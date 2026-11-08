@@ -1,5 +1,5 @@
 #include "renderer.h"
-#include <GLES3/gl3.h>
+#include "gl.h"
 #include <cstdio>
 namespace sk {
 static unsigned compile(unsigned type,const char* src){unsigned s=glCreateShader(type);glShaderSource(s,1,&src,nullptr);glCompileShader(s);int ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
@@ -78,6 +78,8 @@ void Renderer::render(const std::vector<DrawItem>& items){
   for(auto&it:items){auto&g=meshes_[it.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(uMM,1,GL_FALSE,it.model.m);glUniform3f(uT,it.tint.x,it.tint.y,it.tint.z);
     glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);stats.draws++;stats.tris+=g.count/3;}
 }
+void Renderer::present(unsigned t,int tw,int th){glBindFramebuffer(GL_READ_FRAMEBUFFER,fbo_);glBindFramebuffer(GL_DRAW_FRAMEBUFFER,t);
+  glBlitFramebuffer(0,0,w_,h_,0,0,tw,th,GL_COLOR_BUFFER_BIT,GL_LINEAR);glBindFramebuffer(GL_FRAMEBUFFER,t);}
 bool Renderer::readPixels(std::vector<unsigned char>& rgba) const{rgba.assign((size_t)w_*h_*4,0);glBindFramebuffer(GL_FRAMEBUFFER,fbo_);
   glReadPixels(0,0,w_,h_,GL_RGBA,GL_UNSIGNED_BYTE,rgba.data());
   for(int y=0;y<h_/2;y++)for(int x=0;x<w_*4;x++)std::swap(rgba[(size_t)y*w_*4+x],rgba[(size_t)(h_-1-y)*w_*4+x]);return true;}

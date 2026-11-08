@@ -14,6 +14,7 @@ public:
   void setCamera(Vec3 pos,Vec3 target,float fovyRad);
   void setSun(Vec3 dirToSun,Vec3 focus,float radius);
   void render(const std::vector<DrawItem>& items);
+  void present(unsigned targetFbo,int tw,int th);   // blit the rendered frame to a window framebuffer (0 = default)
   bool readPixels(std::vector<unsigned char>& rgba) const;  // top-down RGBA8
   int width() const {return w_;} int height() const {return h_;}
   Stats stats;
