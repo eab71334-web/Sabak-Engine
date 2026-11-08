@@ -3,7 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <functional>
-#include "math.h"
+#include "vmath.h"
 namespace sk {
 struct Vertex { float p[3]; float n[3]; float c[3]; };
 struct MeshData { std::vector<Vertex> v; std::vector<uint32_t> i; };
