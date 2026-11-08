@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.20)
+project(SabakCore CXX)
+set(CMAKE_CXX_STANDARD 17)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+add_library(sabakcore STATIC src/mesh.cpp src/renderer.cpp src/game.cpp)
+target_include_directories(sabakcore PUBLIC src third_party third_party/khr)
+# headless simulator (Linux): needs libegl1 + libgles2 + mesa runtime
+add_executable(sabaksim src/sim.cpp src/platform_egl.cpp)
+target_link_libraries(sabaksim sabakcore -l:libEGL.so.1 -l:libGLESv2.so.2)

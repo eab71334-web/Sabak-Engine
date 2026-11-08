@@ -1,0 +1,22 @@
+name: C++ core test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["core/**", ".github/workflows/core.yml"]
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build libegl1 libgles2 libgl1-mesa-dri
+      - name: Build
+        run: cmake -S core -B core/build -G Ninja && cmake --build core/build
+      - name: Simulate and screenshot
+        run: |
+          mkdir -p out
+          printf 'press W\nstep 90\nstate\nshot out/core.png\n' | EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 core/build/sabaksim
+      - uses: actions/upload-artifact@v4
+        with: { name: core-shot, path: out }

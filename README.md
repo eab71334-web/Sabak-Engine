@@ -10,3 +10,8 @@
 python3 tools/sim.py demo/index.html '[["pause"],["press","KeyW"],["step",120],["shot"],["state"]]' out
 ```
 Commands: pause, resume, step(n,dt), press(...keys), release, releaseAll, tap, stick(x,y), look(dx,dy), nodes, find(name), teleport(name,x,y,z), camera(pos,target), state, shot.
+
+## C++ core (`core/`)
+Native engine core (C++17, OpenGL ES 3). Headless simulator `sabaksim` reads commands from stdin:
+`size W H | press W/A/S/D | release K | releaseall | stick X Y | look DYAW DPITCH | step N [dt] | shot FILE.png | state`
+Build: `cmake -S core -B core/build -G Ninja && cmake --build core/build`
