@@ -36,11 +36,11 @@ jobs:
       - name: Archive unsigned
         working-directory: app/ios/App
         run: |
-          set -e
-          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+          set -eo pipefail
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -25
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -25; test -d "$RUNNER_TEMP/App.xcarchive"
       - name: Package IPA
         run: |
           set -e
