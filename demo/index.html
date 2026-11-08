@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Sabak Engine - demo</title>
+<style>
+  html,body{margin:0;height:100%;background:#111;overflow:hidden;font-family:system-ui,sans-serif}
+  #wrap{position:fixed;inset:0}
+  canvas#game{width:100%;height:100%;display:block}
+  #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;background:#10151c;font-size:18px;transition:opacity .4s}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game"></canvas><div id="boot">Sabak Engine - loading...</div></div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

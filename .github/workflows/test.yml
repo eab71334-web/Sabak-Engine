@@ -1,0 +1,19 @@
+name: Simulator test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install playwright && playwright install --with-deps chromium
+      - name: Run the simulator (move hero forward, take screenshot)
+        run: |
+          python3 tools/sim.py demo/index.html '[["pause"],["press","KeyW"],["step",120],["releaseAll"],["find","hero"],["shot"],["state"]]' out
+      - uses: actions/upload-artifact@v4
+        with: { name: sim-shots, path: out }

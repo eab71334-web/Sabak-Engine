@@ -1,0 +1,58 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+
+permissions:
+  contents: write
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Build web folder and iOS project
+        working-directory: app
+        run: |
+          set -e
+          ./build-www.sh
+          npm install --no-audit --no-fund
+          npx cap add ios
+          # landscape + fullscreen + no status bar
+          P=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" $P || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" $P
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeLeft" $P
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeRight" $P
+          /usr/libexec/PlistBuddy -c "Add :UIStatusBarHidden bool true" $P || true
+          /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" $P || true
+          npx cap sync ios
+      - name: Archive unsigned
+        working-directory: app/ios/App
+        run: |
+          set -e
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -25
+      - name: Package IPA
+        run: |
+          set -e
+          mkdir -p out/Payload
+          cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" out/Payload/
+          (cd out && zip -qry SabakEngine.ipa Payload)
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with: { name: SabakEngine-ipa, path: out/SabakEngine.ipa }
+      - name: Release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          N=$(git rev-list --count HEAD)
+          gh release delete latest -y --cleanup-tag || true
+          gh release create latest out/SabakEngine.ipa -t "Sabak Engine build $N" -n "Unsigned IPA (sign with Sideloadly/AltStore)." --target "$GITHUB_SHA"

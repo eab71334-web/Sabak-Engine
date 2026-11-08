@@ -1,0 +1,7 @@
+{
+  "appId": "com.sabak.engine",
+  "appName": "Sabak Engine",
+  "webDir": "www",
+  "backgroundColor": "#10151c",
+  "ios": { "contentInset": "never", "allowsLinkPreview": false }
+}
