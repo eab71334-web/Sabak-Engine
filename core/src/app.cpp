@@ -17,7 +17,7 @@ static const char* TDESC[3]={"A clean green field. Start from nothing.","Houses,
 
 bool App::init(Renderer& r,const std::string& data,int w,int h){
   r_=&r;data_=data;projDir_=data+"/SabakProjects";importDir_=data+"/Import";std::error_code ec;fs::create_directories(projDir_,ec);fs::create_directories(importDir_,ec);
-  W_=w;H_=h;if(!ui.init(h/393.0f))return false;game.init(r);rescan();rescanImports();return true;}
+  W_=w;H_=h;if(!ui.init(h/393.0f))return false;for(int& m:meshIds_)m=-1;sctx_.scene=&scene_;sctx_.input=&in_;bg_.buildTemplate(1);rescan();rescanImports();return true;}
 void App::resize(int w,int h){W_=w;H_=h;}
 const char* App::screenName() const{return scr_==HOME?"home":scr_==TEMPLATES?"templates":scr_==IMPORT?"import":"editor";}
 static std::string field(const std::string& js,const std::string& key){size_t p=js.find("\""+key+"\"");if(p==std::string::npos)return "";p=js.find(':',p);if(p==std::string::npos)return "";p++;
@@ -31,7 +31,9 @@ void App::createProject(int tmpl){int n=(int)projects_.size()+1;std::string name
   std::error_code ec;fs::create_directories(d/"scenes",ec);fs::create_directories(d/"assets",ec);
   std::ofstream f(d/"project.json");f<<"{\"name\":\""<<name<<"\",\"template\":"<<tmpl<<",\"created\":"<<(long)std::time(nullptr)<<",\"engine\":\"0.1\"}\n";f.close();
   rescan();for(size_t i=0;i<projects_.size();i++)if(projects_[i].name==name)openProject((int)i);toast("Project created");}
-void App::openProject(int i){if(i<0||i>=(int)projects_.size())return;cur_=i;game.setTemplate(*r_,projects_[i].tmpl);go(EDITOR);}
+void App::openProject(int i){if(i<0||i>=(int)projects_.size())return;cur_=i;play_=false;scripts_.clear();sel_=-1;addMenu_=false;expanded_.clear();hierScroll_=0;
+  std::string sp=projects_[i].dir+"/scenes/main.scene";if(!scene_.load(sp)){scene_.buildTemplate(projects_[i].tmpl);std::error_code ec;fs::create_directories(projects_[i].dir+"/scenes",ec);scene_.save(sp);}
+  ecYaw_=0.8f;ecPitch_=0.5f;ecDist_=26;ecTarget_={0,3,0};rebuildRows();go(EDITOR);}
 void App::importFound(int i){if(i<0||i>=(int)found_.size())return;std::error_code ec;fs::path src=fs::path(importDir_)/found_[i],dst=fs::path(projDir_)/found_[i];
   fs::copy(src,dst,fs::copy_options::recursive|fs::copy_options::overwrite_existing,ec);if(ec){toast("Import failed");return;}
   // refresh created time so it appears first
@@ -39,27 +41,27 @@ void App::importFound(int i){if(i<0||i>=(int)found_.size())return;std::error_cod
 void App::go(Screen s){scr_=s;tr_=0;held_=-1;heldId_=-1;if(s==IMPORT)rescanImports();if(s==HOME)rescan();}
 void App::onTap(int id){
   if(id==1)go(TEMPLATES);else if(id==2)go(IMPORT);else if(id==3)go(HOME);else if(id==4){rescanImports();toast("Refreshed");}
-  else if(id==5){go(HOME);game.releaseAll();game.stick(0,0);}
+  else if(id==5){if(play_)stopPlay();saveScene(true);go(HOME);}
+  else if(id>=100&&id<500)editorTap(id);
   else if(id>=10&&id<20)openProject(id-10);else if(id>=20&&id<23)createProject(id-20);else if(id>=30&&id<40)importFound(id-30);}
-void App::key(const std::string& k,bool d){if(scr_!=EDITOR)return;if(d)game.press(k);else game.release(k);}
+void App::key(const std::string& k,bool d){int i=k=="W"?0:k=="A"?1:k=="S"?2:3;keyDown_[i]=d;}
 bool App::btn(int id,float x,float y,float w,float h){btns_.push_back({id,x,y+0,w,h});return heldId_==id;}
 
 void App::update(float dt){t_+=dt;tr_=std::min(1.0f,tr_+dt*3.2f);float e=1-std::pow(1-tr_,3);A_=e;oy_=(1-e)*16;
-  for(int i=0;i<64;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
+  for(int i=0;i<512;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
   if(toastT_>0)toastT_-=dt;fpsAcc_+=dt;fpsN_++;if(fpsAcc_>0.5f){fps_=fpsN_/fpsAcc_;fpsAcc_=0;fpsN_=0;}
-  if(scr_==EDITOR)game.update(dt);}
+  if(scr_==EDITOR)editorUpdate(dt);}
 
 void App::pointer(int type,int id,float px,float py){float s=ui.s();float x=px/s,y=py/s;
   if(type==0){
     for(int i=(int)prevBtns_.size()-1;i>=0;i--){auto&b=prevBtns_[i];if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){heldId_=b.id;held_=id;return;}}
-    if(scr_==EDITOR){float W=W_/s;if(x<W*0.5f&&stickId_<0){stickId_=id;sx0_=px;sy0_=py;}else if(lookId_<0){lookId_=id;lx_=px;ly_=py;}}
+    if(scr_==EDITOR){editorPointer(0,id,px,py);return;}
   }else if(type==1){
-    if(scr_==EDITOR){if(id==stickId_){float dx=(px-sx0_)/(48*s),dy=(py-sy0_)/(48*s);float l=std::sqrt(dx*dx+dy*dy);if(l>1){dx/=l;dy/=l;}game.stick(dx,dy);}
-      else if(id==lookId_){game.look(-(px-lx_)*0.006f/s*1.0f,(py-ly_)*0.005f/s*1.0f);lx_=px;ly_=py;}}
+    if(scr_==EDITOR)editorPointer(1,id,px,py);
     if(held_==id&&heldId_>=0){bool over=false;for(auto&b:prevBtns_)if(b.id==heldId_&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)over=true;if(!over)heldId_=-1;}
   }else{
     if(held_==id&&heldId_>=0){int h=heldId_;heldId_=-1;held_=-1;onTap(h);return;}
-    if(id==stickId_){stickId_=-1;game.stick(0,0);}if(id==lookId_)lookId_=-1;}
+    if(scr_==EDITOR)editorPointer(2,id,px,py);}
 }
 
 // ---------- drawing helpers ----------
@@ -72,7 +74,7 @@ void App::cubeIcon(float cx,float cy,float sz,float a){float h=sz/2;SH(cx-h,cy-h
 
 void App::drawBackground(){float W=W_/ui.s();float H=393;
   
-  game.drawBackdrop(*r_,t_);
+  { float a=t_*0.1f+0.6f;Vec3 tg{0,bg_.height(0,0)+2,0};Vec3 c{std::sin(a)*24,bg_.height(0,0)+9+std::sin(t_*0.2f)*1.5f,std::cos(a)*24};float gh=bg_.height(c.x,c.z)+1;if(c.y<gh)c.y=gh;renderScene(bg_,c,tg,0.95f); }
   ui.begin(W_,H_);
   // dark gradient wash so the UI stays readable, then drifting colour glows and sparkles
   ui.rrect(0,0,W,H,0,Col::hex(0x090b1f,0.55f),Col::hex(0x090b1f,0.84f));
@@ -164,20 +166,9 @@ void App::drawImport(){float W=W_/ui.s();header("Import a project","Bring a proj
     R(x+w-74,y+14,60,30,15,GREEN.with(0.9f),Col::hex(0x059669));T("Import",x+w-44,y+19,12,WHITE,F_BOLD,1);}
 }
 
-void App::drawHud(){float W=W_/ui.s();float H=393;
-  { float x=14,y=14,w=122,h=36;btn(5,x,y,w,h);float k=pressOf(5);squish(k,x,y,w,h);SH(x,y+3,w,h,18,10,Col::hex(0x000000,0.4f));R(x,y,w,h,18,Col::hex(0x0b0f24,0.62f),Col::hex(0x0b0f24,0.62f));RING(x,y,w,h,18,1,WHITE.with(0.28f));
-    T("<",x+20,y+7,17,WHITE,F_BOLD,1);T("Projects",x+72,y+9,13,WHITE,F_BOLD,1);}
-  std::string nm=cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].name:"Project";float nw=ui.measure(nm,13,F_BOLD);
-  R(148,14,nw+30,36,18,Col::hex(0x0b0f24,0.55f),Col::hex(0x0b0f24,0.55f));RING(148,14,nw+30,36,18,1,WHITE.with(0.2f));ui.circle(165,32,4.5f,C(GREEN),C(GREEN));T(nm,176,23,13,WHITE,F_BOLD);
-  R(W-92,14,78,30,15,Col::hex(0x0b0f24,0.55f),Col::hex(0x0b0f24,0.55f));T(std::to_string((int)(fps_+0.5f))+" fps",W-53,20,12,WHITE,F_BOLD,1);
-  // virtual joystick
-  float jx=96,jy=H-92,kx=game.stickX()*30,ky=game.stickY()*30;ui.circle(jx,jy,52,WHITE.with(0.10f),WHITE.with(0.04f));ui.ring(jx-52,jy-52,104,104,52,1.5f,WHITE.with(0.3f));
-  ui.circle(jx+kx,jy+ky,24,WHITE.with(0.55f),WHITE.with(0.3f));
-}
-
 void App::render(){
   btns_.clear();
-  if(scr_==EDITOR){game.draw(*r_);ui.begin(W_,H_);A_=1;oy_=0;drawHud();}
+  if(scr_==EDITOR){drawEditor();}
   else{drawBackground();if(scr_==HOME)drawHome();else if(scr_==TEMPLATES)drawTemplates();else drawImport();}
   if(toastT_>0){float W=W_/ui.s();float a=std::min(1.0f,toastT_*3);float w=ui.measure(toast_,14,F_BOLD)+48;float x=(W-w)/2,y=332;
     ui.shadow(x,y,w,38,19,14,Col::hex(0,0.5f*a));ui.rrect(x,y,w,38,19,Col::hex(0x10b981,a),Col::hex(0x047857,a));ui.text(toast_,W/2,y+9,14,WHITE.with(a),F_BOLD,1);}

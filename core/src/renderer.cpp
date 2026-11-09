@@ -55,7 +55,11 @@ int Renderer::upload(const MeshData& m){GpuMesh g;g.count=m.i.size();glGenVertex
   glGenBuffers(1,&g.ibo);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,g.ibo);glBufferData(GL_ELEMENT_ARRAY_BUFFER,m.i.size()*4,m.i.data(),GL_STATIC_DRAW);
   for(int a=0;a<3;a++){glEnableVertexAttribArray(a);glVertexAttribPointer(a,3,GL_FLOAT,GL_FALSE,sizeof(Vertex),(void*)(a*12));}
   meshes_.push_back(g);return meshes_.size()-1;}
-void Renderer::setCamera(Vec3 pos,Vec3 target,float fovy){camPos_=pos;view_=Mat4::lookAt(pos,target,{0,1,0});proj_=Mat4::perspective(fovy,(float)w_/h_,0.3f,500.0f);}
+void Renderer::setCamera(Vec3 pos,Vec3 target,float fovy){camPos_=pos;camTarget_=target;fov_=fovy;view_=Mat4::lookAt(pos,target,{0,1,0});proj_=Mat4::perspective(fovy,(float)w_/h_,0.3f,500.0f);}
+bool Renderer::project(Vec3 p,float& sx,float& sy) const{Mat4 vp=proj_*view_;float x=vp.m[0]*p.x+vp.m[4]*p.y+vp.m[8]*p.z+vp.m[12],y=vp.m[1]*p.x+vp.m[5]*p.y+vp.m[9]*p.z+vp.m[13],w=vp.m[3]*p.x+vp.m[7]*p.y+vp.m[11]*p.z+vp.m[15];
+  if(w<=0.01f)return false;sx=(x/w*0.5f+0.5f)*w_;sy=(1-(y/w*0.5f+0.5f))*h_;return true;}
+void Renderer::ray(float px,float py,Vec3& o,Vec3& d) const{float nx=px/w_*2-1,ny=1-py/h_*2;float th=std::tan(fov_/2);Vec3 f=norm(camTarget_-camPos_),s=norm(cross(f,{0,1,0})),u=cross(s,f);
+  o=camPos_;d=norm(s*(nx*th*((float)w_/h_))+u*(ny*th)+f);}
 void Renderer::setSun(Vec3 dir,Vec3 focus,float r){sunDir_=norm(dir);Vec3 eye=focus+sunDir_*(r*2.0f);
   // texel-snap the focus so shadows don't shimmer when the camera moves
   float tex=2*r/shSize_;(void)tex;lightVP_=Mat4::ortho(-r,r,-r,r,0.1f,r*4.0f)*Mat4::lookAt(eye,focus,{0,1,0});}

@@ -25,6 +25,6 @@ int main(int argc,char** argv){
     else if(c=="reset"){std::filesystem::remove_all(data);std::puts("{\"reset\":true}");}
     else if(c=="shot"){std::string p;s>>p;app->render();std::vector<unsigned char> px;r.readPixels(px);stbi_write_png(p.c_str(),r.width(),r.height(),4,px.data(),r.width()*4);
       std::printf("{\"shot\":\"%s\",\"screen\":\"%s\",\"draws\":%d}\n",p.c_str(),app->screenName(),r.stats.draws);}
-    else if(c=="state")std::printf("{\"frames\":%d,\"screen\":\"%s\",\"hero\":[%.2f,%.2f,%.2f]}\n",frames,app->screenName(),app->game.hero.x,app->game.hero.y,app->game.hero.z);
+    else if(c=="state")std::printf("{\"frames\":%d,\"screen\":\"%s\",\"entities\":%d,\"selected\":%d,\"playing\":%d}\n",frames,app->screenName(),app->entityCount(),app->selected(),app->playing()?1:0);
     else std::printf("{\"error\":\"unknown command %s\"}\n",c.c_str());}
   return 0;}

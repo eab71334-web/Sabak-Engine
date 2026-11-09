@@ -2,7 +2,12 @@
 #pragma once
 #include <string>
 #include <vector>
-#include "game.h"
+#include <map>
+#include <memory>
+#include <set>
+#include "scene.h"
+#include "script.h"
+#include "renderer.h"
 #include "ui.h"
 namespace sk {
 struct Project { std::string name,dir; int tmpl=1; long created=0; };
@@ -15,12 +20,19 @@ public:
   void pointer(int type,int id,float x,float y);   // type 0 down, 1 move, 2 up. x,y in framebuffer pixels
   void key(const std::string& k,bool down);
   const char* screenName() const;
-  bool quit=false; Game game;
+  bool quit=false;
+  int entityCount() const {return (int)scene_.ents.size();} int selected() const {return sel_;} bool playing() const {return play_;}
+
 private:
   enum Screen { HOME,TEMPLATES,IMPORT,EDITOR };
   struct Btn { int id; float x,y,w,h; };
   void go(Screen s); void createProject(int tmpl); void openProject(int i); void rescan(); void rescanImports(); void importFound(int i);
   void toast(const std::string& m){toast_=m;toastT_=2.4f;}
+  // ---- scene editor (editor.cpp)
+  void drawEditor(); void editorPointer(int type,int id,float px,float py); void editorTap(int id); void editorUpdate(float dt);
+  void renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov); int meshFor(int prim);
+  void startPlay(); void stopPlay(); void saveScene(bool quiet=false); void select(int id); void rebuildRows();
+  bool pickAt(float px,float py); void gizmoUpdate(); bool nearPanel(float x,float y) const;
   void drawBackground(); void drawHome(); void drawTemplates(); void drawImport(); void drawHud(); void header(const std::string& title,const std::string& sub);
   bool btn(int id,float x,float y,float w,float h);     // registers a hit area (design units); returns true if held
   float pressOf(int id){return id>=0&&id<64?press_[id]:0.f;}
@@ -34,7 +46,13 @@ private:
   void plusIcon(float cx,float cy,float sz,Col c); void downIcon(float cx,float cy,float sz,Col c); void cubeIcon(float cx,float cy,float sz,float a);
   Renderer* r_=nullptr; UI ui; std::string data_,projDir_,importDir_; int W_=0,H_=0; float t_=0,A_=1,oy_=0,tr_=1,toastT_=0,fps_=60,fpsAcc_=0; int fpsN_=0;
   Screen scr_=HOME; std::string toast_; std::vector<Project> projects_; std::vector<std::string> found_; int cur_=-1;
-  std::vector<Btn> btns_,prevBtns_; float press_[64]={0}; int held_=-1,heldId_=-1;
-  int stickId_=-1,lookId_=-1; float sx0_=0,sy0_=0,lx_=0,ly_=0;
+  std::vector<Btn> btns_,prevBtns_; float press_[512]={0}; int held_=-1,heldId_=-1;
+  float stickX_=0,stickY_=0; int stickId_=-1,lookId_=-1; float sx0_=0,sy0_=0,lx_=0,ly_=0;
+  Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
+  bool play_=false,addMenu_=false,keyDown_[4]={false,false,false,false}; int sel_=-1,mode_=0; float hierScroll_=0,repeatT_=0,pYaw_=0,pPitch_=0.3f,playT_=0;
+  float ecYaw_=0.8f,ecPitch_=0.5f,ecDist_=26; Vec3 ecTarget_{0,3,0};
+  std::set<int> expanded_; std::vector<std::pair<int,int>> rows_;
+  float gO_[2]={0,0},gT_[3][2]={{0,0},{0,0},{0,0}},gL_=1; bool gOk_=false; int dragAxis_=-1,dragId_=-1,orbitId_=-1,hierId_=-1,pinchA_=-1,pinchB_=-1; float lastX_=0,lastY_=0,downX_=0,downY_=0,pinchD_=0; bool moved_=false;
+  float ptX_[8]={0},ptY_[8]={0}; int ptId_[8]={-1,-1,-1,-1,-1,-1,-1,-1};
 };
 }
