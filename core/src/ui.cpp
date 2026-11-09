@@ -4,7 +4,7 @@
 #include <cmath>
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
-extern const unsigned char Poppins_Bold_ttf[]; extern const unsigned char Poppins_Medium_ttf[];
+extern const unsigned char Inter_SemiBold_ttf[]; extern const unsigned char Inter_Medium_ttf[];
 namespace sk {
 static const char* VS=R"(#version 300 es
 layout(location=0) in vec2 aPos; layout(location=1) in vec2 aLocal; layout(location=2) in vec2 aHalf; layout(location=3) in vec4 aPar;
@@ -28,7 +28,7 @@ bool UI::init(float scale){s_=scale;prog_=glCreateProgram();glAttachShader(prog_
   int st=20*4,off=0;int cnt[7]={2,2,2,4,4,4,2};for(int a=0;a<7;a++){glEnableVertexAttribArray(a);glVertexAttribPointer(a,cnt[a],GL_FLOAT,GL_FALSE,st,(void*)(size_t)off);off+=cnt[a]*4;}
   ok=lk&&glGetError()==GL_NO_ERROR;return ok;}
 UI::Face& UI::face(float size,int font){int key=(int)(size*10)*2+font;for(size_t i=0;i<keys_.size();i++)if(keys_[i]==key)return faces_[i];
-  Face f;f.px=size*s_;f.cd=new stbtt_bakedchar[96];const unsigned char* ttf=font==F_BOLD?Poppins_Bold_ttf:Poppins_Medium_ttf;
+  Face f;f.px=size*s_;f.cd=new stbtt_bakedchar[96];const unsigned char* ttf=font==F_BOLD?Inter_SemiBold_ttf:Inter_Medium_ttf;
   int aw=256;std::vector<unsigned char> bm;while(true){bm.assign((size_t)aw*aw,0);int r=stbtt_BakeFontBitmap(ttf,0,f.px,bm.data(),aw,aw,32,96,(stbtt_bakedchar*)f.cd);if(r>0||aw>=4096)break;aw*=2;}
   f.aw=aw;glGenTextures(1,&f.tex);glBindTexture(GL_TEXTURE_2D,f.tex);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexImage2D(GL_TEXTURE_2D,0,GL_R8,aw,aw,0,GL_RED,GL_UNSIGNED_BYTE,bm.data());
   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);

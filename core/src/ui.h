@@ -1,4 +1,4 @@
-// Sabak Core - immediate-mode 2D UI renderer: SDF rounded rects, shadows, glows, rings, antialiased text (Poppins, OFL).
+// Sabak Core - immediate-mode 2D UI renderer: SDF rounded rects, shadows, glows, rings, antialiased text (Inter, OFL).
 #pragma once
 #include <string>
 #include <vector>

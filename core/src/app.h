@@ -33,6 +33,9 @@ private:
   void renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov); int meshFor(int prim);
   void startPlay(); void stopPlay(); void saveScene(bool quiet=false); void select(int id); void rebuildRows();
   bool pickAt(float px,float py); void gizmoUpdate(); bool nearPanel(float x,float y) const;
+  void panel(float x,float y,float w,float h,const std::string& title);
+  void fbtn(int id,float x,float y,float w,float h,const std::string& label,int kind,bool active=false);   // kind 0 primary,1 normal,2 danger,3 ghost
+  void sect(float k);
   void drawBackground(); void drawHome(); void drawTemplates(); void drawImport(); void drawHud(); void header(const std::string& title,const std::string& sub);
   bool btn(int id,float x,float y,float w,float h);     // registers a hit area (design units); returns true if held
   float pressOf(int id){return id>=0&&id<64?press_[id]:0.f;}
@@ -44,7 +47,7 @@ private:
   void GL(float x,float y,float rad,Col c){ui.glow(x,y+oy_,rad,C(c));}
   void T(const std::string& t,float x,float y,float sz,Col c,int f=F_REG,int al=0){ui.text(t,x,y+oy_,sz,C(c),f,al);}
   void plusIcon(float cx,float cy,float sz,Col c); void downIcon(float cx,float cy,float sz,Col c); void cubeIcon(float cx,float cy,float sz,float a);
-  Renderer* r_=nullptr; UI ui; std::string data_,projDir_,importDir_; int W_=0,H_=0; float t_=0,A_=1,oy_=0,tr_=1,toastT_=0,fps_=60,fpsAcc_=0; int fpsN_=0;
+  Renderer* r_=nullptr; UI ui; std::string data_,projDir_,importDir_; int W_=0,H_=0; float trT_=0,t_=0,A_=1,oy_=0,tr_=1,toastT_=0,fps_=60,fpsAcc_=0; int fpsN_=0;
   Screen scr_=HOME; std::string toast_; std::vector<Project> projects_; std::vector<std::string> found_; int cur_=-1;
   std::vector<Btn> btns_,prevBtns_; float press_[512]={0}; int held_=-1,heldId_=-1;
   float stickX_=0,stickY_=0; int stickId_=-1,lookId_=-1; float sx0_=0,sy0_=0,lx_=0,ly_=0;

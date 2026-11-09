@@ -24,7 +24,7 @@ void main(){ vec3 N=normalize(vN); vec3 L=normalize(uSun); vec3 V=normalize(uCam
   vec3 amb=mix(vec3(0.20,0.18,0.15),vec3(0.38,0.48,0.62),N.y*0.5+0.5);
   vec3 H=normalize(L+V); float spec=pow(max(dot(N,H),0.0),48.0)*0.15*ndl*sh;
   vec3 col=vC*(amb+vec3(1.25,1.12,0.95)*ndl*sh)+spec;
-  float d=length(uCam-vW); float fog=1.0-exp(-d*0.0065); col=mix(col,vec3(0.62,0.74,0.88),clamp(fog,0.0,1.0));
+  float d=length(uCam-vW); float fog=1.0-exp(-d*0.0065); col=mix(col,vec3(0.62,0.68,0.76),clamp(fog,0.0,1.0));
   col=aces(col*0.9); o=vec4(pow(col,vec3(1.0/2.2)),1.0); })";
 static const char* SVS=R"(#version 300 es
 layout(location=0) in vec3 aPos; uniform mat4 uModel,uLightVP; void main(){ gl_Position=uLightVP*uModel*vec4(aPos,1.0);} )";
@@ -33,7 +33,7 @@ precision mediump float; void main(){} )";
 static const char* SKVS=R"(#version 300 es
 out vec2 vUv; void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vUv=p; gl_Position=vec4(p*2.0-1.0,0.9999,1.0);} )";
 static const char* SKFS=R"(#version 300 es
-precision highp float; in vec2 vUv; out vec4 o; void main(){ float t=clamp(vUv.y,0.0,1.0); vec3 hor=vec3(0.78,0.86,0.95),top=vec3(0.25,0.45,0.82);
+precision highp float; in vec2 vUv; out vec4 o; void main(){ float t=clamp(vUv.y,0.0,1.0); vec3 hor=vec3(0.70,0.76,0.84),top=vec3(0.26,0.38,0.58);
   o=vec4(pow(mix(hor,top,pow(t,0.7)),vec3(1.0/2.2)),1.0);} )";
 
 bool Renderer::init(int w,int h){

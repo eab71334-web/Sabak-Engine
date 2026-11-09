@@ -36,11 +36,11 @@ void Scene::buildTemplate(int t){ents.clear();nextId=1;
   { auto& g=add(P_TERRAIN,"Terrain");g.color=Col{1,1,1,1}; }
   if(t==1){float hs[5][2]={{-9,-8},{8,-10},{12,6},{-12,8},{0,-16}};
     for(int i=0;i<5;i++){float x=hs[i][0],z=hs[i][1],w=5+(i%2)*1.5f;int root=add(P_EMPTY,"House "+std::to_string(i+1)).id;get(root)->pos={x,height(x,z),z};
-      auto& b=add(P_BOX,"Walls",root);b.pos={0,1.5f,0};b.scale={w,3,4.5f};b.color=H(0xd8c4a0);auto& r=add(P_PYRAMID,"Roof",root);r.pos={0,3,0};r.rot={0,45,0};r.scale={w*0.78f,2.2f,w*0.78f};r.color=H(0xb23a2a);}}
+      auto& b=add(P_BOX,"Walls",root);b.pos={0,1.5f,0};b.scale={w,3,4.5f};b.color=H(0xcfc6b4);auto& r=add(P_PYRAMID,"Roof",root);r.pos={0,3,0};r.rot={0,45,0};r.scale={w*0.78f,2.2f,w*0.78f};r.color=H(0x7a3a33);}}
   if(t!=0){int n=0;for(int i=0;i<420&&n<110;i++){float x=(hash(i,1)-0.5f)*240,z=(hash(i,2)-0.5f)*240,y=height(x,z);if(y<0.3f||std::sqrt(x*x+z*z)<22||y>13)continue;float s=0.8f+hash(i,3)*0.9f;n++;
       int root=add(P_EMPTY,"Tree "+std::to_string(n)).id;get(root)->pos={x,y,z};get(root)->scale={s,s,s};
-      auto& tr=add(P_CYL,"Trunk",root);tr.scale={0.5f,2.2f,0.5f};tr.color=H(0x5c3d24);auto& cr=add(P_CONE,"Crown",root);cr.pos={0,2.2f,0};cr.scale={3,4.2f,3};cr.color=H(0x2a6b2d);}}
-  if(t!=2){for(int i=0;i<5;i++){float a=i/5.0f*6.28f,x=std::cos(a)*7,z=std::sin(a)*7;auto& c=add(P_SPHERE,"Crystal "+std::to_string(i+1));c.pos={x,height(x,z)+1.2f,z};c.scale={0.9f,1.7f,0.9f};c.color=H(0x4dd9ff);c.script="Bobber";}}
+      auto& tr=add(P_CYL,"Trunk",root);tr.scale={0.5f,2.2f,0.5f};tr.color=H(0x4a3a2c);auto& cr=add(P_CONE,"Crown",root);cr.pos={0,2.2f,0};cr.scale={3,4.2f,3};cr.color=H(0x2f5a35);}}
+  if(t!=2){for(int i=0;i<5;i++){float a=i/5.0f*6.28f,x=std::cos(a)*7,z=std::sin(a)*7;auto& c=add(P_SPHERE,"Crystal "+std::to_string(i+1));c.pos={x,height(x,z)+1.2f,z};c.scale={0.9f,1.7f,0.9f};c.color=H(0x5fb8cc);c.script="Bobber";}}
   int hero=add(P_EMPTY,"Hero").id;get(hero)->pos={0,height(0,4),4};get(hero)->script="PlayerController";
-  auto& body=add(P_CYL,"Body",hero);body.scale={0.76f,1.5f,0.76f};body.color=H(0xb32428);auto& head=add(P_SPHERE,"Head",hero);head.pos={0,1.75f,0};head.scale={0.52f,0.52f,0.52f};head.color=H(0xe8b894);}
+  auto& body=add(P_CYL,"Body",hero);body.scale={0.76f,1.5f,0.76f};body.color=H(0x7a2f2f);auto& head=add(P_SPHERE,"Head",hero);head.pos={0,1.75f,0};head.scale={0.52f,0.52f,0.52f};head.color=H(0xd0a07c);}
 }
