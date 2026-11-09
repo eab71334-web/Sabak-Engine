@@ -5,7 +5,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 file(GLOB GAME_SCRIPTS ${CMAKE_CURRENT_SOURCE_DIR}/../game/scripts/*.cpp)
-add_library(sabakcore STATIC src/mesh.cpp src/renderer.cpp src/ui.cpp src/app.cpp src/editor.cpp src/scene.cpp src/script.cpp src/fonts/Inter_SemiBold.cpp src/fonts/Inter_Medium.cpp)
+add_library(sabakcore STATIC src/mesh.cpp src/renderer.cpp src/ui.cpp src/app.cpp src/editor.cpp src/scene.cpp src/script.cpp src/model.cpp src/fonts/Inter_SemiBold.cpp src/fonts/Inter_Medium.cpp)
 target_include_directories(sabakcore PUBLIC src third_party third_party/khr)
 # headless simulator (Linux): needs libegl1 + libgles2 + mesa runtime
 if(NOT IOS AND NOT APPLE)
@@ -24,6 +24,7 @@ if(SABAK_SDL)
   FetchContent_MakeAvailable(SDL3)
   add_executable(SabakGame MACOSX_BUNDLE src/main_sdl.cpp ${GAME_SCRIPTS})
   target_link_libraries(SabakGame PRIVATE sabakcore SDL3::SDL3)
+  add_custom_command(TARGET SabakGame POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../assets $<TARGET_BUNDLE_CONTENT_DIR:SabakGame>/assets)
   if(IOS)
     set_target_properties(SabakGame PROPERTIES
       MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in

@@ -7,12 +7,14 @@
 #include <iostream>
 #include <sstream>
 #include "app.h"
+#include "model.h"
 #include "platform_egl.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 int main(int argc,char** argv){
   if(!eglHeadlessInit()){std::puts("{\"error\":\"no GL context\"}");return 1;}
   int W=852,H=393;const char* dd=getenv("SABAK_DATA");std::string data=dd?dd:"./simdata";
+  {const char* ad=getenv("SABAK_ASSETS");sk::g_assetDir=ad?ad:"../../assets";}
   sk::Renderer r;if(!r.init(W,H)){std::puts("{\"error\":\"renderer init failed\"}");return 1;}
   auto* app=new sk::App();if(!app->init(r,data,W,H)){std::puts("{\"error\":\"app init failed\"}");return 1;}
   std::ifstream f;if(argc>1)f.open(argv[1]);std::istream& in=argc>1?f:std::cin;std::string line;int frames=0;

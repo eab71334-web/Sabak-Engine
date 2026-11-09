@@ -8,6 +8,7 @@
 #include "scene.h"
 #include "script.h"
 #include "renderer.h"
+#include "model.h"
 #include "ui.h"
 namespace sk {
 struct Project { std::string name,dir; int tmpl=1; long created=0; };
@@ -53,7 +54,7 @@ private:
   std::vector<Btn> btns_,prevBtns_; float press_[512]={0}; int held_=-1,heldId_=-1;
   float stickX_=0,stickY_=0; int stickId_=-1,lookId_=-1; float sx0_=0,sy0_=0,lx_=0,ly_=0;
   std::map<std::string,Target> thumbs_; Target tmplT_[3],banner_; bool tmplOk_[3]={false,false,false},bannerOk_=false,thumbDirty_=false,cbOpen_=false; int cbTab_=0; float cbT_=0;
-  Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
+  Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<std::string,std::unique_ptr<Model>> models_; std::map<std::pair<const Scene*,int>,ModelInst> minst_; Model* modelFor(const std::string& name); std::vector<std::string> mdlList_; std::map<std::string,Target> mthumbs_; void refreshModels(); void placeModel(const std::string& id); std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
   bool play_=false,addMenu_=false,keyDown_[4]={false,false,false,false}; int sel_=-1,mode_=0; float hierScroll_=0,repeatT_=0,pYaw_=0,pPitch_=0.3f,playT_=0;
   float ecYaw_=0.8f,ecPitch_=0.5f,ecDist_=26; Vec3 ecTarget_{0,3,0};
   std::set<int> expanded_; std::vector<std::pair<int,int>> rows_;

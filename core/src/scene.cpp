@@ -4,7 +4,7 @@
 #include <fstream>
 #include <sstream>
 namespace sk {
-const char* PRIM_NAME[P_COUNT]={"Empty","Box","Sphere","Cylinder","Cone","Plane","Terrain","Pyramid"};
+const char* PRIM_NAME[P_COUNT]={"Empty","Box","Sphere","Cylinder","Cone","Plane","Terrain","Pyramid","Model"};
 static float hash(int a,int b){unsigned h=a*374761393u+b*668265263u;h=(h^(h>>13))*1274126177u;return ((h^(h>>16))&0xffffff)/16777215.0f;}
 static float vnoise(float x,float z){int xi=(int)std::floor(x),zi=(int)std::floor(z);float fx=x-xi,fz=z-zi;fx=fx*fx*(3-2*fx);fz=fz*fz*(3-2*fz);
   float a=hash(xi,zi),b=hash(xi+1,zi),c=hash(xi,zi+1),d=hash(xi+1,zi+1);return (a+(b-a)*fx)+((c+(d-c)*fx)-(a+(b-a)*fx))*fz;}
@@ -26,12 +26,12 @@ Mat4 Scene::world(int id) const{const Entity* e=get(id);if(!e)return Mat4::ident
 Vec3 Scene::worldPos(int id) const{Mat4 m=world(id);return {m.m[12],m.m[13],m.m[14]};}
 bool Scene::save(const std::string& path) const{std::ofstream f(path);if(!f)return false;f<<"SABAKSCENE 1\n";
   for(auto&e:ents){std::string n=e.name;for(char&c:n)if(c=='|'||c=='\n')c='_';
-    f<<e.id<<'|'<<e.parent<<'|'<<e.prim<<'|'<<n<<'|'<<e.color.r<<','<<e.color.g<<','<<e.color.b<<'|'<<e.pos.x<<','<<e.pos.y<<','<<e.pos.z<<'|'<<e.rot.x<<','<<e.rot.y<<','<<e.rot.z<<'|'<<e.scale.x<<','<<e.scale.y<<','<<e.scale.z<<'|'<<e.script<<'\n';}return true;}
+    f<<e.id<<'|'<<e.parent<<'|'<<e.prim<<'|'<<n<<'|'<<e.color.r<<','<<e.color.g<<','<<e.color.b<<'|'<<e.pos.x<<','<<e.pos.y<<','<<e.pos.z<<'|'<<e.rot.x<<','<<e.rot.y<<','<<e.rot.z<<'|'<<e.scale.x<<','<<e.scale.y<<','<<e.scale.z<<'|'<<e.script<<'|'<<e.asset<<'|'<<e.anim<<'\n';}return true;}
 static std::vector<std::string> split(const std::string& s,char d){std::vector<std::string> r;std::string cur;for(char c:s){if(c==d){r.push_back(cur);cur.clear();}else cur+=c;}r.push_back(cur);return r;}
 static Vec3 v3(const std::string& s){auto p=split(s,',');if(p.size()<3)return {};return {(float)atof(p[0].c_str()),(float)atof(p[1].c_str()),(float)atof(p[2].c_str())};}
 bool Scene::load(const std::string& path){std::ifstream f(path);if(!f)return false;std::string line;std::getline(f,line);if(line.rfind("SABAKSCENE",0)!=0)return false;ents.clear();nextId=1;
   while(std::getline(f,line)){auto p=split(line,'|');if(p.size()<9)continue;Entity e;e.id=atoi(p[0].c_str());e.parent=atoi(p[1].c_str());e.prim=std::min(P_COUNT-1,std::max(0,atoi(p[2].c_str())));e.name=p[3];
-    Vec3 c=v3(p[4]);e.color=Col{c.x,c.y,c.z,1};e.pos=v3(p[5]);e.rot=v3(p[6]);e.scale=v3(p[7]);e.script=p[8];ents.push_back(e);nextId=std::max(nextId,e.id+1);}return true;}
+    Vec3 c=v3(p[4]);e.color=Col{c.x,c.y,c.z,1};e.pos=v3(p[5]);e.rot=v3(p[6]);e.scale=v3(p[7]);e.script=p[8];if(p.size()>10){e.asset=p[9];e.anim=p[10].empty()?"idle":p[10];}ents.push_back(e);nextId=std::max(nextId,e.id+1);}return true;}
 static Col H(unsigned h){return Col::hex(h);}
 static Col jit(unsigned h,float seed,float amt){float k=1.0f+(hash((int)seed,7)-0.5f)*2*amt;Col c=Col::hex(h);return Col{std::min(1.f,c.r*k),std::min(1.f,c.g*(1.0f+(hash((int)seed,11)-0.5f)*amt)),std::min(1.f,c.b*k),1};}
 void Scene::buildTemplate(int t){ents.clear();nextId=1;
@@ -55,6 +55,6 @@ void Scene::buildTemplate(int t){ents.clear();nextId=1;
     n=0;for(int i=0;i<400&&n<nb;i++){float x=(hash(i,51)-0.5f)*160,z=(hash(i,52)-0.5f)*160,y=height(x,z);if(y<0.4f||std::sqrt(x*x+z*z)<(t==0?9:19)||y>10)continue;n++;
       auto& b=add(P_SPHERE,"Bush "+std::to_string(n));float s=0.8f+hash(i,53)*0.8f;b.pos={x,y+0.35f*s,z};b.scale={1.4f*s,0.9f*s,1.4f*s};b.color=jit(0x3f6b3a,i+7,0.2f);}}
   if(t!=2){for(int i=0;i<5;i++){float a=i/5.0f*6.28f,x=std::cos(a)*7,z=std::sin(a)*7;auto& c=add(P_SPHERE,"Crystal "+std::to_string(i+1));c.pos={x,height(x,z)+1.2f,z};c.scale={0.8f,1.6f,0.8f};c.color=H(0x5fb8cc);c.script="Bobber";}}
-  int hero=add(P_EMPTY,"Hero").id;get(hero)->pos={0,height(0,4),4};get(hero)->script="PlayerController";
-  auto& body=add(P_CYL,"Body",hero);body.scale={0.76f,1.5f,0.76f};body.color=H(0x7a2f2f);auto& head=add(P_SPHERE,"Head",hero);head.pos={0,1.75f,0};head.scale={0.52f,0.52f,0.52f};head.color=H(0xd0a07c);}
+  { auto& hero=add(P_MODEL,"Hero");hero.asset="hero";hero.color=Col{1,1,1,1};hero.pos={0,height(0,4),4};hero.script="PlayerController"; }
+  if(t!=0){auto& hs=add(P_MODEL,"Horse");hs.asset="horse";hs.color=Col{1,1,1,1};hs.pos={4,height(4,2),2};hs.rot={0,-50,0};} }
 }

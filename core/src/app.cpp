@@ -18,7 +18,7 @@ static const char* TNAME[3]={"Empty World","Village Demo","Open Terrain"};
 static const char* TDESC[3]={"Flat terrain with a hero. A clean start.","Village, forest and props. A ready scene.","Open hills and dense forest. No buildings."};
 
 bool App::init(Renderer& r,const std::string& data,int w,int h){
-  r_=&r;data_=data;projDir_=data+"/SabakProjects";importDir_=data+"/Import";std::error_code ec;fs::create_directories(projDir_,ec);fs::create_directories(importDir_,ec);
+  r_=&r;data_=data;projDir_=data+"/SabakProjects";importDir_=data+"/Import";std::error_code ec;fs::create_directories(projDir_,ec);fs::create_directories(importDir_,ec);fs::create_directories(data+"/Models",ec);
   W_=w;H_=h;if(!ui.init(h/393.0f))return false;for(int& m:meshIds_)m=-1;sctx_.scene=&scene_;sctx_.input=&in_;bg_.buildTemplate(1);rescan();rescanImports();return true;}
 void App::resize(int w,int h){W_=w;H_=h;}
 const char* App::screenName() const{return scr_==HOME?"home":scr_==TEMPLATES?"templates":scr_==IMPORT?"import":"editor";}
@@ -49,7 +49,7 @@ void App::onTap(int id){
 void App::key(const std::string& k,bool d){int i=k=="W"?0:k=="A"?1:k=="S"?2:3;keyDown_[i]=d;}
 bool App::btn(int id,float x,float y,float w,float h){btns_.push_back({id,x,y+0,w,h});return heldId_==id;}
 
-void App::update(float dt){t_+=dt;trT_+=dt;A_=1;oy_=0;
+void App::update(float dt){for(auto& kv:minst_){const Entity* e=nullptr;if(kv.first.first==&scene_)e=scene_.get(kv.first.second);kv.second.update(dt,e?e->animSpeed:1.f);}t_+=dt;trT_+=dt;A_=1;oy_=0;
   for(int i=0;i<512;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
   if(toastT_>0)toastT_-=dt;fpsAcc_+=dt;fpsN_++;if(fpsAcc_>0.5f){fps_=fpsN_/fpsAcc_;fpsAcc_=0;fpsN_=0;}
   if(scr_==EDITOR)editorUpdate(dt);}
@@ -98,6 +98,8 @@ void App::header(const std::string& title,const std::string& sub){sect(0);
 
 void App::renderThumb(Target& t,const Scene& sc,Vec3 cam,Vec3 tg,float fov){r_->pushTarget(t);renderScene(sc,cam,tg,fov);r_->popTarget();}
 void App::ensureThumbs(){
+  if(scr_==EDITOR&&cbOpen_&&cbTab_==1){for(auto& n:mdlList_){if(n.rfind("ext:",0)==0)continue;Target& t=mthumbs_[n];if(t.fbo)continue;if(!r_->createTarget(t,128,128))return;Scene tmp;auto& en=tmp.add(P_MODEL,"m");en.asset=n;en.color=Col{1,1,1,1};
+      bool horse=n=="horse";renderThumb(t,tmp,horse?Vec3{3.6f,1.7f,3.8f}:Vec3{2.1f,1.3f,3.3f},{0,horse?1.0f:0.85f,0},0.8f);return;}}
   Vec3 cams[3]={{9,4.5f,14},{15,6.5f,16},{-18,8,18}},tgs[3]={{0,1.5f,0},{-1,2.5f,-5},{0,3,-3}};
   for(int i=0;i<3;i++)if(!tmplOk_[i]){Scene tmp;tmp.buildTemplate(i);if(tmplT_[i].fbo==0&&!r_->createTarget(tmplT_[i],320,180))return;renderThumb(tmplT_[i],tmp,cams[i],tgs[i]);tmplOk_[i]=true;return;}
   if(!bannerOk_){Scene tmp;tmp.buildTemplate(1);if(banner_.fbo==0&&!r_->createTarget(banner_,640,252))return;renderThumb(banner_,tmp,{19,7.5f,23},{-2,2.5f,-6},0.8f);bannerOk_=true;return;}
@@ -158,7 +160,7 @@ void App::drawImport(){float W=W_/ui.s();header("Import project","Bring a projec
 }
 
 void App::render(){
-  btns_.clear();if(scr_!=EDITOR||thumbDirty_)ensureThumbs();
+  btns_.clear();if(scr_!=EDITOR||thumbDirty_||(cbOpen_&&cbTab_==1))ensureThumbs();
   if(scr_==EDITOR){drawEditor();}
   else{drawBackground();if(scr_==HOME)drawHome();else if(scr_==TEMPLATES)drawTemplates();else drawImport();}
   A_=1;oy_=0;

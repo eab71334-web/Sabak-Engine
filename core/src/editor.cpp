@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include "app.h"
 #include "theme.h"
 #include "icons.h"
@@ -23,9 +24,16 @@ int App::meshFor(int prim){int& m=meshIds_[prim];if(m>=0)return m;Vec3 w{1,1,1};
     default:d=makeBox(0.01f,0.01f,0.01f,w);}
   m=r_->upload(d);return m;}
 
-void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());
-  for(auto& e:sc.ents){if(e.prim==P_EMPTY)continue;DrawItem it;it.mesh=meshFor(e.prim);it.model=sc.world(e.id);it.tint={e.color.r,e.color.g,e.color.b};it.castShadow=e.prim!=P_TERRAIN&&e.prim!=P_PLANE;items.push_back(it);}
-  r_->setCamera(cam,target,fov);r_->setSun({0.55f,0.52f,0.42f},{target.x,target.y,target.z},55);r_->render(items);}
+Model* App::modelFor(const std::string& name){auto it=models_.find(name);if(it!=models_.end())return it->second.get();
+  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();if(!loadModel(*r_,path,h,*m))m.reset();Model* p=m.get();models_[name]=std::move(m);return p;}
+
+void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());std::vector<SkinDraw> skin;
+  for(auto& e:sc.ents){if(e.prim==P_MODEL){Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
+      mi.play(e.anim.empty()?"idle":e.anim);if(mi.a<0)mi.play("idle");mi.evaluate();Mat4 w=sc.world(e.id)*Mat4::scale({m->fit,m->fit,m->fit})*Mat4::translate({0,-m->foot,0});
+      for(auto& mp:m->prims){SkinDraw sd;sd.mesh=mp.mesh;sd.model=w;const ModelMat& mm=m->mats[std::min<size_t>(mp.mat,m->mats.size()-1)];sd.tex=mm.tex;for(int k=0;k<4;k++)sd.col[k]=mm.col[k];sd.mask=mm.mask;sd.tint={e.color.r,e.color.g,e.color.b};sd.joints=mi.joints.data();sd.nj=(int)m->joints.size();skin.push_back(sd);}
+      continue;}
+    if(e.prim==P_EMPTY)continue;DrawItem it;it.mesh=meshFor(e.prim);it.model=sc.world(e.id);it.tint={e.color.r,e.color.g,e.color.b};it.castShadow=e.prim!=P_TERRAIN&&e.prim!=P_PLANE;items.push_back(it);}
+  r_->setCamera(cam,target,fov);r_->setSun({0.55f,0.52f,0.42f},{target.x,target.y,target.z},55);r_->render(items,skin);}
 
 void App::saveScene(bool quiet){if(cur_<0||cur_>=(int)projects_.size())return;bool ok=scene_.save(projects_[cur_].dir+"/scenes/main.scene");thumbDirty_=true;if(!quiet)toast(ok?"Scene saved":"Save failed");}
 void App::select(int id){sel_=id;}
@@ -55,6 +63,7 @@ void App::gizmoUpdate(){gOk_=false;const Entity* e=scene_.get(sel_);if(!e||e->pr
 bool App::pickAt(float px,float py){Vec3 o,d;r_->ray(px,py,o,d);int best=-1;float bt=1e9f;
   for(auto& e:scene_.ents){if(e.prim==P_TERRAIN)continue;Mat4 m=scene_.world(e.id);Vec3 c{m.m[12],m.m[13],m.m[14]};float sx=len({m.m[0],m.m[1],m.m[2]}),sy=len({m.m[4],m.m[5],m.m[6]}),sz=len({m.m[8],m.m[9],m.m[10]});
     float rad;if(e.prim==P_EMPTY){c=c+Vec3{0,1,0}*sy;rad=1.3f*std::max(sx,std::max(sy,sz));}
+    else if(e.prim==P_MODEL){Model* mm=modelFor(e.asset);float h=mm?mm->height:1.8f,r=mm?mm->radius:1;c=c+Vec3{m.m[4],m.m[5],m.m[6]}*(h*0.5f);rad=std::max(h*0.55f,r*0.7f)*std::max(sx,std::max(sy,sz));}
     else{if(e.prim==P_CYL||e.prim==P_CONE||e.prim==P_PYRAMID)c=c+Vec3{m.m[4],m.m[5],m.m[6]}*0.5f;rad=0.5f*std::max(sx,std::max(sy,sz))*1.05f;}
     Vec3 oc=c-o;float tca=dot(oc,d);if(tca<0)continue;float d2=dot(oc,oc)-tca*tca;if(d2>rad*rad)continue;float t=tca-std::sqrt(rad*rad-d2);if(e.prim==P_EMPTY)t+=2.0f;   // prefer real meshes over group handles
     if(t<bt){bt=t;best=e.id;}}
@@ -111,6 +120,7 @@ void App::editorTap(int id){
   else if(id==117)startPlay();
   else if(id==118)stopPlay();
   else if(id>=150&&id<158){if(e)e->color=Col::hex(SWATCH[id-150]);}
+  else if(id==161||id==162){if(e&&e->prim==P_MODEL){Model* m=modelFor(e->asset);if(m&&!m->anims.empty()){int n=(int)m->anims.size(),i=std::max(0,m->animIndex(e->anim));i=(i+(id==162?1:n-1))%n;e->anim=m->anims[i].name;}}}
   else if(id==160){if(e){std::vector<std::string> names{""};for(auto&kv:scriptRegistry())names.push_back(kv.first);size_t i=0;for(;i<names.size();i++)if(names[i]==e->script)break;e->script=names[(i+1)%names.size()];}}
   else if(id>=300&&id<318){if(e){int k=id-300,idx=k/2,sign=(k%2)?1:-1,grp=idx/3,ax=idx%3;Vec3* v=grp==0?&e->pos:grp==1?&e->rot:&e->scale;float st=grp==0?0.5f:grp==1?5.0f:0.1f;
       float* f=ax==0?&v->x:ax==1?&v->y:&v->z;*f+=sign*st;if(grp==2&&*f<0.05f)*f=0.05f;}}
@@ -118,9 +128,21 @@ void App::editorTap(int id){
   else if(id>=450&&id<480)cbTap(id);
 }
 
+void App::refreshModels(){mdlList_={"hero","horse"};namespace fs=std::filesystem;std::error_code ec;
+  if(cur_>=0&&cur_<(int)projects_.size()){std::string d=projects_[cur_].dir+"/models";if(fs::is_directory(d,ec))for(auto& f:fs::directory_iterator(d,ec)){std::string x=f.path().extension().string();for(char& c:x)c=(char)tolower(c);if(x==".glb"||x==".gltf"||x==".fbx")mdlList_.push_back("models/"+f.path().filename().string());}}
+  std::string d=data_+"/Models";if(fs::is_directory(d,ec))for(auto& f:fs::directory_iterator(d,ec)){std::string x=f.path().extension().string();for(char& c:x)c=(char)tolower(c);if(x==".glb"||x==".gltf"||x==".fbx")mdlList_.push_back("ext:"+f.path().filename().string());}}
+void App::placeModel(const std::string& id){namespace fs=std::filesystem;std::error_code ec;std::string asset=id,name;
+  if(id.rfind("ext:",0)==0){if(cur_<0||cur_>=(int)projects_.size())return;std::string fn=id.substr(4);std::string src=data_+"/Models/"+fn,dst=projects_[cur_].dir+"/models/"+fn;fs::create_directories(projects_[cur_].dir+"/models",ec);fs::copy_file(src,dst,fs::copy_options::overwrite_existing,ec);
+    if(fn.size()>5&&(fn.substr(fn.size()-5)==".gltf")){std::ifstream f(src);std::string js((std::istreambuf_iterator<char>(f)),std::istreambuf_iterator<char>());size_t p=0;while((p=js.find("\"uri\"",p))!=std::string::npos){p=js.find('"',js.find(':',p)+1);size_t q=js.find('"',p+1);if(q==std::string::npos)break;std::string u=js.substr(p+1,q-p-1);p=q;if(u.rfind("data:",0)==0||u.empty())continue;
+        fs::create_directories(fs::path(projects_[cur_].dir+"/models/"+u).parent_path(),ec);fs::copy_file(data_+"/Models/"+u,projects_[cur_].dir+"/models/"+u,fs::copy_options::overwrite_existing,ec);}}
+    asset="models/"+fn;}
+  if(!modelFor(asset)){toast("Could not load model");return;}
+  name=asset=="hero"?"Hero":asset=="horse"?"Horse":fs::path(asset).stem().string();
+  Entity& n=scene_.add(P_MODEL,name);n.asset=asset;n.color=Col{1,1,1,1};n.pos=ecTarget_;n.pos.y=scene_.height(n.pos.x,n.pos.z);select(n.id);rebuildRows();toast("Added "+name);}
 void App::cbTap(int id){
-  if(id==450)cbOpen_=!cbOpen_;else if(id==451)cbTab_=0;else if(id==452)cbTab_=1;
+  if(id==450)cbOpen_=!cbOpen_;else if(id>=451&&id<=453){cbTab_=id-451;if(cbTab_==1)refreshModels();}
   else if(id>=460){int i=id-460;if(cbTab_==0){int order[7]={P_EMPTY,P_BOX,P_SPHERE,P_CYL,P_CONE,P_PYRAMID,P_PLANE};if(i<7)editorTap(400+order[i]);}
+    else if(cbTab_==1){if(i<(int)mdlList_.size())placeModel(mdlList_[i]);}
     else{std::vector<std::string> names;for(auto&kv:scriptRegistry())names.push_back(kv.first);Entity* e=scene_.get(sel_);if(e&&i<(int)names.size()){e->script=names[i];toast("Attached "+names[i]);}else if(!e)toast("Select an object first");}}}
 
 void App::drawContent(float x0,float x1){float H=H_/ui.s();float ph=24+108*cbT_,y=H-22-ph,w=x1-x0;
@@ -128,12 +150,19 @@ void App::drawContent(float x0,float x1){float H=H_/ui.s();float ph=24+108*cbT_,
   ui.rrect(x0+1,y+1,w-2,22,4,BG2,BG2);ui.rrect(x0+1,y+12,w-2,11,0,BG2,BG2);
   fbtn(450,x0+w-30,y+2,26,20,"",3);if(cbOpen_)ic::chevronD(ui,x0+w-17,y+12,12,TXT2);else ic::chevronU(ui,x0+w-17,y+12,12,TXT2);
   ui.text("CONTENT BROWSER",x0+10,y+7,10,TXT2,F_BOLD);
-  const char* tn[2]={"Place","C++ Scripts"};float tx=x0+128;for(int i=0;i<2;i++){float tw=i==0?54:92;btn(451+i,tx,y+2,tw,20);bool on=cbTab_==i&&cbOpen_;if(on)ui.rrect(tx,y+2,tw,20,3,ACC.with(0.35f),ACC.with(0.30f));ui.text(tn[i],tx+tw/2,y+6,10.5f,on?TXT:TXT3,F_BOLD,1);tx+=tw+4;}
+  const char* tn[3]={"Place","Models","C++ Scripts"};float tx=x0+128;for(int i=0;i<3;i++){float tw=i==0?54:i==1?60:92;btn(451+i,tx,y+2,tw,20);bool on=cbTab_==i&&cbOpen_;if(on)ui.rrect(tx,y+2,tw,20,3,ACC.with(0.35f),ACC.with(0.30f));ui.text(tn[i],tx+tw/2,y+6,10.5f,on?TXT:TXT3,F_BOLD,1);tx+=tw+4;}
   if(cbT_<0.6f)return;float a=std::min(1.0f,(cbT_-0.6f)*2.5f);
   if(cbTab_==0){int order[7]={P_EMPTY,P_BOX,P_SPHERE,P_CYL,P_CONE,P_PYRAMID,P_PLANE};
     for(int i=0;i<7;i++){float cx=x0+10+i*62,cy=y+30,cw=56,chh=70;btn(460+i,cx,cy,cw,chh);float k=pressOf(460+i);ui.rrect(cx,cy,cw,chh,4,BG3.with(a*(0.8f+0.2f*k)),BG2.with(a));ui.ring(cx,cy,cw,chh,4,1,k>0.05f?ACC.with(a):LINE.with(a));
       Col c=TXT2.with(a);float ix=cx+cw/2,iy=cy+27;switch(order[i]){case P_EMPTY:ic::empty(ui,ix,iy,30,c);break;case P_BOX:ic::cube(ui,ix,iy,30,c);break;case P_SPHERE:ic::sphere(ui,ix,iy,30,c);break;case P_CYL:ic::cylinder(ui,ix,iy,30,c);break;case P_CONE:case P_PYRAMID:ic::cone(ui,ix,iy,30,c);break;default:ic::plane(ui,ix,iy,30,c);}
       ui.text(PRIM_NAME[order[i]],ix,cy+52,9.5f,TXT.with(a),F_BOLD,1);}}
+  else if(cbTab_==1){if(mdlList_.empty())refreshModels();int cnt=std::min<int>((int)mdlList_.size(),(int)((w-10)/76));
+    for(int i=0;i<cnt;i++){const std::string& n=mdlList_[i];bool ext=n.rfind("ext:",0)==0;float cx=x0+10+i*76,cy=y+30,cw=70,chh=70;btn(460+i,cx,cy,cw,chh);float k=pressOf(460+i);
+      ui.rrect(cx,cy,cw,chh,4,BG3.with(a*(0.8f+0.2f*k)),BG2.with(a));ui.ring(cx,cy,cw,chh,4,1,k>0.05f?ACC.with(a):LINE.with(a));
+      auto th=mthumbs_.find(n);if(!ext&&th!=mthumbs_.end()&&th->second.fbo)ui.image(th->second.tex,cx+3,cy+3,cw-6,44,4,WHITE.with(a));else{ui.circle(cx+cw/2,cy+17,6,TXT2.with(a),TXT2.with(a));ui.rrect(cx+cw/2-9,cy+26,18,18,6,TXT2.with(a),TXT2.with(a));}
+      std::string nm=n;size_t sl=nm.find_last_of("/:");if(sl!=std::string::npos)nm=nm.substr(sl+1);size_t dt=nm.find_last_of('.');if(dt!=std::string::npos)nm=nm.substr(0,dt);if(nm.size()>10)nm=nm.substr(0,9)+"..";if(nm.size()&&nm[0]>='a'&&nm[0]<='z')nm[0]-=32;
+      ui.text(nm,cx+cw/2,cy+50,10,TXT.with(a),F_BOLD,1);ui.text(ext?"IMPORT":"MODEL",cx+cw/2,cy+60,7.5f,ext?ORG.with(a):TXT3.with(a),F_BOLD,1);}
+    if(mdlList_.size()<=2)ui.text("Put .glb / .gltf files in Files > SabakEngine > Models",x0+170,y+60,10,TXT3.with(a));}
   else{int i=0;for(auto& kv:scriptRegistry()){float cx=x0+10+i*98,cy=y+30,cw=92,chh=70;btn(460+i,cx,cy,cw,chh);float k=pressOf(460+i);const Entity* se=scene_.get(sel_);bool on=se&&se->script==kv.first;
       ui.rrect(cx,cy,cw,chh,4,BG3.with(a*(0.8f+0.2f*k)),BG2.with(a));ui.ring(cx,cy,cw,chh,4,1,on?ACC.with(a):LINE.with(a));ic::code(ui,cx+cw/2,cy+24,26,(on?ACC:TXT2).with(a));
       std::string nm=kv.first;if(nm.size()>13)nm=nm.substr(0,12)+"..";ui.text(nm,cx+cw/2,cy+44,10,TXT.with(a),F_BOLD,1);ui.text("C++",cx+cw/2,cy+57,8.5f,TXT3.with(a),F_BOLD,1);i++;}
@@ -143,8 +172,8 @@ void App::drawContent(float x0,float x1){float H=H_/ui.s();float ph=24+108*cbT_,
 void App::drawSelection(Vec3 cam,Vec3 tg){(void)cam;(void)tg;const Entity* se=scene_.get(sel_);if(!se||se->prim==P_TERRAIN)return;float S=ui.s();
   std::vector<int> q{sel_};float mnx=1e9f,mny=1e9f,mxx=-1e9f,mxy=-1e9f;bool any=false;
   for(size_t qi=0;qi<q.size();qi++){int id=q[qi];for(int c:scene_.childrenOf(id))q.push_back(c);const Entity* e=scene_.get(id);if(!e||e->prim==P_EMPTY||e->prim==P_TERRAIN)continue;Mat4 m=scene_.world(id);
-    float y0=(e->prim==P_CYL||e->prim==P_CONE||e->prim==P_PYRAMID)?0.0f:-0.5f,y1=y0+1.0f;
-    for(int k=0;k<8;k++){float lx=(k&1)?0.5f:-0.5f,ly=(k&2)?y1:y0,lz=(k&4)?0.5f:-0.5f;Vec3 p{m.m[0]*lx+m.m[4]*ly+m.m[8]*lz+m.m[12],m.m[1]*lx+m.m[5]*ly+m.m[9]*lz+m.m[13],m.m[2]*lx+m.m[6]*ly+m.m[10]*lz+m.m[14]};float sx,sy;
+    float y0=(e->prim==P_CYL||e->prim==P_CONE||e->prim==P_PYRAMID||e->prim==P_MODEL)?0.0f:-0.5f,y1=y0+1.0f;float bw=0.5f,bh=1.0f;if(e->prim==P_MODEL){Model* mm=modelFor(e->asset);if(mm){bw=mm->radius*0.7f;bh=mm->height;}y1=bh;}
+    for(int k=0;k<8;k++){float lx=(k&1)?bw:-bw,ly=(k&2)?y1:y0,lz=(k&4)?bw:-bw;Vec3 p{m.m[0]*lx+m.m[4]*ly+m.m[8]*lz+m.m[12],m.m[1]*lx+m.m[5]*ly+m.m[9]*lz+m.m[13],m.m[2]*lx+m.m[6]*ly+m.m[10]*lz+m.m[14]};float sx,sy;
       if(!r_->project(p,sx,sy))continue;any=true;mnx=std::min(mnx,sx);mxx=std::max(mxx,sx);mny=std::min(mny,sy);mxy=std::max(mxy,sy);}}
   if(!any)return;float x0=mnx/S-4,y0=mny/S-4,x1=mxx/S+4,y1=mxy/S+4;float L=std::min(12.0f,std::min(x1-x0,y1-y0)*0.35f);
   ui.rrect(x0,y0,x1-x0,y1-y0,2,ORG.with(0.05f),ORG.with(0.05f));ui.ring(x0,y0,x1-x0,y1-y0,2,1,ORG.with(0.45f));
@@ -209,7 +238,9 @@ void App::drawEditor(){float W=W_/ui.s();float H=H_/ui.s();A_=1;oy_=0;
   if(const Entity* e=scene_.get(sel_)){float x=W-206,y=46,w=200,h=H-46-28;ui.shadow(x,y+2,w,h,5,10,Col::hex(0,0.35f));ui.rrect(x,y,w,h,5,BG1.with(0.95f),BG1.with(0.95f));ui.ring(x,y,w,h,5,1,LINE);
     ui.rrect(x+1,y+1,w-2,25,4,BG2,BG2);ui.rrect(x+1,y+14,w-2,12,0,BG2,BG2);ui.rrect(x+1,y+26,w-2,1,0,LINE,LINE);ui.text("DETAILS",x+12,y+8,10.5f,TXT2,F_BOLD);
     std::string nm=e->name;if(nm.size()>18)nm=nm.substr(0,17)+"..";ui.text(nm,x+12,y+34,13,TXT,F_BOLD);ui.text(std::string(PRIM_NAME[e->prim])+"   #"+std::to_string(e->id),x+12,y+51,10,TXT3);
-    ui.text("Color",x+12,y+71,10,TXT2,F_BOLD);for(int i=0;i<8;i++){float cx=x+56+i*17,cy=y+68;btn(150+i,cx,cy,15,15);Col c=Col::hex(SWATCH[i]);ui.rrect(cx,cy,15,15,3,c,c);bool same=std::fabs(e->color.r-c.r)<0.01f&&std::fabs(e->color.g-c.g)<0.01f&&std::fabs(e->color.b-c.b)<0.01f;ui.ring(cx-1.5f,cy-1.5f,18,18,4,same?1.5f:1,same?ACC:LINE);}
+    if(e->prim==P_MODEL){ui.text("Anim",x+12,y+71,10,TXT2,F_BOLD);float bx=x+52,bw=w-64;ui.rrect(bx,y+66,bw,20,3,BG3,BG3);ui.ring(bx,y+66,bw,20,3,1,LINE);btn(161,bx,y+66,22,20);btn(162,bx+bw-22,y+66,22,20);
+      ui.text("<",bx+11,y+68,12,pressOf(161)>0.1f?ACC:TXT2,F_BOLD,1);ui.text(">",bx+bw-11,y+68,12,pressOf(162)>0.1f?ACC:TXT2,F_BOLD,1);ui.text(e->anim,bx+bw/2,y+71,10.5f,TXT,F_BOLD,1);}
+    else{ui.text("Color",x+12,y+71,10,TXT2,F_BOLD);}for(int i=0;e->prim!=P_MODEL&&i<8;i++){float cx=x+56+i*17,cy=y+68;btn(150+i,cx,cy,15,15);Col c=Col::hex(SWATCH[i]);ui.rrect(cx,cy,15,15,3,c,c);bool same=std::fabs(e->color.r-c.r)<0.01f&&std::fabs(e->color.g-c.g)<0.01f&&std::fabs(e->color.b-c.b)<0.01f;ui.ring(cx-1.5f,cy-1.5f,18,18,4,same?1.5f:1,same?ACC:LINE);}
     ui.rrect(x+1,y+92,w-2,18,0,BG2,BG2);ui.text("TRANSFORM",x+12,y+96,9.5f,TXT3,F_BOLD);
     if(e->prim!=P_TERRAIN){const char* gl[3]={"Location","Rotation","Scale"};const Vec3* vs[3]={&e->pos,&e->rot,&e->scale};
       for(int g=0;g<3;g++){float gy=y+116+g*55;ui.text(gl[g],x+12,gy+16,10.5f,TXT2,F_BOLD);

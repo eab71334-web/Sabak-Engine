@@ -3,6 +3,7 @@
 #include <SDL3/SDL_main.h>
 #include <string>
 #include "app.h"
+#include "model.h"
 #include "gl.h"
 int main(int, char**){
   if(!SDL_Init(SDL_INIT_VIDEO)){SDL_Log("SDL_Init failed: %s",SDL_GetError());return 1;}
@@ -19,6 +20,7 @@ int main(int, char**){
   winFbo=(unsigned)SDL_GetNumberProperty(wp,SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER,0);
   winRb=(unsigned)SDL_GetNumberProperty(wp,SDL_PROP_WINDOW_UIKIT_OPENGL_RENDERBUFFER_NUMBER,0);
 #endif
+  {const char* bp=SDL_GetBasePath();sk::g_assetDir=std::string(bp?bp:"./")+"assets";}
   sk::Renderer r;bool ok=r.init(W,H);
   if(!ok){float cg=r.shadersOk?0.0f:0.5f;   // diagnostic: red = GL error, orange = shader error
     while(true){SDL_Event e;while(SDL_PollEvent(&e)){if(e.type==SDL_EVENT_QUIT)return 0;}
