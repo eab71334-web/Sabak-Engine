@@ -13,10 +13,10 @@ void Game::init(Renderer& r){
   int trunk=r.upload(makeCylinder(0.3f,0.2f,2.2f,8,{0.36f,0.24f,0.14f})),crown=r.upload(makeCone(1.5f,4.2f,10,{0.16f,0.4f,0.17f}));
   int crystal=r.upload(makeSphere(0.5f,14,10,{0.3f,0.85f,1.0f}));
   float hs[5][2]={{-9,-8},{8,-10},{12,6},{-12,8},{0,-16}};
-  for(int i=0;i<5;i++){float x=hs[i][0],z=hs[i][1],y=height(x,z),w=5+(i%2)*1.5f;
+  for(int i=0;i<5&&tmpl_==1;i++){float x=hs[i][0],z=hs[i][1],y=height(x,z),w=5+(i%2)*1.5f;
     items_.push_back({box,Mat4::translate({x,y+1.5f,z})*Mat4::scale({w,3,4.5f})});
     items_.push_back({roof,Mat4::translate({x,y+3,z})*Mat4::rotY(0.785f)*Mat4::scale({w*0.78f,2.2f,w*0.78f})});}
-  for(int i=0;i<420;i++){float x=(hash(i,1)-0.5f)*240,z=(hash(i,2)-0.5f)*240,y=height(x,z);if(y<0.3f||std::sqrt(x*x+z*z)<22||y>13)continue;float s=0.8f+hash(i,3)*0.9f;
+  for(int i=0;i<420&&tmpl_!=0;i++){float x=(hash(i,1)-0.5f)*240,z=(hash(i,2)-0.5f)*240,y=height(x,z);if(y<0.3f||std::sqrt(x*x+z*z)<22||y>13)continue;float s=0.8f+hash(i,3)*0.9f;
     items_.push_back({trunk,Mat4::translate({x,y,z})*Mat4::scale({s,s,s})});items_.push_back({crown,Mat4::translate({x,y+2.2f*s,z})*Mat4::scale({s,s,s})});}
   for(int i=0;i<5;i++){float a=i/5.0f*6.28f,x=std::cos(a)*7,z=std::sin(a)*7;items_.push_back({crystal,Mat4::translate({x,height(x,z)+1.2f,z})*Mat4::scale({0.7f,1.4f,0.7f}),{1.0f,1.0f,1.0f},true});}
   heroMesh_=r.upload(makeCylinder(0.38f,0.3f,1.5f,10,{0.6f,0.12f,0.12f}));headMesh_=r.upload(makeSphere(0.26f,12,8,{0.9f,0.72f,0.58f}));
@@ -25,6 +25,10 @@ void Game::update(float dt){time+=dt;float ax=sx_,ay=sy_;if(keys_[1])ax-=1;if(ke
   float l=std::sqrt(ax*ax+ay*ay);if(l>1){ax/=l;ay/=l;}
   float fx=-std::sin(yaw_),fz=-std::cos(yaw_),rx=std::cos(yaw_),rz=-std::sin(yaw_);float wx=rx*ax+fx*-ay,wz=rz*ax+fz*-ay;
   float sp=5.5f;hero.x+=wx*sp*dt;hero.z+=wz*sp*dt;hero.y=height(hero.x,hero.z);if(l>0.1f)heroYaw=std::atan2(wx,wz);}
+void Game::drawBackdrop(Renderer& r,float t){
+  std::vector<DrawItem> all=items_;all.push_back({heroMesh_,Mat4::translate({0,height(0,0),0})*Mat4::rotY(t*0.3f)});all.push_back({headMesh_,Mat4::translate({0,height(0,0)+1.75f,0})});
+  float a=t*0.1f+0.6f;Vec3 tg{0,height(0,0)+2.0f,0};Vec3 c{std::sin(a)*24,height(0,0)+9.0f+std::sin(t*0.2f)*1.5f,std::cos(a)*24};
+  float gh=height(c.x,c.z)+1.0f;if(c.y<gh)c.y=gh;r.setCamera(c,tg,0.95f);r.setSun({0.5f,0.55f,0.35f},{0,0,0},55);r.render(all);}
 void Game::draw(Renderer& r){
   std::vector<DrawItem> all=items_;
   all.push_back({heroMesh_,Mat4::translate({hero.x,hero.y,hero.z})*Mat4::rotY(heroYaw)});

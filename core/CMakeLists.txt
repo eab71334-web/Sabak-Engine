@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
-add_library(sabakcore STATIC src/mesh.cpp src/renderer.cpp src/game.cpp)
+add_library(sabakcore STATIC src/mesh.cpp src/renderer.cpp src/game.cpp src/ui.cpp src/app.cpp src/fonts/Poppins_Bold.cpp src/fonts/Poppins_Medium.cpp)
 target_include_directories(sabakcore PUBLIC src third_party third_party/khr)
 # headless simulator (Linux): needs libegl1 + libgles2 + mesa runtime
 if(NOT IOS AND NOT APPLE)
