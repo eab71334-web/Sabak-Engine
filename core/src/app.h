@@ -36,6 +36,7 @@ private:
   void panel(float x,float y,float w,float h,const std::string& title);
   void fbtn(int id,float x,float y,float w,float h,const std::string& label,int kind,bool active=false);   // kind 0 primary,1 normal,2 danger,3 ghost
   void sect(float k);
+  void ensureThumbs(); void renderThumb(Target& t,const Scene& sc,Vec3 cam,Vec3 tg,float fov=0.9f); void cbTap(int id); void drawContent(float x0,float x1); void drawSelection(Vec3 cam,Vec3 tg);
   void drawBackground(); void drawHome(); void drawTemplates(); void drawImport(); void drawHud(); void header(const std::string& title,const std::string& sub);
   bool btn(int id,float x,float y,float w,float h);     // registers a hit area (design units); returns true if held
   float pressOf(int id){return id>=0&&id<64?press_[id]:0.f;}
@@ -51,6 +52,7 @@ private:
   Screen scr_=HOME; std::string toast_; std::vector<Project> projects_; std::vector<std::string> found_; int cur_=-1;
   std::vector<Btn> btns_,prevBtns_; float press_[512]={0}; int held_=-1,heldId_=-1;
   float stickX_=0,stickY_=0; int stickId_=-1,lookId_=-1; float sx0_=0,sy0_=0,lx_=0,ly_=0;
+  std::map<std::string,Target> thumbs_; Target tmplT_[3],banner_; bool tmplOk_[3]={false,false,false},bannerOk_=false,thumbDirty_=false,cbOpen_=false; int cbTab_=0; float cbT_=0;
   Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
   bool play_=false,addMenu_=false,keyDown_[4]={false,false,false,false}; int sel_=-1,mode_=0; float hierScroll_=0,repeatT_=0,pYaw_=0,pPitch_=0.3f,playT_=0;
   float ecYaw_=0.8f,ecPitch_=0.5f,ecDist_=26; Vec3 ecTarget_{0,3,0};

@@ -2,6 +2,7 @@
 #include "gl.h"
 #include <cstdio>
 #include <cmath>
+#include <algorithm>
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 extern const unsigned char Inter_SemiBold_ttf[]; extern const unsigned char Inter_Medium_ttf[];
@@ -9,17 +10,20 @@ namespace sk {
 static const char* VS=R"(#version 300 es
 layout(location=0) in vec2 aPos; layout(location=1) in vec2 aLocal; layout(location=2) in vec2 aHalf; layout(location=3) in vec4 aPar;
 layout(location=4) in vec4 aC1; layout(location=5) in vec4 aC2; layout(location=6) in vec2 aUv;
-uniform vec2 uRes; out vec2 vL; out vec2 vH; out vec4 vP; out vec4 vC1; out vec4 vC2; out vec2 vUv;
-void main(){ vL=aLocal; vH=aHalf; vP=aPar; vC1=aC1; vC2=aC2; vUv=aUv; vec2 n=aPos/uRes*2.0-1.0; gl_Position=vec4(n.x,-n.y,0.0,1.0); })";
+uniform vec2 uRes; out vec2 vL; out vec2 vH; out vec4 vP; out vec4 vC1; out vec4 vC2; out vec2 vUv; out vec2 vPx;
+void main(){ vPx=aPos; vL=aLocal; vH=aHalf; vP=aPar; vC1=aC1; vC2=aC2; vUv=aUv; vec2 n=aPos/uRes*2.0-1.0; gl_Position=vec4(n.x,-n.y,0.0,1.0); })";
 static const char* FS=R"(#version 300 es
-precision highp float; in vec2 vL; in vec2 vH; in vec4 vP; in vec4 vC1; in vec4 vC2; in vec2 vUv; out vec4 o; uniform sampler2D uTex;
+precision highp float; in vec2 vL; in vec2 vH; in vec4 vP; in vec4 vC1; in vec4 vC2; in vec2 vUv; in vec2 vPx; out vec4 o; uniform sampler2D uTex;
 float sdr(vec2 p,vec2 h,float r){ vec2 q=abs(p)-(h-vec2(r)); return length(max(q,0.0))+min(max(q.x,q.y),0.0)-r; }
 void main(){ float mode=vP.z; float a=1.0; vec4 col=vC1;
   if(mode<0.5){ float d=sdr(vL,vH,vP.x); a=clamp(0.5-d,0.0,1.0); col=mix(vC1,vC2,clamp(vL.y/vH.y*0.5+0.5,0.0,1.0)); }
   else if(mode<1.5){ float d=sdr(vL,vH,vP.x); a=clamp(0.5-abs(d+vP.y*0.5)+vP.y*0.5,0.0,1.0)*step(d,0.5); a=clamp(vP.y*0.5-abs(d+vP.y*0.5)+0.5,0.0,1.0); }
   else if(mode<2.5){ float d=sdr(vL,vH-vec2(vP.y),vP.x); a=1.0-smoothstep(-vP.y,vP.y,d); a*=a; }
   else if(mode<3.5){ a=texture(uTex,vUv).r; }
-  else { float t=1.0-clamp(length(vL)/vH.x,0.0,1.0); a=t*t; }
+  else if(mode<4.5){ float t=1.0-clamp(length(vL)/vH.x,0.0,1.0); a=t*t; }
+  else if(mode<5.5){ vec2 pa=vPx-vL,ba=vH-vL; float h=clamp(dot(pa,ba)/max(dot(ba,ba),0.0001),0.0,1.0); float d=length(pa-ba*h)-vP.x; a=clamp(0.5-d,0.0,1.0); }
+  else if(mode<6.5){ a=1.0; }
+  else { float d=sdr(vL,vH,vP.x); a=clamp(0.5-d,0.0,1.0); vec4 t=texture(uTex,vUv); col=vec4(t.rgb*vC1.rgb,vC1.a); }
   o=vec4(col.rgb,col.a*a); })";
 static unsigned mk(unsigned t,const char* s){unsigned h=glCreateShader(t);glShaderSource(h,1,&s,nullptr);glCompileShader(h);int ok=0;glGetShaderiv(h,GL_COMPILE_STATUS,&ok);
   if(!ok){char b[1024];glGetShaderInfoLog(h,1024,nullptr,b);std::fprintf(stderr,"ui shader: %s\n",b);}return h;}
@@ -47,6 +51,13 @@ void UI::rrect(float x,float y,float w,float h,float r,Col t,Col b){float S=s_;
 void UI::ring(float x,float y,float w,float h,float r,float bw,Col c){float S=s_;float p=bw*S;quad(x*S-1,y*S-1,(x+w)*S+1,(y+h)*S+1,0,0,0,0,w*S/2+1,h*S/2+1,r*S,p,1,c,c);}
 void UI::shadow(float x,float y,float w,float h,float r,float blur,Col c){float S=s_;float bl=blur*S;quad(x*S-bl,y*S-bl,(x+w)*S+bl,(y+h)*S+bl,0,0,0,0,w*S/2+bl,h*S/2+bl,r*S,bl,2,c,c);}
 void UI::glow(float cx,float cy,float radius,Col c){float S=s_;float r=radius*S;quad(cx*S-r,cy*S-r,cx*S+r,cy*S+r,0,0,0,0,r,r,0,0,4,c,c);}
+void UI::vtx(float px,float py,float lx,float ly,float hx,float hy,float rad,float bw,float mode,Col a,Col b,float u,float v){float f[20]={px,py,lx,ly,hx,hy,rad,bw,mode,0,a.r,a.g,a.b,a.a,b.r,b.g,b.b,b.a,u,v};buf_.insert(buf_.end(),f,f+20);}
+void UI::line(float x0,float y0,float x1,float y1,float w,Col c){float S=s_;float ax=x0*S,ay=y0*S,bx=x1*S,by=y1*S,r=w*S/2;float mnx=std::min(ax,bx)-r-1,mxx=std::max(ax,bx)+r+1,mny=std::min(ay,by)-r-1,mxy=std::max(ay,by)+r+1;
+  float X[4]={mnx,mxx,mxx,mnx},Y[4]={mny,mny,mxy,mxy};int ix[6]={0,1,2,0,2,3};for(int k:ix)vtx(X[k],Y[k],ax,ay,bx,by,r,0,5,c,c,0,0);}
+void UI::tri(float x0,float y0,float x1,float y1,float x2,float y2,Col c){float S=s_;vtx(x0*S,y0*S,0,0,1,1,0,0,6,c,c,0,0);vtx(x1*S,y1*S,0,0,1,1,0,0,6,c,c,0,0);vtx(x2*S,y2*S,0,0,1,1,0,0,6,c,c,0,0);}
+void UI::image(unsigned tex,float x,float y,float w,float h,float r,Col tint){float S=s_;if(curTex_!=tex){flush();curTex_=tex;}
+  float x0=x*S,y0=y*S,x1=(x+w)*S,y1=(y+h)*S,cx=(x0+x1)/2,cy=(y0+y1)/2;float P[4][4]={{x0,y0,0,1},{x1,y0,1,1},{x1,y1,1,0},{x0,y1,0,0}};int ix[6]={0,1,2,0,2,3};
+  for(int k:ix){float*p=P[k];vtx(p[0],p[1],p[0]-cx,p[1]-cy,w*S/2,h*S/2,r*S,0,7,tint,tint,p[2],p[3]);}}
 float UI::measure(const std::string& t,float size,int font){Face& f=face(size,font);float x=0,y=0;stbtt_aligned_quad q;
   for(unsigned char ch:t){if(ch<32||ch>126)ch='?';stbtt_GetBakedQuad((stbtt_bakedchar*)f.cd,f.aw,f.aw,ch-32,&x,&y,&q,1);}return x/s_;}
 void UI::text(const std::string& t,float x,float y,float size,Col c,int font,int align){Face& f=face(size,font);

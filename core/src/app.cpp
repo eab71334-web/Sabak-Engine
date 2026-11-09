@@ -1,5 +1,6 @@
 #include "app.h"
 #include "theme.h"
+#include "icons.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -95,49 +96,55 @@ void App::header(const std::string& title,const std::string& sub){sect(0);
   fbtn(3,12,9,32,32,"",1);T("<",28,13,19,TXT,F_BOLD,1);
   T(title,58,9,15,TXT,F_BOLD);T(sub,58,29,10.5f,TXT3);}
 
-void App::drawHome(){float W=W_/ui.s();float H=393;
-  sect(0);R(0,0,W,46,0,BG1.with(0.94f),BG1.with(0.94f));R(0,45,W,1,0,LINE,LINE);
-  R(14,11,24,24,5,ACC,ACC2);T("S",26,13,14,WHITE,F_BOLD,1);T("SABAK ENGINE",48,10,13,TXT,F_BOLD);T("Version 0.1",48,27,10,TXT3);
-  { std::string st="C++ native   |   OpenGL ES 3   |   "+std::to_string((int)(fps_+0.5f))+" fps";T(st,W-16,17,10.5f,TXT3,F_REG,2);}
-  sect(1);T("Sabak Engine",36,76,38,TXT,F_BOLD);T("Real-time 3D engine for iPhone",38,124,14,TXT2);
-  R(38,152,36,2,1,ACC,ACC);
-  sect(2);
-  { float x=38,y=176,w=236,h=76;btn(1,x,y,w,h);float k=pressOf(1);SH(x,y+3,w,h,6,12,Col::hex(0,0.45f));R(x,y,w,h,6,ACC.mul(1+0.1f*k),ACC2.mul(1+0.1f*k));RING(x,y,w,h,6,1,ACC.mul(1.3f));
-    R(x+14,y+20,36,36,5,Col::hex(0,0.22f),Col::hex(0,0.22f));plusIcon(x+32,y+38,16,WHITE);T("New Project",x+62,y+20,15,WHITE,F_BOLD);T("Create from a template",x+62,y+42,11,WHITE.with(0.78f)); }
-  { float x=288,y=176,w=210,h=76;btn(2,x,y,w,h);float k=pressOf(2);SH(x,y+3,w,h,6,12,Col::hex(0,0.35f));R(x,y,w,h,6,BG2.mul(1+0.3f*k),BG1.mul(1+0.3f*k));RING(x,y,w,h,6,1,LINE2);
-    R(x+14,y+20,36,36,5,BG3,BG3);downIcon(x+32,y+37,15,TXT);T("Import Project",x+62,y+20,15,TXT,F_BOLD);T("From the Files app",x+62,y+42,11,TXT2); }
-  sect(3);
-  { const char* lb[3]={"ENGINE","RENDERER","SCRIPTING"};const char* vl[3]={"0.1 preview","OpenGL ES 3","C++17"};float cw=(460-16)/3.0f;
-    for(int i=0;i<3;i++){float x=38+i*(cw+8),y=268,w=cw,h=44;R(x,y,w,h,5,BG1.with(0.9f),BG1.with(0.9f));RING(x,y,w,h,5,1,LINE);T(lb[i],x+12,y+8,9,TXT3,F_BOLD);T(vl[i],x+12,y+22,12,TXT,F_BOLD);} }
-  sect(4);
-  float px=W-322,py=62,pw=298,ph=H-62-34;panel(px,py,pw,ph,"RECENT PROJECTS");
-  { std::string n=std::to_string(projects_.size());T(n,px+pw-14,py+8,10.5f,TXT3,F_BOLD,2);}
-  if(projects_.empty()){cubeIcon(px+pw/2,py+110,46,A_);T("No projects yet",px+pw/2,py+150,13,TXT,F_BOLD,1);T("Create a new project or import one.",px+pw/2,py+170,11,TXT3,F_REG,1);}
-  else for(int i=0;i<(int)projects_.size()&&i<4;i++){auto&p=projects_[i];float x=px+8,y=py+34+i*60,w=pw-16,h=54;btn(10+i,x,y,w,h);float k=pressOf(10+i);
-    R(x,y,w,h,4,BG3.with(0.0f+0.9f*k),BG3.with(0.0f+0.9f*k));R(x,y+h-1,w,1,0,LINE.with(0.6f),LINE.with(0.6f));
-    unsigned cs[4]={0x3d7dd8,0x3aa08a,0xc08a3e,0x8a6fc0};Col cc=Col::hex(cs[(p.name.size()+p.tmpl)%4]);R(x+4,y+8,38,38,4,BG2,BG2);RING(x+4,y+8,38,38,4,1,LINE2);R(x+4,y+8,3,38,0,cc,cc);
-    T(p.name.empty()?"?":p.name.substr(p.name.size()-1,1),x+25,y+17,16,cc,F_BOLD,1);
-    T(p.name.size()>20?p.name.substr(0,19)+"..":p.name,x+54,y+11,12.5f,TXT,F_BOLD);
-    long days=(long)((std::time(nullptr)-p.created)/86400);std::string when=days<=0?"Today":std::to_string(days)+"d ago";
-    T(std::string(TNAME[std::min(2,std::max(0,p.tmpl))])+"  |  "+when,x+54,y+30,10.5f,TXT3);T(">",x+w-14,y+16,14,TXT3,F_BOLD,1);}
-  sect(5);T("Tip: pinch to zoom, drag to orbit, tap an object to select it.",38,H-26,10.5f,TXT3);
+void App::renderThumb(Target& t,const Scene& sc,Vec3 cam,Vec3 tg,float fov){r_->pushTarget(t);renderScene(sc,cam,tg,fov);r_->popTarget();}
+void App::ensureThumbs(){
+  Vec3 cams[3]={{9,4.5f,14},{15,6.5f,16},{-18,8,18}},tgs[3]={{0,1.5f,0},{-1,2.5f,-5},{0,3,-3}};
+  for(int i=0;i<3;i++)if(!tmplOk_[i]){Scene tmp;tmp.buildTemplate(i);if(tmplT_[i].fbo==0&&!r_->createTarget(tmplT_[i],320,180))return;renderThumb(tmplT_[i],tmp,cams[i],tgs[i]);tmplOk_[i]=true;return;}
+  if(!bannerOk_){Scene tmp;tmp.buildTemplate(1);if(banner_.fbo==0&&!r_->createTarget(banner_,640,252))return;renderThumb(banner_,tmp,{19,7.5f,23},{-2,2.5f,-6},0.8f);bannerOk_=true;return;}
+  if(thumbDirty_&&cur_>=0&&cur_<(int)projects_.size()){Target& t=thumbs_[projects_[cur_].dir];if(t.fbo==0)r_->createTarget(t,192,108);Vec3 tg=ecTarget_,cam=tg+Vec3{std::sin(ecYaw_)*std::cos(ecPitch_)*ecDist_,std::sin(ecPitch_)*ecDist_,std::cos(ecYaw_)*std::cos(ecPitch_)*ecDist_};renderThumb(t,scene_,cam,tg);thumbDirty_=false;return;}
+  if(scr_==HOME)for(auto& p:projects_){if(thumbs_.count(p.dir)&&thumbs_[p.dir].fbo)continue;Scene tmp;if(!tmp.load(p.dir+"/scenes/main.scene"))tmp.buildTemplate(p.tmpl);Target& t=thumbs_[p.dir];if(t.fbo==0)r_->createTarget(t,192,108);
+    Vec3 tg{0,3,0},cam=tg+Vec3{std::sin(0.8f)*std::cos(0.5f)*26,std::sin(0.5f)*26,std::cos(0.8f)*std::cos(0.5f)*26};renderThumb(t,tmp,cam,tg);return;}
 }
 
+void App::drawHome(){float W=W_/ui.s();float H=H_/ui.s();
+  sect(0);R(0,0,W,46,0,BG1.with(0.94f),BG1.with(0.94f));R(0,45,W,1,0,LINE,LINE);
+  R(14,11,24,24,5,ACC,ACC2);ic::cube(ui,26,23+oy_,15,WHITE.with(A_));T("SABAK ENGINE",48,10,13,TXT,F_BOLD);T("Version 0.1",48,27,10,TXT3);
+  { std::string st="C++ native   |   OpenGL ES 3   |   "+std::to_string((int)(fps_+0.5f))+" fps";T(st,W-16,17,10.5f,TXT3,F_REG,2);}
+  // ---- hero banner (real render of the Village template)
+  sect(1);{ float x=24,y=58,w=500,h=196;SH(x,y+3,w,h,8,14,Col::hex(0,0.5f));
+    if(bannerOk_)ui.image(banner_.tex,x,y+oy_,w,h,8,Col{1,1,1,A_});else R(x,y,w,h,8,BG2,BG2);
+    R(x,y,w,h,8,BG0.with(0.05f),BG0.with(0.80f));for(int i=0;i<25;i++){float aa=0.78f*std::pow(1-i/25.0f,1.6f);R(x+i*14,y,15,h,0,BG0.with(aa),BG0.with(aa));}RING(x,y,w,h,8,1,LINE2);
+    R(x+24,y+26,3,50,0,ACC,ACC);T("SABAK ENGINE",x+36,y+24,10.5f,ACC,F_BOLD);T("Create your game",x+36,y+40,30,WHITE,F_BOLD);T("Design scenes, place objects and write C++ gameplay.",x+36,y+84,12,TXT2);
+    { float bx=x+24,by=y+h-60,bw=170,bh=40;btn(1,bx,by,bw,bh);float k=pressOf(1);R(bx,by,bw,bh,5,ACC.mul(1+0.12f*k),ACC2.mul(1+0.12f*k));RING(bx,by,bw,bh,5,1,ACC.mul(1.3f));ic::plus(ui,bx+24,by+bh/2+oy_,15,WHITE.with(A_));T("New Project",bx+44,by+11,13.5f,WHITE,F_BOLD);}
+    { float bx=x+204,by=y+h-60,bw=156,bh=40;btn(2,bx,by,bw,bh);float k=pressOf(2);R(bx,by,bw,bh,5,BG3.with(0.9f).mul(1+0.25f*k),BG2.with(0.9f).mul(1+0.25f*k));RING(bx,by,bw,bh,5,1,LINE2);ic::download(ui,bx+24,by+bh/2+oy_,15,TXT.with(A_));T("Import",bx+44,by+11,13.5f,TXT,F_BOLD);} }
+  // ---- quick start templates
+  sect(2);T("QUICK START",26,266,10,TXT3,F_BOLD);R(100,272,424,1,0,LINE,LINE);
+  for(int i=0;i<3;i++){float x=24+i*(160+10),y=284,w=160,h=94;btn(20+i,x,y,w,h);float k=pressOf(20+i);SH(x,y+2,w,h,6,10,Col::hex(0,0.4f));
+    if(tmplOk_[i])ui.image(tmplT_[i].tex,x,y+oy_,w,h,6,Col{1,1,1,A_});else R(x,y,w,h,6,BG2,BG2);
+    R(x,y+h*0.45f,w,h*0.55f,6,BG0.with(0.0f),BG0.with(0.88f));RING(x,y,w,h,6,k>0.05f?1.5f:1,k>0.05f?ACC:LINE2);
+    T(TNAME[i],x+10,y+h-34,12,WHITE,F_BOLD);const char* tg[3]={"BLANK","SCENE","TERRAIN"};T(tg[i],x+10,y+h-18,9,TXT2,F_BOLD);R(x+w-30,y+h-30,20,20,10,ACC.with(0.9f),ACC2.with(0.9f));ic::plus(ui,x+w-20,y+h-20+oy_,10,WHITE.with(A_));}
+  // ---- recent projects
+  sect(3);float px=W-24-288,py=58,pw=288,ph=H-58-14;panel(px,py,pw,ph,"RECENT PROJECTS");T(std::to_string(projects_.size()),px+pw-14,py+8,10.5f,TXT3,F_BOLD,2);
+  if(projects_.empty()){ic::cube(ui,px+pw/2,py+ph/2-24+oy_,44,TXT3.with(A_*0.8f));T("No projects yet",px+pw/2,py+ph/2+10,13,TXT,F_BOLD,1);T("Create one or import an existing project.",px+pw/2,py+ph/2+30,10.5f,TXT3,F_REG,1);}
+  else for(int i=0;i<(int)projects_.size()&&i<4;i++){auto&p=projects_[i];float x=px+8,y=py+34+i*70,w=pw-16,h=64;btn(10+i,x,y,w,h);float k=pressOf(10+i);
+    R(x,y,w,h,5,BG3.with(0.0f+0.9f*k),BG3.with(0.0f+0.9f*k));R(x,y+h+2,w,1,0,LINE.with(0.5f),LINE.with(0.5f));
+    auto it=thumbs_.find(p.dir);if(it!=thumbs_.end()&&it->second.fbo)ui.image(it->second.tex,x+4,y+5+oy_,96,54,4,Col{1,1,1,A_});else{R(x+4,y+5,96,54,4,BG2,BG2);ic::cube(ui,x+52,y+32+oy_,22,TXT3.with(A_));}
+    RING(x+4,y+5,96,54,4,1,LINE2);
+    T(p.name.size()>16?p.name.substr(0,15)+"..":p.name,x+110,y+12,12.5f,TXT,F_BOLD);
+    long days=(long)((std::time(nullptr)-p.created)/86400);std::string when=days<=0?"Today":std::to_string(days)+"d ago";
+    T(std::string(TNAME[std::min(2,std::max(0,p.tmpl))]),x+110,y+30,10.5f,TXT2);T(when,x+110,y+44,10,TXT3);ic::chevronR(ui,x+w-12,y+32+oy_,14,TXT3.with(A_));}
+}
 
 void App::drawTemplates(){float W=W_/ui.s();header("New project","Select a template to start from.");
-  float cw=(W-36*2-16*2)/3,y0=70,ch=H_/ui.s()-y0-26;
+  float cw=(W-36*2-16*2)/3,y0=66,ch=H_/ui.s()-y0-20;
   for(int i=0;i<3;i++){sect(1+i);float x=36+i*(cw+16),y=y0,w=cw,h=ch;btn(20+i,x,y,w,h);float k=pressOf(20+i);
     SH(x,y+3,w,h,6,12,Col::hex(0,0.4f));R(x,y,w,h,6,BG1.with(0.96f),BG1.with(0.96f));RING(x,y,w,h,6,1,k>0.05f?ACC:LINE2);
-    float ax=x+8,ay=y+8,aw=w-16,ah=122;
-    if(i==0){R(ax,ay,aw,ah,4,Col::hex(0x3d4c5e),Col::hex(0x93a5b8));ui.circle(ax+aw*0.74f,ay+32+oy_,13,C(Col::hex(0xe8e2cf,0.9f)),C(Col::hex(0xe8e2cf,0.9f)));R(ax,ay+ah*0.64f,aw,ah*0.36f,4,Col::hex(0x59713f),Col::hex(0x37492a));}
-    else if(i==1){R(ax,ay,aw,ah,4,Col::hex(0x4a4150),Col::hex(0xc29a7a));R(ax,ay+ah*0.64f,aw,ah*0.36f,4,Col::hex(0x5d6b3a),Col::hex(0x2f3a22));
-      for(int h2=0;h2<3;h2++){float hx=ax+22+h2*(aw-70)/2.0f,hy=ay+ah*0.50f;R(hx,hy+10,30,20,2,Col::hex(0xcfc6b4),Col::hex(0x9a927f));R(hx-4,hy,38,12,3,Col::hex(0x7a3e36),Col::hex(0x55292a));}
-      for(int t2=0;t2<4;t2++){float tx=ax+12+t2*(aw-34)/3.0f;ui.circle(tx+6,ay+ah*0.87f+oy_,6,C(Col::hex(0x2f5a35)),C(Col::hex(0x244a2b)));}}
-    else {R(ax,ay,aw,ah,4,Col::hex(0x343c4a),Col::hex(0x7d8aa0));R(ax,ay+ah*0.50f,aw*0.62f,ah*0.50f,24,Col::hex(0x4a6b3a),Col::hex(0x2f4a28));R(ax+aw*0.36f,ay+ah*0.42f,aw*0.64f,ah*0.58f,28,Col::hex(0x3e5d33),Col::hex(0x243b20));R(ax+aw*0.1f,ay+ah*0.76f,aw*0.8f,ah*0.24f,10,Col::hex(0x2a4325),Col::hex(0x182a16));}
+    float ax=x+8,ay=y+8,aw=w-16,ah=aw*0.5625f;
+    if(tmplOk_[i])ui.image(tmplT_[i].tex,ax,ay+oy_,aw,ah,4,Col{1,1,1,A_});else R(ax,ay,aw,ah,4,BG2,BG2);
     RING(ax,ay,aw,ah,4,1,LINE);
-    T(TNAME[i],x+14,y+142,14,TXT,F_BOLD);T(TDESC[i],x+14,y+164,10.5f,TXT2);
-    const char* tag[3]={"BLANK","SCENE","TERRAIN"};R(x+14,y+h-72,52,16,3,BG3,BG3);T(tag[i],x+40,y+h-70,8.5f,TXT2,F_BOLD,1);
-    fbtn(20+i,x+14,y+h-44,w-28,30,"Create",0);}
+    T(TNAME[i],x+14,ay+ah+12,14,TXT,F_BOLD);T(TDESC[i],x+14,ay+ah+34,10.5f,TXT2);
+    const char* tag[3]={"BLANK","SCENE","TERRAIN"};R(x+14,y+h-76,52,16,3,BG3,BG3);T(tag[i],x+40,y+h-74,8.5f,TXT2,F_BOLD,1);
+    fbtn(20+i,x+14,y+h-48,w-28,34,"Create project",0);}
 }
 
 void App::drawImport(){float W=W_/ui.s();header("Import project","Bring a project folder in from the Files app.");
@@ -151,7 +158,7 @@ void App::drawImport(){float W=W_/ui.s();header("Import project","Bring a projec
 }
 
 void App::render(){
-  btns_.clear();
+  btns_.clear();if(scr_!=EDITOR||thumbDirty_)ensureThumbs();
   if(scr_==EDITOR){drawEditor();}
   else{drawBackground();if(scr_==HOME)drawHome();else if(scr_==TEMPLATES)drawTemplates();else drawImport();}
   A_=1;oy_=0;

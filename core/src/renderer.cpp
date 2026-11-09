@@ -21,20 +21,24 @@ float shadow(){ vec3 p=vL.xyz/vL.w*0.5+0.5; if(p.z>1.0||p.x<0.0||p.x>1.0||p.y<0.
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
 void main(){ vec3 N=normalize(vN); vec3 L=normalize(uSun); vec3 V=normalize(uCam-vW);
   float ndl=max(dot(N,L),0.0); float sh=shadow();
-  vec3 amb=mix(vec3(0.20,0.18,0.15),vec3(0.38,0.48,0.62),N.y*0.5+0.5);
+  vec3 amb=mix(vec3(0.30,0.25,0.19),vec3(0.36,0.47,0.66),N.y*0.5+0.5);
   vec3 H=normalize(L+V); float spec=pow(max(dot(N,H),0.0),48.0)*0.15*ndl*sh;
-  vec3 col=vC*(amb+vec3(1.25,1.12,0.95)*ndl*sh)+spec;
-  float d=length(uCam-vW); float fog=1.0-exp(-d*0.0065); col=mix(col,vec3(0.62,0.68,0.76),clamp(fog,0.0,1.0));
-  col=aces(col*0.9); o=vec4(pow(col,vec3(1.0/2.2)),1.0); })";
+  float rim=pow(1.0-max(dot(N,V),0.0),3.0)*0.10; vec3 col=vC*(amb+vec3(1.45,1.22,0.96)*ndl*sh)+spec+vec3(0.55,0.68,0.9)*rim*(N.y*0.5+0.5);
+  float d=length(uCam-vW); float fog=1.0-exp(-d*0.0030); col=mix(col,vec3(0.74,0.78,0.84),clamp(fog,0.0,1.0));
+  col=aces(col*1.0); col=mix(vec3(dot(col,vec3(0.299,0.587,0.114))),col,1.08); o=vec4(pow(col,vec3(1.0/2.2)),1.0); })";
 static const char* SVS=R"(#version 300 es
 layout(location=0) in vec3 aPos; uniform mat4 uModel,uLightVP; void main(){ gl_Position=uLightVP*uModel*vec4(aPos,1.0);} )";
 static const char* SFS=R"(#version 300 es
 precision mediump float; void main(){} )";
 static const char* SKVS=R"(#version 300 es
-out vec2 vUv; void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vUv=p; gl_Position=vec4(p*2.0-1.0,0.9999,1.0);} )";
+out vec2 vN; void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vN=p*2.0-1.0; gl_Position=vec4(vN,0.9999,1.0);} )";
 static const char* SKFS=R"(#version 300 es
-precision highp float; in vec2 vUv; out vec4 o; void main(){ float t=clamp(vUv.y,0.0,1.0); vec3 hor=vec3(0.70,0.76,0.84),top=vec3(0.26,0.38,0.58);
-  o=vec4(pow(mix(hor,top,pow(t,0.7)),vec3(1.0/2.2)),1.0);} )";
+precision highp float; in vec2 vN; out vec4 o; uniform vec3 uF,uS,uU,uSun; uniform vec2 uT;
+void main(){ vec3 r=normalize(uF+uS*(vN.x*uT.x)+uU*(vN.y*uT.y)); float h=r.y;
+  vec3 hor=vec3(0.74,0.78,0.84),mid=vec3(0.40,0.54,0.74),top=vec3(0.14,0.27,0.54);
+  vec3 c=mix(hor,mid,smoothstep(0.0,0.22,h)); c=mix(c,top,smoothstep(0.18,0.85,h));
+  float sd=max(dot(r,normalize(uSun)),0.0); c+=vec3(1.0,0.80,0.52)*(pow(sd,6.0)*0.16+pow(sd,60.0)*0.35+pow(sd,900.0)*2.0);
+  c=mix(c,hor*0.85,smoothstep(0.0,-0.12,h)); o=vec4(pow(c,vec3(1.0/2.2)),1.0);} )";
 
 bool Renderer::init(int w,int h){
   prog_=link(VS,FS);shProg_=link(SVS,SFS);skyProg_=link(SKVS,SKFS);glGenVertexArrays(1,&skyVao_);
@@ -46,6 +50,13 @@ bool Renderer::init(int w,int h){
   GLenum none=GL_NONE;glDrawBuffers(1,&none);glReadBuffer(GL_NONE);
   glGenFramebuffers(1,&fbo_);glGenRenderbuffers(1,&colorRb_);glGenRenderbuffers(1,&depthRb_);resize(w,h);
   shadersOk=!g_bad;glError=glGetError();return shadersOk&&glError==GL_NO_ERROR;}
+bool Renderer::createTarget(Target& t,int w,int h){t.w=w;t.h=h;glGenTextures(1,&t.tex);glBindTexture(GL_TEXTURE_2D,t.tex);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+  glGenRenderbuffers(1,&t.depth);glBindRenderbuffer(GL_RENDERBUFFER,t.depth);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,w,h);
+  glGenFramebuffers(1,&t.fbo);glBindFramebuffer(GL_FRAMEBUFFER,t.fbo);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,t.tex,0);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,t.depth);
+  bool ok=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;glBindFramebuffer(GL_FRAMEBUFFER,useExt_?ext_:fbo_);return ok;}
+void Renderer::pushTarget(const Target& t){sExt_=ext_;sUse_=useExt_;sW_=w_;sH_=h_;ext_=t.fbo;useExt_=true;w_=t.w;h_=t.h;}
+void Renderer::popTarget(){ext_=sExt_;useExt_=sUse_;w_=sW_;h_=sH_;}
 void Renderer::resize(int w,int h){w_=w;h_=h;glBindRenderbuffer(GL_RENDERBUFFER,colorRb_);glRenderbufferStorage(GL_RENDERBUFFER,GL_RGBA8,w,h);
   glBindRenderbuffer(GL_RENDERBUFFER,depthRb_);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,w,h);
   glBindFramebuffer(GL_FRAMEBUFFER,fbo_);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_RENDERBUFFER,colorRb_);
@@ -74,7 +85,9 @@ void Renderer::render(const std::vector<DrawItem>& items){
   glDisable(GL_POLYGON_OFFSET_FILL);
   // 2) main pass
   glBindFramebuffer(GL_FRAMEBUFFER,useExt_?ext_:fbo_);glViewport(0,0,w_,h_);glClearColor(0.6f,0.75f,0.9f,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-  glDisable(GL_DEPTH_TEST);glUseProgram(skyProg_);glBindVertexArray(skyVao_);glDrawArrays(GL_TRIANGLES,0,3);glEnable(GL_DEPTH_TEST);
+  glDisable(GL_DEPTH_TEST);glUseProgram(skyProg_);{Vec3 f=norm(camTarget_-camPos_),sx=norm(cross(f,{0,1,0})),su=cross(sx,f);float th=std::tan(fov_/2);
+    glUniform3f(glGetUniformLocation(skyProg_,"uF"),f.x,f.y,f.z);glUniform3f(glGetUniformLocation(skyProg_,"uS"),sx.x,sx.y,sx.z);glUniform3f(glGetUniformLocation(skyProg_,"uU"),su.x,su.y,su.z);
+    glUniform2f(glGetUniformLocation(skyProg_,"uT"),th*((float)w_/h_),th);glUniform3f(glGetUniformLocation(skyProg_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);}glBindVertexArray(skyVao_);glDrawArrays(GL_TRIANGLES,0,3);glEnable(GL_DEPTH_TEST);
   glUseProgram(prog_);Mat4 vp=proj_*view_;
   glUniformMatrix4fv(glGetUniformLocation(prog_,"uVP"),1,GL_FALSE,vp.m);glUniformMatrix4fv(glGetUniformLocation(prog_,"uLightVP"),1,GL_FALSE,lightVP_.m);
   glUniform3f(glGetUniformLocation(prog_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);glUniform3f(glGetUniformLocation(prog_,"uCam"),camPos_.x,camPos_.y,camPos_.z);

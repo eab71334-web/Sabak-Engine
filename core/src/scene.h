@@ -18,7 +18,7 @@ public:
   Mat4 local(const Entity& e) const; Mat4 world(int id) const; Vec3 worldPos(int id) const;
   bool save(const std::string& path) const; bool load(const std::string& path);
   void buildTemplate(int t);                         // 0 empty world, 1 village, 2 open terrain
-  float height(float x,float z) const;
+  float height(float x,float z) const; float noise(float x,float z) const;   // smooth 0..1 value noise, used for terrain tinting
   std::vector<int> childrenOf(int id) const;
   int depthOf(int id) const;
 };
