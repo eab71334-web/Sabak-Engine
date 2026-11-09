@@ -2,9 +2,10 @@
 #include "gl.h"
 #include <cstdio>
 namespace sk {
+static bool g_bad=false;
 static unsigned compile(unsigned type,const char* src){unsigned s=glCreateShader(type);glShaderSource(s,1,&src,nullptr);glCompileShader(s);int ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
-  if(!ok){char b[2048];glGetShaderInfoLog(s,2048,nullptr,b);std::fprintf(stderr,"shader error: %s\n",b);}return s;}
-static unsigned link(const char* vs,const char* fs){unsigned p=glCreateProgram();glAttachShader(p,compile(GL_VERTEX_SHADER,vs));glAttachShader(p,compile(GL_FRAGMENT_SHADER,fs));glLinkProgram(p);return p;}
+  if(!ok){g_bad=true;char b[2048];glGetShaderInfoLog(s,2048,nullptr,b);std::fprintf(stderr,"shader error: %s\n",b);}return s;}
+static unsigned link(const char* vs,const char* fs){unsigned p=glCreateProgram();glAttachShader(p,compile(GL_VERTEX_SHADER,vs));glAttachShader(p,compile(GL_FRAGMENT_SHADER,fs));glLinkProgram(p);int lk=0;glGetProgramiv(p,GL_LINK_STATUS,&lk);if(!lk)g_bad=true;return p;}
 
 static const char* VS=R"(#version 300 es
 layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec3 aCol;
@@ -44,7 +45,7 @@ bool Renderer::init(int w,int h){
   glGenFramebuffers(1,&shFbo_);glBindFramebuffer(GL_FRAMEBUFFER,shFbo_);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_TEXTURE_2D,shTex_,0);
   GLenum none=GL_NONE;glDrawBuffers(1,&none);glReadBuffer(GL_NONE);
   glGenFramebuffers(1,&fbo_);glGenRenderbuffers(1,&colorRb_);glGenRenderbuffers(1,&depthRb_);resize(w,h);
-  return glGetError()==GL_NO_ERROR;}
+  shadersOk=!g_bad;glError=glGetError();return shadersOk&&glError==GL_NO_ERROR;}
 void Renderer::resize(int w,int h){w_=w;h_=h;glBindRenderbuffer(GL_RENDERBUFFER,colorRb_);glRenderbufferStorage(GL_RENDERBUFFER,GL_RGBA8,w,h);
   glBindRenderbuffer(GL_RENDERBUFFER,depthRb_);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,w,h);
   glBindFramebuffer(GL_FRAMEBUFFER,fbo_);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_RENDERBUFFER,colorRb_);
@@ -68,7 +69,7 @@ void Renderer::render(const std::vector<DrawItem>& items){
   for(auto&it:items){if(!it.castShadow)continue;auto&g=meshes_[it.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(uM,1,GL_FALSE,it.model.m);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
   glDisable(GL_POLYGON_OFFSET_FILL);
   // 2) main pass
-  glBindFramebuffer(GL_FRAMEBUFFER,fbo_);glViewport(0,0,w_,h_);glClearColor(0.6f,0.75f,0.9f,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+  glBindFramebuffer(GL_FRAMEBUFFER,useExt_?ext_:fbo_);glViewport(0,0,w_,h_);glClearColor(0.6f,0.75f,0.9f,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
   glDisable(GL_DEPTH_TEST);glUseProgram(skyProg_);glBindVertexArray(skyVao_);glDrawArrays(GL_TRIANGLES,0,3);glEnable(GL_DEPTH_TEST);
   glUseProgram(prog_);Mat4 vp=proj_*view_;
   glUniformMatrix4fv(glGetUniformLocation(prog_,"uVP"),1,GL_FALSE,vp.m);glUniformMatrix4fv(glGetUniformLocation(prog_,"uLightVP"),1,GL_FALSE,lightVP_.m);

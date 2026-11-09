@@ -3,23 +3,30 @@
 #include <SDL3/SDL_main.h>
 #include <cmath>
 #include "game.h"
+#include "gl.h"
 int main(int, char**){
   if(!SDL_Init(SDL_INIT_VIDEO)){SDL_Log("SDL_Init failed: %s",SDL_GetError());return 1;}
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,0);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_ES);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);
-  SDL_Window* win=SDL_CreateWindow("Sabak Engine",1280,720,SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN|SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  SDL_Window* win=SDL_CreateWindow("Sabak Engine",1280,720,SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
   if(!win){SDL_Log("window failed: %s",SDL_GetError());return 1;}
   SDL_GLContext ctx=SDL_GL_CreateContext(win);if(!ctx){SDL_Log("GL context failed: %s",SDL_GetError());return 1;}
   SDL_GL_SetSwapInterval(1);
-  int W=0,H=0;SDL_GetWindowSizeInPixels(win,&W,&H);
-  // render at most 1280 px wide for speed; the blit scales it to the screen
-  float sc=W>1280?1280.0f/W:1.0f;int RW=(int)(W*sc),RH=(int)(H*sc);
-  sk::Renderer r;if(!r.init(RW,RH)){SDL_Log("renderer init failed");return 1;}
-  sk::Game g;g.init(r);
-  unsigned winFbo=0;
+  int W=0,H=0;SDL_GetWindowSizeInPixels(win,&W,&H);if(W<=0||H<=0)SDL_GetWindowSize(win,&W,&H);if(W<=0||H<=0){W=852;H=393;}
+  unsigned winFbo=0,winRb=0;
 #ifdef __APPLE__
-  winFbo=(unsigned)SDL_GetNumberProperty(SDL_GetWindowProperties(win),SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER,0);
+  SDL_PropertiesID wp=SDL_GetWindowProperties(win);
+  winFbo=(unsigned)SDL_GetNumberProperty(wp,SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER,0);
+  winRb=(unsigned)SDL_GetNumberProperty(wp,SDL_PROP_WINDOW_UIKIT_OPENGL_RENDERBUFFER_NUMBER,0);
 #endif
+  sk::Renderer r;bool ok=r.init(W,H);
+  // diagnostic: if setup fails, show a solid colour instead of a black screen (red = GL error, orange = shader error)
+  if(!ok){float cr=r.shadersOk?1.0f:1.0f,cg=r.shadersOk?0.0f:0.5f;
+    while(true){SDL_Event e;while(SDL_PollEvent(&e)){if(e.type==SDL_EVENT_QUIT)return 0;}
+      glBindFramebuffer(GL_FRAMEBUFFER,winFbo);glViewport(0,0,W,H);glClearColor(cr,cg,0,1);glClear(GL_COLOR_BUFFER_BIT);
+      if(winRb)glBindRenderbuffer(GL_RENDERBUFFER,winRb);SDL_GL_SwapWindow(win);}}
+  r.setExternalTarget(winFbo);
+  sk::Game g;g.init(r);
   SDL_FingerID stickId=0,lookId=0;bool hasStick=false,hasLook=false;float sx0=0,sy0=0;
   bool run=true;Uint64 last=SDL_GetTicksNS();
   while(run){
@@ -40,6 +47,6 @@ int main(int, char**){
       else if(e.type==SDL_EVENT_MOUSE_MOTION&&(e.motion.state&SDL_BUTTON_LMASK))g.look(-e.motion.xrel*0.006f,e.motion.yrel*0.005f);
     }
     Uint64 now=SDL_GetTicksNS();float dt=(float)((now-last)/1e9);last=now;if(dt>0.05f)dt=0.05f;
-    g.update(dt);g.draw(r);r.present(winFbo,W,H);SDL_GL_SwapWindow(win);
+    g.update(dt);g.draw(r);if(winRb)glBindRenderbuffer(GL_RENDERBUFFER,winRb);SDL_GL_SwapWindow(win);
   }
   SDL_Quit();return 0;}
