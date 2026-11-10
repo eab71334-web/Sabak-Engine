@@ -44,6 +44,49 @@ void ModelInst::evaluate(){if(!m)return;if(a>=(int)m->anims.size()){a=-1;cur.cle
 
 static void addLoco(Model& m){if(m.animIndex("idle")>=0&&m.animIndex("walk")>=0&&m.animIndex("run")>=0&&m.animIndex("Locomotion")<0){Anim a;a.name="Locomotion";a.dur=1;m.anims.push_back(a);}}
 static bool loadFbx(Renderer& r,const std::string& path,float targetHeight,Model& out);
+
+// ---- auto-rig: static (unskinned) glTF gets a humanoid skeleton (hero naming) and distance-based skin weights
+static float segDist(const float* p,const float* a,const float* b){float ab[3]={b[0]-a[0],b[1]-a[1],b[2]-a[2]},ap[3]={p[0]-a[0],p[1]-a[1],p[2]-a[2]};float l=ab[0]*ab[0]+ab[1]*ab[1]+ab[2]*ab[2];float t=l>1e-9f?(ap[0]*ab[0]+ap[1]*ab[1]+ap[2]*ab[2])/l:0;t=std::max(0.f,std::min(1.f,t));float d[3]={ap[0]-ab[0]*t,ap[1]-ab[1]*t,ap[2]-ab[2]*t};return std::sqrt(d[0]*d[0]+d[1]*d[1]+d[2]*d[2]);}
+static bool autoRigGltf(Renderer& r,cgltf_data* d,Model& out,float targetHeight){
+  struct P{std::vector<SkinVertex> v;std::vector<uint32_t> idx;int mat=0;};std::vector<P> ps;float mn[3]={1e9f,1e9f,1e9f},mx[3]={-1e9f,-1e9f,-1e9f};
+  for(size_t ni=0;ni<d->nodes_count;ni++){cgltf_node* n=&d->nodes[ni];if(!n->mesh)continue;float wm[16];cgltf_node_transform_world(n,wm);
+    for(size_t pi=0;pi<n->mesh->primitives_count;pi++){cgltf_primitive* pr=&n->mesh->primitives[pi];if(pr->type!=cgltf_primitive_type_triangles)continue;cgltf_accessor *ap=nullptr,*an=nullptr,*au=nullptr;
+      for(size_t k=0;k<pr->attributes_count;k++){cgltf_attribute* at=&pr->attributes[k];if(at->type==cgltf_attribute_type_position)ap=at->data;else if(at->type==cgltf_attribute_type_normal)an=at->data;else if(at->type==cgltf_attribute_type_texcoord&&at->index==0)au=at->data;}
+      if(!ap)continue;P p;p.v.resize(ap->count);p.mat=pr->material?(int)(pr->material-d->materials):0;
+      for(size_t v=0;v<ap->count;v++){SkinVertex& s=p.v[v];float q[3],nn[3]={0,1,0};cgltf_accessor_read_float(ap,v,q,3);if(an)cgltf_accessor_read_float(an,v,nn,3);s.uv[0]=s.uv[1]=0;if(au)cgltf_accessor_read_float(au,v,s.uv,2);
+        for(int k=0;k<3;k++){s.p[k]=wm[k]*q[0]+wm[4+k]*q[1]+wm[8+k]*q[2]+wm[12+k];s.n[k]=wm[k]*nn[0]+wm[4+k]*nn[1]+wm[8+k]*nn[2];mn[k]=std::min(mn[k],s.p[k]);mx[k]=std::max(mx[k],s.p[k]);}
+        float l=std::sqrt(s.n[0]*s.n[0]+s.n[1]*s.n[1]+s.n[2]*s.n[2]);if(l>1e-6f)for(int k=0;k<3;k++)s.n[k]/=l;}
+      if(pr->indices){p.idx.resize(pr->indices->count);for(size_t k=0;k<p.idx.size();k++)p.idx[k]=(uint32_t)cgltf_accessor_read_index(pr->indices,k);}else{p.idx.resize(ap->count);for(size_t k=0;k<p.idx.size();k++)p.idx[k]=(uint32_t)k;}
+      ps.push_back(std::move(p));}}
+  if(ps.empty())return false;
+  float H=std::max(0.01f,mx[1]-mn[1]),W=mx[0]-mn[0],cx=(mx[0]+mn[0])*0.5f,cz=(mx[2]+mn[2])*0.5f,y0=mn[1];bool tpose=W/H>0.85f;
+  struct J{const char* name;int par;float x,y,z;};   // x as +left fraction of H, y fraction of H, z fraction of H (forward)
+  float ax1=tpose?0.30f:0.20f,ax2=tpose?std::min(0.47f,0.46f*W/H):0.27f,ay1=tpose?0.79f:0.61f,ay2=tpose?0.79f:0.46f;
+  std::vector<J> js={{"root",-1,0,.52f,0},{"spine05",0,0,.54f,0},{"spine03",1,0,.64f,0},{"spine01",2,0,.74f,0},{"neck01",3,0,.82f,0},{"head",4,0,.87f,0},
+    {"clavicle.L",3,.03f,.80f,0},{"clavicle.R",3,-.03f,.80f,0},{"upperarm01.L",6,.12f,.79f,0},{"upperarm01.R",7,-.12f,.79f,0},{"lowerarm01.L",8,ax1,ay1,0},{"lowerarm01.R",9,-ax1,ay1,0},{"wrist.L",10,ax2,ay2,.01f},{"wrist.R",11,-ax2,ay2,.01f},
+    {"upperleg01.L",0,.06f,.50f,0},{"upperleg01.R",0,-.06f,.50f,0},{"lowerleg01.L",14,.065f,.27f,0},{"lowerleg01.R",15,-.065f,.27f,0},{"foot.L",16,.065f,.05f,0},{"foot.R",17,-.065f,.05f,0}};
+  size_t nj=js.size();std::vector<std::array<float,3>> wp(nj);for(size_t i=0;i<nj;i++)wp[i]={cx+js[i].x*H,y0+js[i].y*H,cz+js[i].z*H};
+  out.nodeName.resize(nj);out.parent.resize(nj);out.rest.resize(nj);out.joints.clear();out.ibm.clear();
+  for(size_t i=0;i<nj;i++){out.nodeName[i]=js[i].name;out.parent[i]=js[i].par;TRS t;int pa=js[i].par;t.t={wp[i][0]-(pa>=0?wp[pa][0]:0),wp[i][1]-(pa>=0?wp[pa][1]:0),wp[i][2]-(pa>=0?wp[pa][2]:0)};out.rest[i]=t;out.joints.push_back((int)i);out.ibm.push_back(Mat4::translate({-wp[i][0],-wp[i][1],-wp[i][2]}));}
+  // bone segments (joint index, from, to)
+  struct Sg{int j;std::array<float,3> a,b;int side;};std::vector<Sg> sg;auto side=[&](int j){const std::string& n=out.nodeName[j];return n.size()>2&&n[n.size()-2]=='.'?(n.back()=='L'?1:-1):0;};
+  auto ext=[&](int j,float dx,float dy,float dz){return std::array<float,3>{wp[j][0]+dx*H,wp[j][1]+dy*H,wp[j][2]+dz*H};};
+  std::vector<std::pair<int,int>> link={{0,1},{1,2},{2,3},{3,4},{4,5},{6,8},{7,9},{8,10},{9,11},{10,12},{11,13},{14,16},{15,17},{16,18},{17,19}};
+  for(auto& l:link)sg.push_back({l.first,wp[l.first],wp[l.second],side(l.first)});
+  sg.push_back({5,wp[5],ext(5,0,.10f,0),0});float hx=(tpose?.06f:.04f);sg.push_back({12,wp[12],ext(12,hx,tpose?0:-.05f,0),1});sg.push_back({13,wp[13],ext(13,-hx,tpose?0:-.05f,0),-1});sg.push_back({18,wp[18],ext(18,0,-.04f,.10f),1});sg.push_back({19,wp[19],ext(19,0,-.04f,.10f),-1});
+  float margin=0.035f*H;
+  for(auto& p:ps){for(auto& v:p.v){float best[4]={0,0,0,0};int bj[4]={0,0,0,0};
+    std::vector<std::pair<float,int>> cand;float dx=v.p[0]-cx;
+    for(auto& g:sg){if(g.side!=0&&std::fabs(dx)>margin&&((dx>0)!=(g.side>0)))continue;float dd=segDist(v.p,g.a.data(),g.b.data());float w=1.f/((dd*dd+1e-5f)*(dd*dd+1e-5f));cand.push_back({w,g.j});}
+    if(cand.empty())cand.push_back({1.f,0});std::sort(cand.begin(),cand.end(),[](const std::pair<float,int>&a,const std::pair<float,int>&b){return a.first>b.first;});
+    // merge segments of the same joint
+    std::vector<std::pair<float,int>> m;for(auto& c:cand){bool f=false;for(auto& e:m)if(e.second==c.second){e.first=std::max(e.first,c.first);f=true;break;}if(!f)m.push_back(c);}
+    std::sort(m.begin(),m.end(),[](const std::pair<float,int>&a,const std::pair<float,int>&b){return a.first>b.first;});float sum=0;for(int k=0;k<4&&k<(int)m.size();k++){best[k]=m[k].first;bj[k]=m[k].second;sum+=best[k];}
+    for(int k=0;k<4;k++){v.w[k]=sum>0?best[k]/sum:0;v.j[k]=(unsigned char)bj[k];}}
+    ModelPrim mp;mp.mesh=r.uploadSkin(p.v,p.idx);mp.mat=p.mat;out.prims.push_back(mp);}
+  float rad=0;for(auto& p:ps)for(auto& v:p.v)rad=std::max(rad,std::sqrt((v.p[0]-cx)*(v.p[0]-cx)+(v.p[2]-cz)*(v.p[2]-cz)));
+  out.fit=targetHeight/H;out.foot=y0;out.height=targetHeight;out.radius=std::max(0.5f,rad*out.fit);out.autoRig=true;
+  Anim lo;lo.name="Locomotion";lo.dur=1;out.anims.push_back(lo);out.builtin=(int)out.anims.size();return true;}
 bool loadModel(Renderer& r,const std::string& name,float targetHeight,Model& out){
   if(name.size()>4){std::string x=name.substr(name.size()-4);for(char& ch:x)ch=(char)tolower(ch);if(x==".fbx")return loadFbx(r,name,targetHeight,out);}
   std::string path=name;size_t sl=path.find_last_of("/\\");std::string base=sl==std::string::npos?".":path.substr(0,sl);cgltf_options opt{};cgltf_data* d=nullptr;
@@ -56,7 +99,7 @@ bool loadModel(Renderer& r,const std::string& name,float targetHeight,Model& out
     if(n->has_translation)k.t={n->translation[0],n->translation[1],n->translation[2]};if(n->has_rotation)for(int j=0;j<4;j++)k.r[j]=n->rotation[j];if(n->has_scale)k.s={n->scale[0],n->scale[1],n->scale[2]};}
   // skin
   if(d->skins_count>0){cgltf_skin* sk=&d->skins[0];for(size_t j=0;j<sk->joints_count;j++){out.joints.push_back((int)(sk->joints[j]-d->nodes));Mat4 m=Mat4::identity();if(sk->inverse_bind_matrices)cgltf_accessor_read_float(sk->inverse_bind_matrices,j,m.m,16);out.ibm.push_back(m);}}
-  if(out.joints.empty()||out.joints.size()>80){cgltf_free(d);return false;}
+  bool rig=d->skins_count==0;if(!rig&&(out.joints.empty()||out.joints.size()>80)){cgltf_free(d);return false;}
   // materials + textures
   std::map<std::string,unsigned> cache;std::vector<unsigned char> white{255,255,255,255};unsigned wt=r.createTexture(white.data(),1,1);
   auto loadImg=[&](cgltf_texture* t)->unsigned{if(!t||!t->image)return wt;std::string key;int w=0,h=0,c=0;unsigned char* px=nullptr;
@@ -66,6 +109,7 @@ bool loadModel(Renderer& r,const std::string& name,float targetHeight,Model& out
   for(size_t i=0;i<d->materials_count;i++){cgltf_material* m=&d->materials[i];ModelMat mm;if(m->has_pbr_metallic_roughness){for(int j=0;j<4;j++)mm.col[j]=m->pbr_metallic_roughness.base_color_factor[j];mm.tex=loadImg(m->pbr_metallic_roughness.base_color_texture.texture);}else mm.tex=wt;
     mm.mask=m->alpha_mode!=cgltf_alpha_mode_opaque;out.mats.push_back(mm);}
   if(out.mats.empty()){ModelMat mm;mm.tex=wt;out.mats.push_back(mm);}
+  if(rig){bool ok=autoRigGltf(r,d,out,targetHeight);cgltf_free(d);return ok;}
   // meshes (every skinned primitive uses skin 0 / joint indices directly)
   float mn=1e9f,mx=-1e9f,rad=0;
   for(size_t ni=0;ni<nn;ni++){cgltf_node* n=&d->nodes[ni];if(!n->mesh)continue;
@@ -151,7 +195,7 @@ void Model::clearClips(){clips.clear();rawData.clear();anims.resize(builtin);}
 static std::string safeId(std::string s){for(char& c:s)if(c=='/'||c==':'||c=='\\'||c==' ')c='_';return s;}
 std::string clipFilePath(const std::string& dir,const std::string& id,const std::string& name){return dir+"/"+safeId(id)+"__"+safeId(name)+".anim";}
 bool Model::saveClips(const std::string& dir,const std::string& id) const{std::error_code ec;std::filesystem::create_directories(dir,ec);bool ok=true;
-  for(size_t i=0;i<clips.size();i++){const ClipDef& d=clips[i];std::string fn=dir+"/"+safeId(id)+"__"+safeId(d.name)+".anim";std::ofstream f(fn);if(!f){ok=false;continue;}
+  for(size_t i=0;i<clips.size();i++){const ClipDef& d=clips[i];if(d.lib)continue;std::string fn=dir+"/"+safeId(id)+"__"+safeId(d.name)+".anim";std::ofstream f(fn);if(!f){ok=false;continue;}
     f<<"SABAKANIM 1\n"<<d.name<<'|'<<d.base<<'|'<<d.dur<<'|'<<(d.raw?1:0)<<'|'<<(d.loop?1:0)<<'|'<<(d.inPlace?1:0)<<'|'<<d.overlay<<'|'<<d.mask<<'|'<<d.weight<<'\n';
     for(auto& ev:d.events)f<<"event|"<<ev.first<<'|'<<ev.second<<'\n';for(auto& pn:d.pins)f<<"pin|"<<nodeName[pn.first]<<'|'<<pn.second.x<<'|'<<pn.second.y<<'|'<<pn.second.z<<'\n';
     if(!d.raw){for(auto& kv:d.keys)for(auto& k:kv.second)f<<"key|"<<nodeName[kv.first]<<'|'<<k.t<<'|'<<k.rot.x<<'|'<<k.rot.y<<'|'<<k.rot.z<<'|'<<k.pos.x<<'|'<<k.pos.y<<'|'<<k.pos.z<<'|'<<k.ease<<'\n';}
@@ -184,13 +228,13 @@ static std::string roleOf(std::string n){size_t c=n.find(':');if(c!=std::string:
   if(has("upleg")||has("upperleg")||has("thigh"))return "upleg"+side;
   if(has("lowerleg")||has("calf")||has("shin")||has("leg"))return "loleg"+side;
   if(has("foot")||has("ankle"))return "foot"+side;return "";}
-int Model::retargetFrom(const Model& src,int& mapped){mapped=0;std::map<std::string,int> sr;for(size_t i=0;i<src.nodeName.size();i++){std::string r=roleOf(src.nodeName[i]);if(!r.empty()&&!sr.count(r))sr[r]=(int)i;}
+int Model::retargetFrom(const Model& src,int& mapped,bool lib){mapped=0;std::map<std::string,int> sr;for(size_t i=0;i<src.nodeName.size();i++){std::string r=roleOf(src.nodeName[i]);if(!r.empty()&&!sr.count(r))sr[r]=(int)i;}
   size_t nn=rest.size();std::vector<int> map(nn,-1);for(size_t i=0;i<nn;i++){std::string r=roleOf(nodeName[i]);if(r.empty())continue;auto it=sr.find(r);if(it!=sr.end()){map[i]=it->second;mapped++;}}
   if(mapped<3)return 0;
   auto worldQ=[&](const Model& m,const std::vector<TRS>& p,std::vector<std::array<float,4>>& w){size_t n=p.size();w.assign(n,{0,0,0,1});std::vector<char> dn(n,0);std::function<void(int)> go=[&](int i){if(dn[i])return;int pa=m.parent[i];std::array<float,4> l{p[i].r[0],p[i].r[1],p[i].r[2],p[i].r[3]};if(pa>=0){go(pa);qmul(w[pa].data(),l.data(),w[i].data());}else w[i]=l;dn[i]=1;};for(size_t i=0;i<n;i++)go((int)i);};
   std::vector<std::array<float,4>> sRest,dRest;worldQ(src,src.rest,sRest);worldQ(*this,rest,dRest);
   float sH=src.height/std::max(1e-4f,src.fit),dH=height/std::max(1e-4f,fit),ratio=dH/std::max(1e-4f,sH);int hips=-1;for(size_t i=0;i<nn;i++)if(roleOf(nodeName[i])=="hips")hips=(int)i;
-  int added=0;for(size_t ai=0;ai<src.anims.size();ai++){const Anim& sa=src.anims[ai];if(sa.dur<=0)continue;ClipDef d;d.name=uniqueClipName(sa.name.substr(sa.name.find('|')==std::string::npos?0:sa.name.find('|')+1));d.dur=sa.dur;d.raw=true;
+  int added=0;for(size_t ai=0;ai<(lib?(size_t)src.builtin:src.anims.size());ai++){const Anim& sa=src.anims[ai];if(sa.dur<=0||sa.name=="Locomotion")continue;ClipDef d;d.name=uniqueClipName(sa.name.substr(sa.name.find('|')==std::string::npos?0:sa.name.find('|')+1));d.dur=sa.dur;d.raw=true;d.lib=lib;
     Anim out;out.name=d.name;out.dur=sa.dur;int fr=(int)std::ceil(sa.dur*30)+1;std::vector<AnimChannel> cr(nn),ct(nn);for(size_t i=0;i<nn;i++){cr[i].node=ct[i].node=(int)i;cr[i].path=1;ct[i].path=0;}
     std::vector<TRS> sp;std::vector<std::array<float,4>> sw;std::vector<std::array<float,4>> dw(nn);
     for(int k=0;k<fr;k++){float t=std::min(sa.dur,k/30.0f);src.sample((int)ai,t,sp);worldQ(src,sp,sw);std::vector<char> dn(nn,0);std::vector<TRS> o=rest;
