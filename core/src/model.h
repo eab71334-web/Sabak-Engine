@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <array>
 #include "renderer.h"
 namespace sk {
 extern std::string g_assetDir;                       // folder holding hero.glb, horse.glb and tex/
@@ -15,12 +16,14 @@ struct ClipKey { float t=0; Vec3 rot,pos; int ease=1; };   // ease: 0 linear 1 s
 struct ClipDef { std::string name,base; float dur=1.5f; std::map<int,std::vector<ClipKey>> keys; bool raw=false,loop=true,inPlace=false,lib=false; std::string overlay; int mask=0; float weight=1.f; std::vector<std::pair<float,std::string>> events; std::vector<std::pair<int,Vec3>> pins; };   // overlay: second clip layered over base on a body mask (0 upper,1 lower,2 full)
 float easeF(int e,float f);
 void clipEval(const std::vector<ClipKey>& ks,float t,Vec3& rot,Vec3& pos);   // raw = baked/retargeted data kept as-is
+struct Fx { bool gait=true,breath=true,secondary=true,foot=true; };
 struct Model {
   std::string name; std::vector<ModelPrim> prims; std::vector<ModelMat> mats;
   std::vector<int> parent; std::vector<std::string> nodeName; std::vector<TRS> rest; std::vector<int> joints; std::vector<Mat4> ibm; std::vector<Anim> anims;
   float fit=1, foot=0, height=1.8f, radius=1.2f;       // fit scales the raw model to `height` metres, foot is the raw min Y
   int animIndex(const std::string& n) const { for(size_t i=0;i<anims.size();i++) if(anims[i].name==n) return (int)i; return -1; }
   void sample(int anim,float t,std::vector<TRS>& out) const;
+  Fx fx; mutable std::vector<int> footNodes; mutable std::vector<float> footRestY; mutable bool footInit=false;
   std::vector<ClipDef> clips; std::vector<Anim> rawData; int builtin=0; bool autoRig=false;      // anims[builtin+i] is the baked clip i
   void bakeClip(int ci); void basePose(int ci,float t,std::vector<TRS>& p) const;
   std::string boneRole(int node) const; int mirrorNode(int node) const; bool isUpper(int node) const;
@@ -35,6 +38,8 @@ struct Model {
 };
 struct ModelInst {
   const Model* m=nullptr; std::string cur; int a=-1,prev=-1; float t=0,pt=0,blend=1; bool loop=true,loco=false,prevLoco=false; float phase=0,param=0; std::vector<std::string> fired; std::vector<float> joints; std::vector<Mat4> world;
+  bool lookOn=false; float lookYaw=0,lookPitch=0,lcY=0,lcP=0,lastDt=0.016f,clock=0; bool needStep=false; std::map<int,std::array<float,6>> sp;
+  void post(std::vector<TRS>& p);
   void play(const std::string& name,float fade=0.2f);
   void update(float dt,float speed=1.f);
   void evaluate();

@@ -29,7 +29,7 @@ void Model::sample(int ai,float t,std::vector<TRS>& out) const{out=rest;if(ai<0|
 void ModelInst::play(const std::string& name,float fade){if(!m||name==cur)return;int i=m->animIndex(name);if(i<0)return;
   prev=a;pt=loco?phase:t;prevLoco=loco;a=i;t=0;phase=0;blend=prev<0?1.f:0.f;cur=name;loco=name=="Locomotion";(void)fade;
   int ci=i-m->builtin;if(ci>=0&&ci<(int)m->clips.size())loop=m->clips[ci].loop;else loop=!(name.rfind("die",0)==0||name=="mount"||name=="dismount");}
-void ModelInst::update(float dt,float speed){if(!m||a<0)return;if(a>=(int)m->anims.size()){a=-1;cur.clear();return;}if(prev>=(int)m->anims.size())prev=-1;float d=m->anims[a].dur;float t0=t;
+void ModelInst::update(float dt,float speed){lastDt=dt;needStep=true;if(!m||a<0)return;if(a>=(int)m->anims.size()){a=-1;cur.clear();return;}if(prev>=(int)m->anims.size())prev=-1;float d=m->anims[a].dur;float t0=t;
   if(loco){phase+=dt*speed/std::max(0.2f,m->locoCycle(param));phase-=std::floor(phase);}
   else{t+=dt*speed;if(loop){if(d>0)t=std::fmod(t,d);}else t=std::min(t,d);
     int ci=a-m->builtin;if(ci>=0&&ci<(int)m->clips.size()&&!m->clips[ci].events.empty()){for(auto& ev:m->clips[ci].events){bool hit=t>=t0?(ev.first>t0&&ev.first<=t):(ev.first>t0||ev.first<=t);if(hit&&dt*speed>0)fired.push_back(ev.second);}}}
@@ -37,7 +37,7 @@ void ModelInst::update(float dt,float speed){if(!m||a<0)return;if(a>=(int)m->ani
 void ModelInst::evaluate(){if(!m)return;if(a>=(int)m->anims.size()){a=-1;cur.clear();loco=false;}if(prev>=(int)m->anims.size())prev=-1;const Model& M=*m;std::vector<TRS> p;if(loco)M.sampleLoco(param,phase,p);else M.sample(a,t,p);
   if(blend<1&&prev>=0){std::vector<TRS> q;if(prevLoco)M.sampleLoco(param,pt,q);else M.sample(prev,pt,q);for(size_t i=0;i<p.size();i++){float k=blend;TRS& o=p[i];const TRS& s=q[i];
       o.t=s.t+(o.t-s.t)*k;o.s=s.s+(o.s-s.s)*k;float r[4];nlerp(s.r,o.r,k,r);for(int j=0;j<4;j++)o.r[j]=r[j];}}
-  size_t n=p.size();std::vector<Mat4> w(n);std::vector<char> done(n,0);
+  post(p);size_t n=p.size();std::vector<Mat4> w(n);std::vector<char> done(n,0);
   std::function<void(int)> go=[&](int i){if(done[i])return;int pa=M.parent[i];Mat4 l=toM(p[i]);if(pa>=0){go(pa);w[i]=w[pa]*l;}else w[i]=l;done[i]=1;};
   for(size_t i=0;i<n;i++)go((int)i);world=w;
   joints.resize(M.joints.size()*16);for(size_t j=0;j<M.joints.size();j++){Mat4 jm=w[M.joints[j]]*M.ibm[j];std::memcpy(&joints[j*16],jm.m,64);}}
@@ -163,6 +163,29 @@ void ik2(const Model& m,std::vector<TRS>& p,int end,Vec3 T){int b=m.parent[end];
   Vec3 B2=A+dir*along+perp*hh;
   auto applyRot=[&](int bone,const float* qw){int pa=m.parent[bone];float pq[4]={0,0,0,1};if(pa>=0)for(int i=0;i<4;i++)pq[i]=wq[pa][i];float nw[4],ip[4]={-pq[0],-pq[1],-pq[2],pq[3]},loc[4];qmul(qw,wq[bone].data(),nw);qmul(ip,nw,loc);qnorm(loc);for(int i=0;i<4;i++)p[bone].r[i]=loc[i];};
   float q1[4];qarc(B-A,B2-A,q1);applyRot(a,q1);worldPose(m,p,w,wq);Vec3 C1=posOf(w[end]),B1=posOf(w[b]);float q2[4];qarc(C1-B1,Tc-B1,q2);applyRot(b,q2);}
+// ---- post-pose stage: gait boost, breathing, secondary motion, look-at, foot planting
+static void rotAdd(TRS& t,float rx,float ry,float rz){float q[4];qeuler({rx,ry,rz},q);float o[4];qmul(t.r,q,o);qnorm(o);for(int i=0;i<4;i++)t.r[i]=o[i];}
+static void amplifyRot(TRS& t,const TRS& rest,float k){float o[4];nlerp(rest.r,t.r,k,o);for(int i=0;i<4;i++)t.r[i]=o[i];}
+void ModelInst::post(std::vector<TRS>& p){if(!m||p.empty())return;const Model& M=*m;float dt=needStep?std::min(lastDt,0.05f):0;needStep=false;clock+=dt;size_t n=p.size();
+  auto find=[&](const char* nm){for(size_t i=0;i<n;i++)if(M.nodeName[i]==nm)return (int)i;return -1;};
+  float cyc=loco?phase:(a>=0&&a<(int)M.anims.size()&&M.anims[a].dur>0?t/M.anims[a].dur:0);
+  float g=0;if(loco)g=std::min(1.f,param/6.f);else if(cur=="run")g=1;else if(cur=="walk")g=0.5f;
+  if(M.fx.gait&&g>0.01f){int hu[4]={find("hl_u"),find("hr_u"),find("fl_u"),find("fr_u")};bool quad=hu[0]>=0&&hu[1]>=0;
+    if(quad){for(int k=0;k<4;k++)if(hu[k]>=0)amplifyRot(p[hu[k]],M.rest[hu[k]],1+0.3f*g);int hk[2]={find("hl_l"),find("hr_l")};for(int k=0;k<2;k++)if(hk[k]>=0)amplifyRot(p[hk[k]],M.rest[hk[k]],1+0.15f*g);
+      int sp3[2]={0,find("chest")};for(int k=0;k<2;k++)if(sp3[k]>=0)amplifyRot(p[sp3[k]],M.rest[sp3[k]],1+0.7f*g);
+      int nk=find("neck");if(nk>=0)rotAdd(p[nk],5.f*g*std::sin(cyc*12.5664f+1.0f),0,0);int rt=0;p[rt].t.y+=0.035f*g*std::sin(cyc*12.5664f+0.5f);}}
+  if(M.fx.breath){float b=std::sin(clock*1.9f)*0.9f*(1-std::min(1.f,g));for(size_t i=0;i<n;i++){const std::string& nm=M.nodeName[i];if(nm=="chest"||M.boneRole((int)i)=="spine2")rotAdd(p[i],b,0,0);}}
+  if(M.fx.secondary){for(size_t i=0;i<n;i++){const std::string& nm=M.nodeName[i];bool sec=false;for(const char* k:{"tail","hair","mane","cape","cloak","skirt","scarf","cloth","pony"})if(nm.find(k)!=std::string::npos){sec=true;break;}if(!sec)continue;
+      int pa=M.parent[i];if(pa<0)continue;Vec3 d;quatToEuler(p[pa].r,d);Vec3 d0;quatToEuler(M.rest[pa].r,d0);d=d-d0;auto& s=sp[(int)i];
+      float dd[3]={d.x,d.y,d.z};float lag[3];for(int k=0;k<3;k++){if(dt>0){s[k*2+1]+=(70.f*(dd[k]-s[k*2])-9.f*s[k*2+1])*dt;s[k*2]+=s[k*2+1]*dt;}lag[k]=(s[k*2]-dd[k])*1.2f;}
+      float wag=std::sin(clock*(2.2f+g*5.f))*(3.f+g*6.f);rotAdd(p[i],lag[0],lag[1]+wag,lag[2]);}}
+  if(lookOn||std::fabs(lcY)>0.05f||std::fabs(lcP)>0.05f){float ty=lookOn?lookYaw:0,tp=lookOn?lookPitch:0;ty=std::max(-70.f,std::min(70.f,ty));tp=std::max(-35.f,std::min(35.f,tp));float k=std::min(1.f,dt*8.f);lcY+=(ty-lcY)*k;lcP+=(tp-lcP)*k;
+    int nk=-1,hd=-1;for(size_t i=0;i<n;i++){std::string r=M.boneRole((int)i);if(r=="neck"&&nk<0)nk=(int)i;if(r=="head"&&hd<0)hd=(int)i;}
+    if(nk>=0)rotAdd(p[nk],-lcP*0.4f,lcY*0.4f,0);if(hd>=0)rotAdd(p[hd],-lcP*0.6f,lcY*0.6f,0);}
+  if(M.fx.foot){if(!M.footInit){M.footInit=true;for(size_t i=0;i<n;i++){std::string r=M.boneRole((int)i);const std::string& nm=M.nodeName[i];if(r=="footL"||r=="footR"||(nm.size()>2&&nm.compare(nm.size()-2,2,"_h")==0))M.footNodes.push_back((int)i);}
+      std::vector<Mat4> w;std::vector<std::array<float,4>> wq;worldPose(M,M.rest,w,wq);for(int f:M.footNodes)M.footRestY.push_back(w[f].m[13]);}
+    if(!M.footNodes.empty()){std::vector<Mat4> w;std::vector<std::array<float,4>> wq;worldPose(M,p,w,wq);for(size_t k=0;k<M.footNodes.size();k++){int f=M.footNodes[k];float y=w[f].m[13],ry=M.footRestY[k];if(y<ry-0.02f){Vec3 T{w[f].m[12],ry,w[f].m[14]};ik2(M,p,f,T);worldPose(M,p,w,wq);}}}}}
+
 std::string Model::boneRole(int n) const{return n>=0&&n<(int)nodeName.size()?roleOf(nodeName[n]):"";}
 int Model::mirrorNode(int n) const{std::string r=boneRole(n);if(r.empty())return n;char s=r.back();if(s!='L'&&s!='R')return n;r.back()=s=='L'?'R':'L';for(size_t i=0;i<nodeName.size();i++)if(boneRole((int)i)==r)return (int)i;return n;}
 bool Model::isUpper(int n) const{for(int i=n;i>=0;i=parent[i])if(boneRole(i)=="spine0")return true;return false;}
