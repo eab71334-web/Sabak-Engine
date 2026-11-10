@@ -27,7 +27,7 @@ int App::meshFor(int prim){int& m=meshIds_[prim];if(m>=0)return m;Vec3 w{1,1,1};
 Model* App::modelFor(const std::string& name){auto it=models_.find(name);if(it!=models_.end())return it->second.get();
   float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();if(!loadModel(*r_,path,h,*m))m.reset();else if(cur_>=0&&cur_<(int)projects_.size())m->loadClips(projects_[cur_].dir+"/anims",name);Model* p=m.get();models_[name]=std::move(m);return p;}
 
-void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());std::vector<SkinDraw> skin;
+void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());std::vector<SkinDraw> skin;bool studio=false;for(auto& e:sc.ents)if(e.name=="StudioFloor")studio=true;r_->setStudio(studio);
   for(auto& e:sc.ents){if(e.prim==P_MODEL){if(animEd_&&&sc==&scene_&&e.id!=sel_)continue;Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
       mi.param=e.animParam;mi.play(e.anim.empty()?"idle":e.anim);if(mi.a<0)mi.play("idle");mi.evaluate();Mat4 w=sc.world(e.id)*Mat4::scale({m->fit,m->fit,m->fit})*Mat4::translate({0,-m->foot,0});
       for(auto& mp:m->prims){SkinDraw sd;sd.mesh=mp.mesh;sd.model=w;const ModelMat& mm=m->mats[std::min<size_t>(mp.mat,m->mats.size()-1)];sd.tex=mm.tex;for(int k=0;k<4;k++)sd.col[k]=mm.col[k];sd.mask=mm.mask;sd.tint={e.color.r,e.color.g,e.color.b};sd.joints=mi.joints.data();sd.nj=(int)m->joints.size();skin.push_back(sd);}

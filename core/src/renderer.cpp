@@ -27,7 +27,7 @@ void main(){
 static const char* FS=R"(#version 300 es
 precision highp float; precision highp sampler2DShadow;
 in vec3 vW; in vec3 vN; in vec3 vC; in vec4 vL; in vec2 vUV; out vec4 o;
-uniform vec3 uSun,uCam; uniform sampler2DShadow uShadow;
+uniform vec3 uSun,uCam,uFog; uniform sampler2DShadow uShadow;
 #ifdef SKIN
 uniform sampler2D uTex; uniform vec4 uBase; uniform float uMask;
 #endif
@@ -43,7 +43,7 @@ void main(){ vec3 albedo=vC;
   vec3 amb=mix(vec3(0.30,0.25,0.19),vec3(0.36,0.47,0.66),N.y*0.5+0.5);
   vec3 H=normalize(L+V); float spec=pow(max(dot(N,H),0.0),48.0)*0.15*ndl*sh;
   float rim=pow(1.0-max(dot(N,V),0.0),3.0)*0.10; vec3 col=albedo*(amb+vec3(1.45,1.22,0.96)*ndl*sh)+spec+vec3(0.55,0.68,0.9)*rim*(N.y*0.5+0.5);
-  float d=length(uCam-vW); float fog=1.0-exp(-d*0.0030); col=mix(col,vec3(0.74,0.78,0.84),clamp(fog,0.0,1.0));
+  float d=length(uCam-vW); float fog=1.0-exp(-d*0.0030); col=mix(col,uFog,clamp(fog,0.0,1.0));
   col=aces(col*1.0); col=mix(vec3(dot(col,vec3(0.299,0.587,0.114))),col,1.08); o=vec4(pow(col,vec3(1.0/2.2)),1.0); })";
 static const char* SVS=R"(#version 300 es
 layout(location=0) in vec3 aPos;
@@ -72,12 +72,14 @@ static std::string withSkin(const char* src){std::string s=src;size_t p=s.find('
 static const char* SKVS=R"(#version 300 es
 out vec2 vN; void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vN=p*2.0-1.0; gl_Position=vec4(vN,0.9999,1.0);} )";
 static const char* SKFS=R"(#version 300 es
-precision highp float; in vec2 vN; out vec4 o; uniform vec3 uF,uS,uU,uSun; uniform vec2 uT;
+precision highp float; in vec2 vN; out vec4 o; uniform vec3 uF,uS,uU,uSun; uniform vec2 uT; uniform float uStudio;
 void main(){ vec3 r=normalize(uF+uS*(vN.x*uT.x)+uU*(vN.y*uT.y)); float h=r.y;
   vec3 hor=vec3(0.74,0.78,0.84),mid=vec3(0.40,0.54,0.74),top=vec3(0.14,0.27,0.54);
   vec3 c=mix(hor,mid,smoothstep(0.0,0.22,h)); c=mix(c,top,smoothstep(0.18,0.85,h));
   float sd=max(dot(r,normalize(uSun)),0.0); c+=vec3(1.0,0.80,0.52)*(pow(sd,6.0)*0.16+pow(sd,60.0)*0.35+pow(sd,900.0)*2.0);
-  c=mix(c,hor*0.85,smoothstep(0.0,-0.12,h)); o=vec4(pow(c,vec3(1.0/2.2)),1.0);} )";
+  c=mix(c,hor*0.85,smoothstep(0.0,-0.12,h));
+  if(uStudio>0.5){ vec3 s0=vec3(0.020,0.022,0.028), s1=vec3(0.075,0.085,0.105); c=mix(s1,s0,smoothstep(-0.25,0.7,h)); c+=vec3(0.03,0.04,0.06)*pow(max(0.0,1.0-abs(h)*3.0),2.0); }
+  o=vec4(pow(c,vec3(1.0/2.2)),1.0);} )";
 
 bool Renderer::init(int w,int h){
   prog_=link(VS,FS);shProg_=link(SVS,SFS);{std::string a=withSkin(VS),b=withSkin(FS),c=withSkin(SVS),d=withSkin(SFS);skinProg_=link(a.c_str(),b.c_str());skinShProg_=link(c.c_str(),d.c_str());}skyProg_=link(SKVS,SKFS);glGenVertexArrays(1,&skyVao_);
@@ -139,16 +141,16 @@ void Renderer::render(const std::vector<DrawItem>& items,const std::vector<SkinD
   glBindFramebuffer(GL_FRAMEBUFFER,useExt_?ext_:fbo_);glViewport(0,0,w_,h_);glClearColor(0.6f,0.75f,0.9f,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
   glDisable(GL_DEPTH_TEST);glUseProgram(skyProg_);{Vec3 f=norm(camTarget_-camPos_),sx=norm(cross(f,{0,1,0})),su=cross(sx,f);float th=std::tan(fov_/2);
     glUniform3f(glGetUniformLocation(skyProg_,"uF"),f.x,f.y,f.z);glUniform3f(glGetUniformLocation(skyProg_,"uS"),sx.x,sx.y,sx.z);glUniform3f(glGetUniformLocation(skyProg_,"uU"),su.x,su.y,su.z);
-    glUniform2f(glGetUniformLocation(skyProg_,"uT"),th*((float)w_/h_),th);glUniform3f(glGetUniformLocation(skyProg_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);}glBindVertexArray(skyVao_);glDrawArrays(GL_TRIANGLES,0,3);glEnable(GL_DEPTH_TEST);
+    glUniform2f(glGetUniformLocation(skyProg_,"uT"),th*((float)w_/h_),th);glUniform3f(glGetUniformLocation(skyProg_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);glUniform1f(glGetUniformLocation(skyProg_,"uStudio"),studio_?1.f:0.f);}glBindVertexArray(skyVao_);glDrawArrays(GL_TRIANGLES,0,3);glEnable(GL_DEPTH_TEST);
   glUseProgram(prog_);Mat4 vp=proj_*view_;
   glUniformMatrix4fv(glGetUniformLocation(prog_,"uVP"),1,GL_FALSE,vp.m);glUniformMatrix4fv(glGetUniformLocation(prog_,"uLightVP"),1,GL_FALSE,lightVP_.m);
-  glUniform3f(glGetUniformLocation(prog_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);glUniform3f(glGetUniformLocation(prog_,"uCam"),camPos_.x,camPos_.y,camPos_.z);
+  glUniform3f(glGetUniformLocation(prog_,"uFog"),studio_?0.035f:0.74f,studio_?0.040f:0.78f,studio_?0.050f:0.84f);glUniform3f(glGetUniformLocation(prog_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);glUniform3f(glGetUniformLocation(prog_,"uCam"),camPos_.x,camPos_.y,camPos_.z);
   glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,shTex_);glUniform1i(glGetUniformLocation(prog_,"uShadow"),0);
   int uMM=glGetUniformLocation(prog_,"uModel"),uT=glGetUniformLocation(prog_,"uTint");
   for(auto&it:items){auto&g=meshes_[it.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(uMM,1,GL_FALSE,it.model.m);glUniform3f(uT,it.tint.x,it.tint.y,it.tint.z);
     glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);stats.draws++;stats.tris+=g.count/3;}
   if(!skin.empty()){glUseProgram(skinProg_);glUniformMatrix4fv(glGetUniformLocation(skinProg_,"uVP"),1,GL_FALSE,vp.m);glUniformMatrix4fv(glGetUniformLocation(skinProg_,"uLightVP"),1,GL_FALSE,lightVP_.m);
-    glUniform3f(glGetUniformLocation(skinProg_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);glUniform3f(glGetUniformLocation(skinProg_,"uCam"),camPos_.x,camPos_.y,camPos_.z);
+    glUniform3f(glGetUniformLocation(skinProg_,"uFog"),studio_?0.035f:0.74f,studio_?0.040f:0.78f,studio_?0.050f:0.84f);glUniform3f(glGetUniformLocation(skinProg_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);glUniform3f(glGetUniformLocation(skinProg_,"uCam"),camPos_.x,camPos_.y,camPos_.z);
     glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,shTex_);glUniform1i(glGetUniformLocation(skinProg_,"uShadow"),0);glUniform1i(glGetUniformLocation(skinProg_,"uTex"),1);
     int kM=glGetUniformLocation(skinProg_,"uModel"),kJ=glGetUniformLocation(skinProg_,"uJ"),kT=glGetUniformLocation(skinProg_,"uTint"),kB=glGetUniformLocation(skinProg_,"uBase"),kMk=glGetUniformLocation(skinProg_,"uMask");
     for(auto&s:skin){auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);glUniform1f(kMk,s.mask?1.f:0.f);

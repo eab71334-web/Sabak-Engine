@@ -16,6 +16,8 @@ public:
   void resize(int w,int h);
   void setCamera(Vec3 pos,Vec3 target,float fovyRad);
   void setSun(Vec3 dirToSun,Vec3 focus,float radius);
+  void setStudio(bool on){studio_=on;}   // dark studio backdrop (sky + fog)
+  bool studio_=false;
   bool project(Vec3 p,float& sx,float& sy) const;                 // world -> framebuffer pixels (false if behind the camera)
   void ray(float px,float py,Vec3& origin,Vec3& dir) const;       // framebuffer pixel -> world ray
   Vec3 cameraPos() const {return camPos_;}
