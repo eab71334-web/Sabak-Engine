@@ -49,6 +49,7 @@ jobs:
           (cd out && zip -qry SabakEngine.ipa Payload)
           ls -la out
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with: { name: SabakEngine-ipa, path: out/SabakEngine.ipa }
       - name: Release
         env: { GH_TOKEN: "${{ github.token }}" }

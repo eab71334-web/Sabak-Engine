@@ -16,4 +16,5 @@ jobs:
         run: |
           python3 tools/sim.py demo/index.html '[["pause"],["press","KeyW"],["step",120],["releaseAll"],["find","hero"],["shot"],["state"]]' out
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with: { name: sim-shots, path: out }

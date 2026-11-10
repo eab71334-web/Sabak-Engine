@@ -27,8 +27,6 @@ jobs:
           APP=$(find build-ios -name "SabakGame.app" -path "*Release-iphoneos*" | head -1)
           mkdir -p out/Payload && cp -R "$APP" out/Payload/
           (cd out && zip -qry SabakCore.ipa Payload) && ls -la out
-      - uses: actions/upload-artifact@v4
-        with: { name: SabakCore-ipa, path: out/SabakCore.ipa }
       - name: Release
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |

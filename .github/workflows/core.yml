@@ -19,4 +19,5 @@ jobs:
           mkdir -p out
           printf 'press W\nstep 90\nstate\nshot out/core.png\n' | EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 core/build/sabaksim
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with: { name: core-shot, path: out }
