@@ -11,7 +11,7 @@ static unsigned link(const char* vs,const char* fs){unsigned p=glCreateProgram()
 static const char* VS=R"(#version 300 es
 layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm;
 #ifdef SKIN
-layout(location=2) in vec2 aUV; layout(location=3) in uvec4 aJ; layout(location=4) in vec4 aW; uniform mat4 uJ[32];
+layout(location=2) in vec2 aUV; layout(location=3) in uvec4 aJ; layout(location=4) in vec4 aW; uniform mat4 uJ[80];
 #else
 layout(location=2) in vec3 aCol;
 #endif
@@ -48,7 +48,7 @@ void main(){ vec3 albedo=vC;
 static const char* SVS=R"(#version 300 es
 layout(location=0) in vec3 aPos;
 #ifdef SKIN
-layout(location=2) in vec2 aUV; layout(location=3) in uvec4 aJ; layout(location=4) in vec4 aW; uniform mat4 uJ[32]; out vec2 vUV;
+layout(location=2) in vec2 aUV; layout(location=3) in uvec4 aJ; layout(location=4) in vec4 aW; uniform mat4 uJ[80]; out vec2 vUV;
 #endif
 uniform mat4 uModel,uLightVP;
 void main(){

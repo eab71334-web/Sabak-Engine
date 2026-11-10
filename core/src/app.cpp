@@ -33,7 +33,7 @@ void App::createProject(int tmpl){int n=(int)projects_.size()+1;std::string name
   std::error_code ec;fs::create_directories(d/"scenes",ec);fs::create_directories(d/"assets",ec);
   std::ofstream f(d/"project.json");f<<"{\"name\":\""<<name<<"\",\"template\":"<<tmpl<<",\"created\":"<<(long)std::time(nullptr)<<",\"engine\":\"0.1\"}\n";f.close();
   rescan();for(size_t i=0;i<projects_.size();i++)if(projects_[i].name==name)openProject((int)i);toast("Project created");}
-void App::openProject(int i){if(i<0||i>=(int)projects_.size())return;cur_=i;play_=false;scripts_.clear();sel_=-1;addMenu_=false;expanded_.clear();hierScroll_=0;
+void App::openProject(int i){if(i<0||i>=(int)projects_.size())return;cur_=i;play_=false;animEd_=false;models_.clear();minst_.clear();mthumbs_.clear();scripts_.clear();sel_=-1;addMenu_=false;expanded_.clear();hierScroll_=0;
   std::string sp=projects_[i].dir+"/scenes/main.scene";if(!scene_.load(sp)){scene_.buildTemplate(projects_[i].tmpl);std::error_code ec;fs::create_directories(projects_[i].dir+"/scenes",ec);scene_.save(sp);}
   ecYaw_=0.8f;ecPitch_=0.5f;ecDist_=26;ecTarget_={0,3,0};rebuildRows();go(EDITOR);}
 void App::importFound(int i){if(i<0||i>=(int)found_.size())return;std::error_code ec;fs::path src=fs::path(importDir_)/found_[i],dst=fs::path(projDir_)/found_[i];
@@ -44,7 +44,7 @@ void App::go(Screen s){scr_=s;tr_=0;trT_=0;held_=-1;heldId_=-1;if(s==IMPORT)resc
 void App::onTap(int id){
   if(id==1)go(TEMPLATES);else if(id==2)go(IMPORT);else if(id==3)go(HOME);else if(id==4){rescanImports();toast("Refreshed");}
   else if(id==5){if(play_)stopPlay();saveScene(true);go(HOME);}
-  else if(id>=100&&id<500)editorTap(id);
+  else if(id>=100&&id<700)editorTap(id);
   else if(id>=10&&id<20)openProject(id-10);else if(id>=20&&id<23)createProject(id-20);else if(id>=30&&id<40)importFound(id-30);}
 void App::key(const std::string& k,bool d){int i=k=="W"?0:k=="A"?1:k=="S"?2:3;keyDown_[i]=d;}
 bool App::btn(int id,float x,float y,float w,float h){btns_.push_back({id,x,y+0,w,h});return heldId_==id;}
@@ -56,9 +56,10 @@ void App::update(float dt){for(auto& kv:minst_){const Entity* e=nullptr;if(kv.fi
 
 void App::pointer(int type,int id,float px,float py){float s=ui.s();float x=px/s,y=py/s;
   if(type==0){
-    for(int i=(int)prevBtns_.size()-1;i>=0;i--){auto&b=prevBtns_[i];if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){heldId_=b.id;held_=id;return;}}
+    for(int i=(int)prevBtns_.size()-1;i>=0;i--){auto&b=prevBtns_[i];if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){heldId_=b.id;held_=id;if(animEd_&&b.id==149)aeSeek(x);return;}}
     if(scr_==EDITOR){editorPointer(0,id,px,py);return;}
   }else if(type==1){
+    if(animEd_&&held_==id&&heldId_==149)aeSeek(x);
     if(scr_==EDITOR)editorPointer(1,id,px,py);
     if(held_==id&&heldId_>=0){bool over=false;for(auto&b:prevBtns_)if(b.id==heldId_&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)over=true;if(!over)heldId_=-1;}
   }else{

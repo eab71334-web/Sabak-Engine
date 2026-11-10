@@ -25,7 +25,7 @@ int App::meshFor(int prim){int& m=meshIds_[prim];if(m>=0)return m;Vec3 w{1,1,1};
   m=r_->upload(d);return m;}
 
 Model* App::modelFor(const std::string& name){auto it=models_.find(name);if(it!=models_.end())return it->second.get();
-  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();if(!loadModel(*r_,path,h,*m))m.reset();Model* p=m.get();models_[name]=std::move(m);return p;}
+  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();if(!loadModel(*r_,path,h,*m))m.reset();else if(cur_>=0&&cur_<(int)projects_.size())m->loadClips(projects_[cur_].dir+"/anims",name);Model* p=m.get();models_[name]=std::move(m);return p;}
 
 void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());std::vector<SkinDraw> skin;
   for(auto& e:sc.ents){if(e.prim==P_MODEL){Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
@@ -35,7 +35,7 @@ void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vecto
     if(e.prim==P_EMPTY)continue;DrawItem it;it.mesh=meshFor(e.prim);it.model=sc.world(e.id);it.tint={e.color.r,e.color.g,e.color.b};it.castShadow=e.prim!=P_TERRAIN&&e.prim!=P_PLANE;items.push_back(it);}
   r_->setCamera(cam,target,fov);r_->setSun({0.55f,0.52f,0.42f},{target.x,target.y,target.z},55);r_->render(items,skin);}
 
-void App::saveScene(bool quiet){if(cur_<0||cur_>=(int)projects_.size())return;bool ok=scene_.save(projects_[cur_].dir+"/scenes/main.scene");thumbDirty_=true;if(!quiet)toast(ok?"Scene saved":"Save failed");}
+void App::saveScene(bool quiet){if(cur_<0||cur_>=(int)projects_.size())return;bool ok=scene_.save(projects_[cur_].dir+"/scenes/main.scene");for(auto& kv:models_)if(kv.second&&!kv.second->clips.empty())kv.second->saveClips(projects_[cur_].dir+"/anims",kv.first);thumbDirty_=true;if(!quiet)toast(ok?"Scene saved":"Save failed");}
 void App::select(int id){sel_=id;}
 void App::rebuildRows(){rows_.clear();std::vector<int> roots;for(auto&e:scene_.ents)if(e.parent<0||!scene_.get(e.parent))roots.push_back(e.id);
   std::function<void(int,int)> walk=[&](int id,int d){rows_.push_back({id,d});if(expanded_.count(id))for(int c:scene_.childrenOf(id))walk(c,d+1);};for(int r:roots)walk(r,0);}
@@ -47,16 +47,16 @@ void App::startPlay(){if(play_)return;snap_=scene_;play_=true;addMenu_=false;scr
   pYaw_=0;pPitch_=0.3f;stickId_=lookId_=-1;}
 void App::stopPlay(){if(!play_)return;scripts_.clear();scene_=snap_;play_=false;in_=Input();rebuildRows();}
 
-void App::editorUpdate(float dt){cbT_+=((cbOpen_?1.0f:0.0f)-cbT_)*std::min(1.0f,dt*12);
+void App::editorUpdate(float dt){animUpdate(dt);cbT_+=((cbOpen_?1.0f:0.0f)-cbT_)*std::min(1.0f,dt*12);
   if(play_){playT_+=dt;sctx_.time=playT_;float kx=(keyDown_[3]?1:0)-(keyDown_[1]?1:0),ky=(keyDown_[2]?1:0)-(keyDown_[0]?1:0);
     in_.moveX=std::max(-1.f,std::min(1.f,stickX_+kx));in_.moveY=std::max(-1.f,std::min(1.f,stickY_+ky));in_.camYaw=pYaw_;
     for(auto& kv:scripts_){kv.second->self=scene_.get(kv.first);if(kv.second->self)kv.second->onUpdate(dt);}}
   // hold-to-repeat on inspector steppers
-  if(heldId_>=300&&heldId_<318){repeatT_+=dt;if(repeatT_>0.45f){repeatT_-=0.07f;editorTap(heldId_);}}else repeatT_=0;}
+  if((heldId_>=300&&heldId_<318)||(heldId_>=320&&heldId_<330)){repeatT_+=dt;if(repeatT_>0.45f){repeatT_-=0.07f;editorTap(heldId_);}}else repeatT_=0;}
 
-bool App::nearPanel(float x,float y) const{float W=W_/ui.s();float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
+bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(animEd_)return y<42||x>W-240||y>H_/ui.s()-160;float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
 
-void App::gizmoUpdate(){gOk_=false;const Entity* e=scene_.get(sel_);if(!e||e->prim==P_TERRAIN||play_)return;Vec3 o=scene_.worldPos(sel_);Vec3 c=r_->cameraPos();gL_=len(o-c)*0.14f;
+void App::gizmoUpdate(){gOk_=false;const Entity* e=scene_.get(sel_);if(!e||e->prim==P_TERRAIN||play_||animEd_)return;Vec3 o=scene_.worldPos(sel_);Vec3 c=r_->cameraPos();gL_=len(o-c)*0.14f;
   float sx,sy;if(!r_->project(o,sx,sy))return;gO_[0]=sx;gO_[1]=sy;Vec3 ax[3]={{1,0,0},{0,1,0},{0,0,1}};
   for(int a=0;a<3;a++){float tx,ty;if(!r_->project(o+ax[a]*gL_,tx,ty))return;gT_[a][0]=tx;gT_[a][1]=ty;}gOk_=true;}
 
@@ -85,7 +85,7 @@ void App::editorPointer(int type,int id,float px,float py){float s=ui.s();float 
     int sl=slot(id,true);if(sl>=0){ptX_[sl]=px;ptY_[sl]=py;}
     // gizmo handle?
     if(gOk_&&sel_>=0){for(int a=0;a<3;a++){float dx=px-gT_[a][0],dy=py-gT_[a][1];if(dx*dx+dy*dy<26*26*s*s){dragAxis_=a;dragId_=id;lastX_=px;lastY_=py;return;}}}
-    if(x>=6&&x<=184&&y>=46&&y<=H_/s-26){hierId_=id;lastY_=py;moved_=false;downX_=px;downY_=py;return;}
+    if(!animEd_&&x>=6&&x<=184&&y>=46&&y<=H_/s-26){hierId_=id;lastY_=py;moved_=false;downX_=px;downY_=py;return;}
     if(nearPanel(x,y))return;
     // viewport: orbit / pinch / tap-to-pick
     if(orbitId_<0){orbitId_=id;lastX_=px;lastY_=py;downX_=px;downY_=py;moved_=false;}
@@ -114,6 +114,8 @@ void App::editorTap(int id){
   Entity* e=scene_.get(sel_);
   if(id>=110&&id<=112)mode_=id-110;
   else if(id==113)addMenu_=!addMenu_;
+  else if(id==119)openAnimator();
+  else if((id>=120&&id<150)||(id>=320&&id<330)||(id>=600&&id<660))animTap(id);
   else if(id==114){if(e&&e->prim!=P_TERRAIN){scene_.remove(sel_);sel_=-1;rebuildRows();toast("Deleted");}}
   else if(id==115){if(e&&e->prim!=P_TERRAIN){int n=scene_.duplicate(sel_);select(n);rebuildRows();toast("Duplicated");}}
   else if(id==116)saveScene();
@@ -188,6 +190,7 @@ void App::drawEditor(){float W=W_/ui.s();float H=H_/ui.s();A_=1;oy_=0;
   else{tg=ecTarget_;cam=tg+Vec3{std::sin(ecYaw_)*std::cos(ecPitch_)*ecDist_,std::sin(ecPitch_)*ecDist_,std::cos(ecYaw_)*std::cos(ecPitch_)*ecDist_};
     float gh=scene_.height(cam.x,cam.z)+1.0f;if(cam.y<gh)cam.y=gh;}
   renderScene(scene_,cam,tg,0.95f);gizmoUpdate();ui.begin(W_,H_);float S=ui.s();
+  if(animEd_){drawAnimator(W,H);return;}
   if(play_){
     R(0,0,W,0,0,BG1,BG1);
     fbtn(118,12,10,92,28,"",2);ic::stop(ui,28,24,16,WHITE);ui.text("Stop",64,17,12,WHITE,F_BOLD,1);
@@ -215,6 +218,7 @@ void App::drawEditor(){float W=W_/ui.s();float H=H_/ui.s();A_=1;oy_=0;
     ui.text(label,x+28,13,11.5f,c,F_BOLD);};
   ib(110,150,68,0,"Move",1,mode_==0);ib(111,220,72,1,"Rotate",1,mode_==1);ib(112,294,66,2,"Scale",1,mode_==2);
   ui.rrect(364,7,1,26,0,LINE,LINE);
+  fbtn(119,656,6,92,28,"",1);ui.text("Animate",702,13,11.5f,TXT,F_BOLD,1);
   ib(113,372,64,3,"Add",1,false);ib(115,440,66,4,"Copy",1,false);ib(114,510,72,5,"Delete",2,false);ib(116,586,64,6,"Save",1,false);
   fbtn(117,W-96,6,86,28,"",1);ui.rrect(W-96,6,86,28,4,OK,OK2);ui.ring(W-96,6,86,28,4,1,OK.mul(1.3f));ic::play(ui,W-80,20,16,WHITE);ui.text("Play",W-46,13,12,WHITE,F_BOLD,1);
   // ---- viewport chips + status bar

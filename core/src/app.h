@@ -40,7 +40,7 @@ private:
   void ensureThumbs(); void renderThumb(Target& t,const Scene& sc,Vec3 cam,Vec3 tg,float fov=0.9f); void cbTap(int id); void drawContent(float x0,float x1); void drawSelection(Vec3 cam,Vec3 tg);
   void drawBackground(); void drawHome(); void drawTemplates(); void drawImport(); void drawHud(); void header(const std::string& title,const std::string& sub);
   bool btn(int id,float x,float y,float w,float h);     // registers a hit area (design units); returns true if held
-  float pressOf(int id){return id>=0&&id<64?press_[id]:0.f;}
+  float pressOf(int id){return id>=0&&id<512?press_[id]:0.f;}
   void onTap(int id);
   Col C(Col c){c.a*=A_;return c;}
   void R(float x,float y,float w,float h,float r,Col a,Col b){ui.rrect(x,y+oy_,w,h,r,C(a),C(b));}
@@ -54,7 +54,10 @@ private:
   std::vector<Btn> btns_,prevBtns_; float press_[512]={0}; int held_=-1,heldId_=-1;
   float stickX_=0,stickY_=0; int stickId_=-1,lookId_=-1; float sx0_=0,sy0_=0,lx_=0,ly_=0;
   std::map<std::string,Target> thumbs_; Target tmplT_[3],banner_; bool tmplOk_[3]={false,false,false},bannerOk_=false,thumbDirty_=false,cbOpen_=false; int cbTab_=0; float cbT_=0;
-  Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<std::string,std::unique_ptr<Model>> models_; std::map<std::pair<const Scene*,int>,ModelInst> minst_; Model* modelFor(const std::string& name); std::vector<std::string> mdlList_; std::map<std::string,Target> mthumbs_; void refreshModels(); void placeModel(const std::string& id); std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
+  Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<std::string,std::unique_ptr<Model>> models_; std::map<std::pair<const Scene*,int>,ModelInst> minst_; Model* modelFor(const std::string& name); std::vector<std::string> mdlList_; std::map<std::string,Target> mthumbs_; void refreshModels(); void placeModel(const std::string& id);
+  // animator (animator.cpp)
+  void openAnimator(); void closeAnimator(); void animTap(int id); void animUpdate(float dt); void drawAnimator(float W,float H); void aeSeek(float x); Model* aeModel(); std::string aeId();
+  bool animEd_=false,aePlay_=true,aeImp_=false; int aeBone_=0,aeClip_=-1; float aeT_=0,aeScroll_=0; std::string aePrevAnim_; std::vector<std::string> aeFiles_; std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
   bool play_=false,addMenu_=false,keyDown_[4]={false,false,false,false}; int sel_=-1,mode_=0; float hierScroll_=0,repeatT_=0,pYaw_=0,pPitch_=0.3f,playT_=0;
   float ecYaw_=0.8f,ecPitch_=0.5f,ecDist_=26; Vec3 ecTarget_{0,3,0};
   std::set<int> expanded_; std::vector<std::pair<int,int>> rows_;
