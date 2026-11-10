@@ -28,8 +28,8 @@ Model* App::modelFor(const std::string& name){auto it=models_.find(name);if(it!=
   float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();if(!loadModel(*r_,path,h,*m))m.reset();else if(cur_>=0&&cur_<(int)projects_.size())m->loadClips(projects_[cur_].dir+"/anims",name);Model* p=m.get();models_[name]=std::move(m);return p;}
 
 void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());std::vector<SkinDraw> skin;
-  for(auto& e:sc.ents){if(e.prim==P_MODEL){Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
-      mi.play(e.anim.empty()?"idle":e.anim);if(mi.a<0)mi.play("idle");mi.evaluate();Mat4 w=sc.world(e.id)*Mat4::scale({m->fit,m->fit,m->fit})*Mat4::translate({0,-m->foot,0});
+  for(auto& e:sc.ents){if(e.prim==P_MODEL){if(animEd_&&&sc==&scene_&&e.id!=sel_)continue;Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
+      mi.param=e.animParam;mi.play(e.anim.empty()?"idle":e.anim);if(mi.a<0)mi.play("idle");mi.evaluate();Mat4 w=sc.world(e.id)*Mat4::scale({m->fit,m->fit,m->fit})*Mat4::translate({0,-m->foot,0});
       for(auto& mp:m->prims){SkinDraw sd;sd.mesh=mp.mesh;sd.model=w;const ModelMat& mm=m->mats[std::min<size_t>(mp.mat,m->mats.size()-1)];sd.tex=mm.tex;for(int k=0;k<4;k++)sd.col[k]=mm.col[k];sd.mask=mm.mask;sd.tint={e.color.r,e.color.g,e.color.b};sd.joints=mi.joints.data();sd.nj=(int)m->joints.size();skin.push_back(sd);}
       continue;}
     if(e.prim==P_EMPTY)continue;DrawItem it;it.mesh=meshFor(e.prim);it.model=sc.world(e.id);it.tint={e.color.r,e.color.g,e.color.b};it.castShadow=e.prim!=P_TERRAIN&&e.prim!=P_PLANE;items.push_back(it);}
@@ -54,7 +54,7 @@ void App::editorUpdate(float dt){animUpdate(dt);cbT_+=((cbOpen_?1.0f:0.0f)-cbT_)
   // hold-to-repeat on inspector steppers
   if((heldId_>=300&&heldId_<318)||(heldId_>=320&&heldId_<330)){repeatT_+=dt;if(repeatT_>0.45f){repeatT_-=0.07f;editorTap(heldId_);}}else repeatT_=0;}
 
-bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(animEd_)return y<42||x>W-240||y>H_/ui.s()-160;float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
+bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(animEd_)return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182;float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
 
 void App::gizmoUpdate(){gOk_=false;const Entity* e=scene_.get(sel_);if(!e||e->prim==P_TERRAIN||play_||animEd_)return;Vec3 o=scene_.worldPos(sel_);Vec3 c=r_->cameraPos();gL_=len(o-c)*0.14f;
   float sx,sy;if(!r_->project(o,sx,sy))return;gO_[0]=sx;gO_[1]=sy;Vec3 ax[3]={{1,0,0},{0,1,0},{0,0,1}};
@@ -80,6 +80,7 @@ void App::editorPointer(int type,int id,float px,float py){float s=ui.s();float 
       else if(id==lookId_){pYaw_-=(px-lx_)*0.006f/s;pPitch_=clampf(pPitch_+(py-ly_)*0.005f/s,-0.2f,1.2f);lx_=px;ly_=py;}}
     else{if(id==stickId_){stickId_=-1;stickX_=stickY_=0;}if(id==lookId_)lookId_=-1;}
     return;}
+  if(animEd_&&aePointer(type,id,px,py))return;
   if(type==0){
     if(addMenu_){addMenu_=false;}
     int sl=slot(id,true);if(sl>=0){ptX_[sl]=px;ptY_[sl]=py;}

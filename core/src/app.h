@@ -57,6 +57,7 @@ private:
   Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<std::string,std::unique_ptr<Model>> models_; std::map<std::pair<const Scene*,int>,ModelInst> minst_; Model* modelFor(const std::string& name); std::vector<std::string> mdlList_; std::map<std::string,Target> mthumbs_; void refreshModels(); void placeModel(const std::string& id);
   // animator (animator.cpp)
   void openAnimator(); void closeAnimator(); void animTap(int id); void animUpdate(float dt); void drawAnimator(float W,float H); void aeSeek(float x); Model* aeModel(); std::string aeId();
+  bool aePointer(int type,int id,float px,float py); void drawToolBtn(int id,float x,float y,float w,float h,const std::string& label,bool on=false); void aeProject(); void aePush(); std::vector<std::vector<ClipDef>> aeUndo_,aeRedo_; std::map<int,std::pair<Vec3,Vec3>> aeCopy_; struct AeJ{int joint;float x,y;}; std::vector<AeJ> aeJ_; int aeEvName_=0,aeDragId_=-1; bool aeIK_=true,aeDragChanged_=false; float aeLx_=0,aeLy_=0;
   bool animEd_=false,aePlay_=true,aeImp_=false; int aeBone_=0,aeClip_=-1; float aeT_=0,aeScroll_=0; std::string aePrevAnim_; std::vector<std::string> aeFiles_; std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
   bool play_=false,addMenu_=false,keyDown_[4]={false,false,false,false}; int sel_=-1,mode_=0; float hierScroll_=0,repeatT_=0,pYaw_=0,pPitch_=0.3f,playT_=0;
   float ecYaw_=0.8f,ecPitch_=0.5f,ecDist_=26; Vec3 ecTarget_{0,3,0};
