@@ -19,6 +19,11 @@ struct MB{   // mesh builder for one material
   void ellipsoid(Vec3 c,Vec3 r,float latMax=1.f,int seg=18,int rings=12){uint32_t base=(uint32_t)v.size();
     for(int j=0;j<=rings;j++){float ph=PI*latMax*j/rings;for(int i=0;i<=seg;i++){float th=2*PI*i/seg;add({c.x+r.x*std::sin(ph)*std::cos(th),c.y+r.y*std::cos(ph),c.z+r.z*std::sin(ph)*std::sin(th)},(float)i/seg,(float)j/rings);}}
     for(int j=0;j<rings;j++)for(int i=0;i<seg;i++){uint32_t a=base+j*(seg+1)+i,b=a+1,c2=a+seg+1,d=c2+1;tri(a,c2,b);tri(b,c2,d);}}
+  // sculpted head: jaw narrows, chin pushes forward (all in absolute units)
+  void head(Vec3 c,Vec3 r,int seg,int rings){uint32_t base=(uint32_t)v.size();auto sm=[](float t){t=t<0?0:t>1?1:t;return t*t*(3-2*t);};
+    for(int j=0;j<=rings;j++){float ph=PI*j/rings,vv=std::cos(ph);for(int i=0;i<=seg;i++){float th=2*PI*i/seg;float w=1.f-0.30f*sm((-vv-0.15f)/0.85f),zo=r.z*0.17f*sm((-vv-0.30f)/0.70f)*std::max(0.f,std::sin(th));
+      add({c.x+r.x*w*std::sin(ph)*std::cos(th),c.y+r.y*vv,c.z+r.z*std::sin(ph)*std::sin(th)+zo},(float)i/seg,(float)j/rings);}}
+    for(int j=0;j<rings;j++)for(int i=0;i<seg;i++){uint32_t a=base+j*(seg+1)+i,b=a+1,c2=a+seg+1,d=c2+1;tri(a,c2,b);tri(b,c2,d);}}
   // tube between two points with circular rings of radius ra..rb
   void tube(Vec3 a,Vec3 b,float ra,float rb,int seg=14,int rings=4){Vec3 d=b-a;float L=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(L<1e-6f)return;d=d*(1.f/L);Vec3 up=std::fabs(d.y)<0.9f?Vec3{0,1,0}:Vec3{1,0,0};
     Vec3 u{d.y*up.z-d.z*up.y,d.z*up.x-d.x*up.z,d.x*up.y-d.y*up.x};float ul=std::sqrt(u.x*u.x+u.y*u.y+u.z*u.z);u=u*(1.f/ul);Vec3 w{d.y*u.z-d.z*u.y,d.z*u.x-d.x*u.z,d.x*u.y-d.y*u.x};
@@ -43,13 +48,14 @@ bool buildCharacter(Renderer& r,const CharDef& cd,Model& out){
   // torso: hips to neck base
   top.loft({{.455f*H,.092f*H*b,.070f*H*b,0},{.50f*H,.104f*H*b,.078f*H*b,0},{.58f*H,.090f*H*b,.068f*H*b,0},{.68f*H,.100f*H*b,.072f*H*b,.004f*H},{.76f*H,.122f*H*sh*b,.068f*H*b,.002f*H},{.805f*H,.100f*H*sh,.055f*H,0},{.822f*H,.040f*H,.040f*H,0}});
   skin.tube(P(0,.815f,0),P(0,.865f,0.004f),.034f*H,.030f*H);
-  skin.ellipsoid(P(0,.925f,.006f),{.062f*H*hs,.076f*H*hs,.068f*H*hs},1.f,22,14);
-  skin.ellipsoid(P(0,.905f,.050f*hs),{.012f*H,.012f*H,.014f*H},1.f,8,6);   // nose
+  skin.head(P(0,.925f,.006f),{.062f*H*hs,.076f*H*hs,.068f*H*hs},28,20);
   // arms (A-pose, matching the auto-rig joints)
   for(int s=-1;s<=1;s+=2){float x=(float)s;
-    MB& ua=sleeveless?skin:shirt;ua.tube(P(x*.12f,.79f,0),P(x*.20f,.61f,0),.040f*H*mu,.032f*H*mu);
+    MB& ua=sleeveless?skin:shirt;ua.ellipsoid(P(x*.125f,.785f,0),{.046f*H*mu,.042f*H*mu,.043f*H*mu},1.f,12,8);ua.tube(P(x*.12f,.79f,0),P(x*.20f,.61f,0),.040f*H*mu,.032f*H*mu);
     skin.tube(P(x*.20f,.61f,0),P(x*.27f,.46f,.005f),.031f*H*mu,.022f*H*mu);
-    skin.ellipsoid(P(x*.285f,.425f,.01f),{.020f*H,.040f*H,.016f*H},1.f,10,8);
+    skin.ellipsoid(P(x*.282f,.428f,.010f),{.019f*H,.026f*H,.010f*H},1.f,10,8);   // palm
+    {const float fl[4]={.034f,.038f,.036f,.029f};for(int k=0;k<4;k++){float px=x*.282f+(k-1.5f)*.0072f;skin.tube(P(px,.410f,.010f),P(px,.410f-fl[k],.016f),.0050f*H,.0042f*H,8,3);}
+      skin.tube(P(x*.270f,.425f,.016f),P(x*.262f,.392f,.026f),.0058f*H,.0046f*H,8,3);}
     bot.tube(P(x*.06f,.50f,0),P(x*.065f,.27f,.004f),.066f*H*mu*b,.046f*H*mu);
     MB& shin=(sleeveless&&!naked)?skin:bot;shin.tube(P(x*.065f,.27f,.004f),P(x*.065f,.05f,0),.044f*H*mu,.032f*H);
     foot.ellipsoid(P(x*.065f,.03f,.045f),{.036f*H,.030f*H,.078f*H},1.f,12,8);}
@@ -60,7 +66,11 @@ bool buildCharacter(Renderer& r,const CharDef& cd,Model& out){
   if(cd.hair==3){hair.ellipsoid(P(0,.934f,-.006f),{.068f*H*hs,.080f*H*hs,.073f*H*hs},0.48f,22,12);hair.tube(P(-.058f*hs,.92f,0),P(-.052f*hs,.82f,-.02f),.012f*H,.010f*H);hair.tube(P(.058f*hs,.92f,0),P(.052f*hs,.82f,-.02f),.012f*H,.010f*H);}
   // ---- face: eyes, brows, lips (separate parts so expression morphs can move them)
   MB eyeW,iris,brow,lipU,lipL,mouthIn;
-  auto surf=[&](float x,float y){float a=x/(.062f*hs),c=(y-.925f)/(.076f*hs);float q=1.f-a*a-c*c;if(q<.05f)q=.05f;return .006f+.068f*hs*std::sqrt(q);};
+  auto sm3=[](float t){t=t<0?0:t>1?1:t;return t*t*(3-2*t);};
+  auto surf=[&](float x,float y){float vv=(y-.925f)/(.076f*hs);if(vv>1)vv=1;if(vv<-1)vv=-1;float w=1.f-0.30f*sm3((-vv-0.15f)/0.85f);float a=x/(.062f*hs*w),q=1.f-a*a-vv*vv;if(q<.05f)q=.05f;return .006f+.068f*hs*(std::sqrt(q)+0.17f*sm3((-vv-0.30f)/0.70f));};
+  skin.tube(P(0,.940f,surf(0,.940f)),P(0,.908f,surf(0,.908f)+.008f),.0050f*H,.0088f*H,10,4);
+  for(int s2=-1;s2<=1;s2+=2){skin.ellipsoid(P(s2*.011f,.898f,surf(0,.898f)+.004f),{.0075f*H,.0060f*H,.0070f*H},1.f,8,6);skin.ellipsoid(P(s2*.063f*hs,.922f,.004f),{.0075f*H,.0175f*H,.0120f*H},1.f,10,8);}
+
   for(int s2=-1;s2<=1;s2+=2){float x=s2*.022f*hs;
     eyeW.ellipsoid(P(x,.934f,surf(x,.934f)-.002f),{.0125f*H,.0105f*H,.010f*H},1.f,14,10);
     iris.ellipsoid(P(x,.934f,surf(x,.934f)+.0055f),{.0065f*H,.0065f*H,.004f*H},1.f,12,8);
