@@ -20,6 +20,7 @@ static const char* PART_N[5]={"Skin","Hair","Shirt","Pants","Shoes"};
 struct Slider{const char* name;float CharDef::*p;float lo,hi;};
 static const Slider SL[5]={{"Height",&CharDef::height,1.5f,2.1f},{"Build",&CharDef::build,0,1},{"Muscle",&CharDef::muscle,0,1},{"Head size",&CharDef::head,0,1},{"Shoulders",&CharDef::shoulder,0,1}};
 static const float SLY0=102,SLH=29;
+static const char* EX_N[6]={"Smile","Mouth open","Blink","Brows up","Angry","Sad"};
 
 static std::string charDir(const std::string& proj){return proj+"/characters";}
 static std::vector<std::string> charNames(const std::string& proj){std::vector<std::string> v;std::error_code ec;if(!fs::is_directory(charDir(proj),ec))return v;for(auto& e:fs::directory_iterator(charDir(proj),ec))if(e.path().extension()==".char")v.push_back(e.path().stem().string());std::sort(v.begin(),v.end());return v;}
@@ -47,6 +48,11 @@ void App::crUpdate(float dt){if(!crEd_)return;crT_+=dt;if(crDirty_&&crT_>0.12f){
 
 bool App::crPointer(int type,int id,float px,float py){if(!crEd_)return false;float s=ui.s();float x=px/s,y=py/s;
   auto setFrom=[&](int i){const Slider& sl=SL[i];float t=std::max(0.f,std::min(1.f,(x-18)/208.f));cr_.*(sl.p)=sl.lo+(sl.hi-sl.lo)*t;crDirty_=true;};
+  float ex0=W_-92.f,exw=74.f;
+  auto setEx=[&](int i){float t=std::max(0.f,std::min(1.f,(x-ex0)/exw));cr_.ex[i]=t;if(Entity* e=crEntity()){if(Model* m=modelFor(e->asset)){m->morphW.assign(cr_.ex,cr_.ex+6);m->applyMorphs(*r_);}}};
+  if(type==0){for(int i=0;i<6;i++){float ry=243+i*20;if(x>=ex0-72&&x<=ex0+exw+8&&y>=ry&&y<=ry+20){crDrag_=10+i;crDragId_=id;setEx(i);return true;}}}
+  if(type==1&&crDrag_>=10&&id==crDragId_){setEx(crDrag_-10);return true;}
+  if(type==2&&crDrag_>=10&&id==crDragId_){crDrag_=-1;crDragId_=-1;if(cur_>=0&&cur_<(int)projects_.size())cr_.save(charDir(projects_[cur_].dir)+"/"+cr_.name+".char");return true;}
   if(type==0){for(int i=0;i<5;i++){float ry=SLY0+i*SLH;if(x>=10&&x<=238&&y>=ry&&y<=ry+SLH){crDrag_=i;crDragId_=id;setFrom(i);return true;}}return false;}
   if(id!=crDragId_||crDrag_<0)return false;
   if(type==1){setFrom(crDrag_);return true;}
@@ -61,6 +67,7 @@ void App::crTap(int id){Entity* e=crEntity();if(!e)return;std::string dir=cur_>=
   if(id==712||id==713){cr_.outfit=(cr_.outfit+(id==713?1:2))%3;crDirty_=true;crT_=1;return;}
   if(id>=720&&id<725){crSel_=id-720;return;}
   if(id>=730&&id<742){const unsigned* pal=crSel_==0?SKIN_P:crSel_==1?HAIR_P:GEN_P;cr_.col[crSel_]=pal[id-730];crDirty_=true;crT_=1;return;}
+  if(id==754){Model* m=modelFor(e->asset);Vec3 p=scene_.worldPos(e->id);float h=m?m->height:1.8f;if(ecDist_<2.f){ecTarget_={p.x,p.y+h*0.5f,p.z};ecDist_=std::max(5.0f,h*2.8f);}else{ecTarget_={p.x,p.y+h*0.925f,p.z};ecDist_=0.75f;ecYaw_=0.f;ecPitch_=0.02f;}return;}
   if(id==750){closeCreator();select(e->id);openAnimator();return;}
   if(id==751){Model* m=modelFor(e->asset);if(!m){toast("No model");return;}std::string err,out=data_+"/Models/Exports/"+cr_.name+".glb";if(exportGlb(*m,out,err))toast("Exported: Files > SabakEngine > Models > Exports");else toast("Export failed: "+err);return;}
   if(id==752){cr_.save(charDir(dir)+"/"+cr_.name+".char");saveScene(true);toast("Character saved");return;}
@@ -85,6 +92,8 @@ void App::drawCreator(float W,float H){
   { float w=164,x=W-w-6,y=46,h=170;ui.shadow(x,y+2,w,h,5,10,Col::hex(0,0.35f));ui.rrect(x,y,w,h,5,BG1.with(0.96f),BG1.with(0.96f));ui.ring(x,y,w,h,5,1,LINE);ui.rrect(x+1,y+1,w-2,22,4,BG2,BG2);ui.text("CHARACTER",x+12,y+7,10.5f,TXT2,F_BOLD);
     fbtn(750,x+10,y+30,w-20,30,"",0);ui.text("Animate this character",x+w/2,y+39,11.5f,WHITE,F_BOLD,1);
     drawToolBtn(751,x+10,y+68,w-20,26,"Export GLB");drawToolBtn(752,x+10,y+98,w-20,26,"Save");drawToolBtn(753,x+10,y+128,w-20,26,"Randomize");}
+  { float w=164,x=W-w-6,y=222,h=H-222-28;ui.shadow(x,y+2,w,h,5,10,Col::hex(0,0.35f));ui.rrect(x,y,w,h,5,BG1.with(0.96f),BG1.with(0.96f));ui.ring(x,y,w,h,5,1,LINE);ui.rrect(x+1,y+1,w-2,18,4,BG2,BG2);ui.text("EXPRESSION",x+12,y+5,10,TXT2,F_BOLD);drawToolBtn(754,x+w-58,y+2,54,16,ecDist_<2.f?"Body cam":"Face cam");
+    for(int i=0;i<6;i++){float ry=243+i*20;ui.text(EX_N[i],x+10,ry+2,9.5f,TXT2,F_BOLD);float t=cr_.ex[i];ui.rrect(x+78,ry+7,w-90,5,2,BG0,BG0);ui.rrect(x+78,ry+7,(w-90)*t,5,2,ACC,ACC);ui.circle(x+78+(w-90)*t,ry+9.5f,6,WHITE,WHITE);}}
   ui.rrect(0,H-22,W,22,0,BG1.with(0.97f),BG1.with(0.97f));ui.rrect(0,H-22,W,1,0,LINE,LINE);ui.text("Auto-rigged on every change. Animate uses the hero library; export keeps all animations.",10,H-16,10,TXT3);
 }
 }

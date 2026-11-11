@@ -21,6 +21,7 @@ public:
   bool project(Vec3 p,float& sx,float& sy) const;                 // world -> framebuffer pixels (false if behind the camera)
   void ray(float px,float py,Vec3& origin,Vec3& dir) const;       // framebuffer pixel -> world ray
   Vec3 cameraPos() const {return camPos_;}
+  void updateSkin(int id,const std::vector<SkinVertex>& v);
   int uploadSkin(const std::vector<SkinVertex>& v,const std::vector<uint32_t>& i);   // skinned mesh id (separate id space)
   unsigned createTexture(const unsigned char* rgba,int w,int h);                    // RGBA8, mipmapped, repeat
   void render(const std::vector<DrawItem>& items,const std::vector<SkinDraw>& skin={});

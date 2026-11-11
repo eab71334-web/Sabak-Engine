@@ -107,6 +107,7 @@ int Renderer::upload(const MeshData& m){GpuMesh g;g.count=m.i.size();glGenVertex
   glGenBuffers(1,&g.ibo);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,g.ibo);glBufferData(GL_ELEMENT_ARRAY_BUFFER,m.i.size()*4,m.i.data(),GL_STATIC_DRAW);
   for(int a=0;a<3;a++){glEnableVertexAttribArray(a);glVertexAttribPointer(a,3,GL_FLOAT,GL_FALSE,sizeof(Vertex),(void*)(a*12));}
   meshes_.push_back(g);return meshes_.size()-1;}
+void Renderer::updateSkin(int id,const std::vector<SkinVertex>& v){if(id<0||id>=(int)skinMeshes_.size())return;glBindBuffer(GL_ARRAY_BUFFER,skinMeshes_[id].vbo);glBufferSubData(GL_ARRAY_BUFFER,0,v.size()*sizeof(SkinVertex),v.data());}
 int Renderer::uploadSkin(const std::vector<SkinVertex>& v,const std::vector<uint32_t>& ix){GpuMesh g;g.count=(int)ix.size();glGenVertexArrays(1,&g.vao);glBindVertexArray(g.vao);
   glGenBuffers(1,&g.vbo);glBindBuffer(GL_ARRAY_BUFFER,g.vbo);glBufferData(GL_ARRAY_BUFFER,v.size()*sizeof(SkinVertex),v.data(),GL_STATIC_DRAW);
   glGenBuffers(1,&g.ibo);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,g.ibo);glBufferData(GL_ELEMENT_ARRAY_BUFFER,ix.size()*4,ix.data(),GL_STATIC_DRAW);

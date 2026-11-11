@@ -126,7 +126,11 @@ bool loadModel(Renderer& r,const std::string& name,float targetHeight,Model& out
         float sw=s.w[0]+s.w[1]+s.w[2]+s.w[3];if(sw>1e-6f)for(int k=0;k<4;k++)s.w[k]/=sw;else{s.w[0]=1;}
         mn=std::min(mn,s.p[1]);mx=std::max(mx,s.p[1]);rad=std::max(rad,std::sqrt(s.p[0]*s.p[0]+s.p[2]*s.p[2]));}
       std::vector<uint32_t> idx;if(pr->indices){idx.resize(pr->indices->count);for(size_t k=0;k<idx.size();k++)idx[k]=(uint32_t)cgltf_accessor_read_index(pr->indices,k);}else{idx.resize(vc);for(size_t k=0;k<vc;k++)idx[k]=(uint32_t)k;}
-      ModelPrim mp;mp.mesh=r.uploadSkin(vs,idx);mp.mat=pr->material?(int)(pr->material-d->materials):0;mp.cv=vs;mp.ci=idx;out.prims.push_back(std::move(mp));}}
+      ModelPrim mp;mp.mesh=r.uploadSkin(vs,idx);mp.mat=pr->material?(int)(pr->material-d->materials):0;mp.cv=vs;mp.ci=idx;
+      if(pr->targets_count>0){size_t nt=std::min<size_t>(pr->targets_count,32);if(out.morphNames.size()<nt){size_t o=out.morphNames.size();out.morphNames.resize(nt);for(size_t k=o;k<nt;k++)out.morphNames[k]=(n->mesh->target_names&&k<n->mesh->target_names_count&&n->mesh->target_names[k])?n->mesh->target_names[k]:"morph"+std::to_string(k);}
+        mp.md.resize(nt);for(size_t k=0;k<nt;k++){cgltf_accessor* tp=nullptr;for(size_t q=0;q<pr->targets[k].attributes_count;q++)if(pr->targets[k].attributes[q].type==cgltf_attribute_type_position)tp=pr->targets[k].attributes[q].data;
+          if(!tp||tp->count!=vc)continue;mp.md[k].resize(vc*3);for(size_t v=0;v<vc;v++)cgltf_accessor_read_float(tp,v,&mp.md[k][v*3],3);}}
+      out.prims.push_back(std::move(mp));}}
   // animations
   for(size_t ai=0;ai<d->animations_count;ai++){cgltf_animation* a=&d->animations[ai];Anim an;an.name=a->name?a->name:"anim"+std::to_string(ai);
     for(size_t ci=0;ci<a->channels_count;ci++){cgltf_animation_channel* c=&a->channels[ci];if(!c->target_node||!c->sampler)continue;AnimChannel ch;ch.node=(int)(c->target_node-d->nodes);
@@ -340,4 +344,11 @@ static bool loadFbx(Renderer& r,const std::string& path,float targetHeight,Model
     out.anims.push_back(std::move(an));}
   float raw=std::max(0.01f,mx-mn);out.fit=targetHeight/raw;out.foot=mn;out.height=targetHeight;out.radius=std::max(0.5f,rad*out.fit);addLoco(out);out.builtin=(int)out.anims.size();
   ufbx_free_scene(sc);return true;}
+}
+
+namespace sk {
+int Model::morphIndex(const std::string& n) const{for(size_t i=0;i<morphNames.size();i++)if(morphNames[i]==n)return (int)i;return -1;}
+void Model::applyMorphs(Renderer& r) const{if(morphNames.empty())return;if(morphW.size()<morphNames.size())morphW.resize(morphNames.size(),0.f);
+  for(const ModelPrim& p:prims){if(p.md.empty()||p.mesh<0)continue;std::vector<SkinVertex> v=p.cv;for(size_t k=0;k<p.md.size()&&k<morphW.size();k++){float w=morphW[k];if(std::fabs(w)<1e-4f||p.md[k].empty())continue;for(size_t i=0;i<v.size();i++)for(int c=0;c<3;c++)v[i].p[c]+=w*p.md[k][i*3+c];}
+    r.updateSkin(p.mesh,v);}}
 }

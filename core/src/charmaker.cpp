@@ -33,9 +33,9 @@ struct MB{   // mesh builder for one material
 };
 }
 bool CharDef::save(const std::string& path) const{std::error_code ec;std::filesystem::create_directories(std::filesystem::path(path).parent_path(),ec);std::ofstream f(path);if(!f)return false;
-  f<<"SABAKCHAR 1\n"<<height<<' '<<build<<' '<<muscle<<' '<<head<<' '<<shoulder<<' '<<hair<<' '<<outfit<<'\n';for(int i=0;i<5;i++)f<<col[i]<<(i<4?' ':'\n');return true;}
+  f<<"SABAKCHAR 1\n"<<height<<' '<<build<<' '<<muscle<<' '<<head<<' '<<shoulder<<' '<<hair<<' '<<outfit<<'\n';for(int i=0;i<5;i++)f<<col[i]<<(i<4?' ':'\n');for(int i=0;i<6;i++)f<<ex[i]<<(i<5?' ':'\n');return true;}
 bool CharDef::load(const std::string& path){std::ifstream f(path);if(!f)return false;std::string h;std::getline(f,h);if(h.rfind("SABAKCHAR",0)!=0)return false;
-  f>>height>>build>>muscle>>head>>shoulder>>hair>>outfit;for(int i=0;i<5;i++)f>>col[i];return (bool)f;}
+  f>>height>>build>>muscle>>head>>shoulder>>hair>>outfit;for(int i=0;i<5;i++)f>>col[i];if(!f)return false;for(int i=0;i<6;i++){float v=0;if(f>>v)ex[i]=v;}return true;}
 bool buildCharacter(Renderer& r,const CharDef& cd,Model& out){
   const float H=1.8f;float b=0.8f+0.5f*cd.build,mu=0.85f+0.5f*cd.muscle,hs=0.85f+0.4f*cd.head,sh=0.85f+0.35f*cd.shoulder;
   MB skin,hair,shirt,pants,shoes;bool sleeveless=cd.outfit==1,naked=cd.outfit==2;MB& top=naked?skin:shirt;MB& bot=naked?skin:pants;MB& foot=naked?skin:shoes;
@@ -58,9 +58,37 @@ bool buildCharacter(Renderer& r,const CharDef& cd,Model& out){
   if(cd.hair==2){hair.tube(P(0,.90f,-.062f*hs),P(0,.77f,-.07f),.034f*H,.026f*H);}
   if(cd.hair==4){hair.ellipsoid(P(0,.995f,-.02f),{.032f*H,.032f*H,.032f*H},1.f,12,8);}
   if(cd.hair==3){hair.ellipsoid(P(0,.934f,-.006f),{.068f*H*hs,.080f*H*hs,.073f*H*hs},0.48f,22,12);hair.tube(P(-.058f*hs,.92f,0),P(-.052f*hs,.82f,-.02f),.012f*H,.010f*H);hair.tube(P(.058f*hs,.92f,0),P(.052f*hs,.82f,-.02f),.012f*H,.010f*H);}
-  std::vector<MB*> parts={&skin,&hair,&shirt,&pants,&shoes};std::vector<RigPrim> ps;out=Model();out.name=cd.name;
+  // ---- face: eyes, brows, lips (separate parts so expression morphs can move them)
+  MB eyeW,iris,brow,lipU,lipL,mouthIn;
+  auto surf=[&](float x,float y){float a=x/(.062f*hs),c=(y-.925f)/(.076f*hs);float q=1.f-a*a-c*c;if(q<.05f)q=.05f;return .006f+.068f*hs*std::sqrt(q);};
+  for(int s2=-1;s2<=1;s2+=2){float x=s2*.022f*hs;
+    eyeW.ellipsoid(P(x,.934f,surf(x,.934f)-.002f),{.0125f*H,.0105f*H,.010f*H},1.f,14,10);
+    iris.ellipsoid(P(x,.934f,surf(x,.934f)+.0055f),{.0065f*H,.0065f*H,.004f*H},1.f,12,8);
+    float x1=s2*.010f*hs,x2=s2*.038f*hs;brow.tube(P(x1,.962f,surf(x1,.962f)+.001f),P(x2,.965f,surf(x2,.965f)+.001f),.0035f*H,.0030f*H,8,3);}
+  for(int i=0;i<4;i++){float x1=(-.022f+.011f*i)*hs,x2=x1+.011f*hs;
+    lipU.tube(P(x1,.8875f,surf(x1,.8875f)+.0015f),P(x2,.8875f,surf(x2,.8875f)+.0015f),.0042f*H,.0042f*H,8,2);
+    lipL.tube(P(x1,.8795f,surf(x1,.8795f)+.0015f),P(x2,.8795f,surf(x2,.8795f)+.0015f),.0046f*H,.0046f*H,8,2);}
+  mouthIn.ellipsoid(P(0,.8835f,surf(0,.8835f)-.0010f),{.017f*H,.0055f*H,.003f*H},1.f,12,8);
+  std::vector<MB*> parts={&skin,&hair,&shirt,&pants,&shoes,&eyeW,&iris,&brow,&lipU,&lipL,&mouthIn};std::vector<RigPrim> ps;std::vector<int> roles;out=Model();out.name=cd.name;
   std::vector<unsigned char> white{255,255,255,255};unsigned wt=r.createTexture(white.data(),1,1);
-  for(int i=0;i<5;i++){MB& m=*parts[i];if(m.idx.empty())continue;m.finish();ModelMat mm;mm.tex=wt;unsigned c=cd.col[i];mm.col[0]=((c>>16)&255)/255.f;mm.col[1]=((c>>8)&255)/255.f;mm.col[2]=(c&255)/255.f;mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
-    RigPrim p;p.v=std::move(m.v);p.idx=std::move(m.idx);p.mat=mi;ps.push_back(std::move(p));}
-  return rigStatic(r,ps,out,cd.height);}
+  auto mix=[](unsigned a,unsigned b,float t){auto ch=[&](int sh){return (unsigned)((1-t)*((a>>sh)&255)+t*((b>>sh)&255));};return (ch(16)<<16)|(ch(8)<<8)|ch(0);};
+  unsigned lip=mix(cd.col[0],0xa03838,0.35f);unsigned cols[11]={cd.col[0],cd.col[1],cd.col[2],cd.col[3],cd.col[4],0xf2f2ee,0x3a2616,cd.col[1],lip,lip,0x2a0f10};
+  for(int i=0;i<11;i++){MB& m=*parts[i];if(m.idx.empty())continue;m.finish();ModelMat mm;mm.tex=wt;unsigned c=cols[i];mm.col[0]=((c>>16)&255)/255.f;mm.col[1]=((c>>8)&255)/255.f;mm.col[2]=(c&255)/255.f;mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
+    RigPrim p;p.v=std::move(m.v);p.idx=std::move(m.idx);p.mat=mi;ps.push_back(std::move(p));roles.push_back(i);}
+  if(!rigStatic(r,ps,out,cd.height))return false;
+  // ---- expression morph targets (deltas in raw model space)
+  out.morphNames={"Smile","MouthOpen","Blink","BrowUp","Angry","Sad"};out.morphW.assign(6,0.f);
+  auto cl=[](float v,float lo,float hi){return v<lo?lo:v>hi?hi:v;};
+  for(size_t pi=0;pi<out.prims.size()&&pi<roles.size();pi++){int ro=roles[pi];if(ro<5)continue;ModelPrim& mp=out.prims[pi];size_t vc=mp.cv.size();mp.md.assign(6,std::vector<float>(vc*3,0.f));
+    for(size_t i=0;i<vc;i++){float qx=mp.cv[i].p[0]/H,qy=mp.cv[i].p[1]/H;float ax=std::fabs(qx),sg=qx<0?-1.f:1.f;
+      auto D=[&](int k,float dx,float dy,float dz){mp.md[k][i*3]+=dx*H;mp.md[k][i*3+1]+=dy*H;mp.md[k][i*3+2]+=dz*H;};
+      if(ro==5||ro==6){D(2,0,-(qy-.934f)*0.92f,0);D(4,0,-(qy-.934f)*0.18f,0);D(5,0,0,0);}
+      else if(ro==7){float u=cl((ax-.010f)/.028f,0,1);D(3,0,.012f,0);D(4,-sg*.003f*(1-u),-.010f+.006f*u,0);D(5,0,.010f-.008f*u,0);}
+      else{float c=cl(ax/.022f,0,1);bool lower=ro==9,inner=ro==10;
+        D(0,sg*.004f*c,.011f*c*c-.002f,0);
+        D(1,0,inner?(qy-.8835f)*3.f-.005f:lower?-.014f:.002f,0);
+        D(4,0,-.004f*c,0);D(5,0,-.008f*c*c,0);}}}
+  for(int k=0;k<6;k++)out.morphW[k]=cd.ex[k];out.applyMorphs(r);
+  return true;
+}
 }

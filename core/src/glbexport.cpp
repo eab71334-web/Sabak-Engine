@@ -29,7 +29,11 @@ bool exportGlb(const Model& m,const std::string& path,std::string& err){
     int vp=addView(pos.data(),pos.size()*4,34962),vn=addView(nor.data(),nor.size()*4,34962),vu=addView(uv.data(),uv.size()*4,34962),vj=addView(jn.data(),jn.size(),34962),vw=addView(wt.data(),wt.size()*4,34962),vi=addView(p.ci.data(),p.ci.size()*4,34963);
     char mm[160];std::snprintf(mm,sizeof mm,",\"min\":[%s,%s,%s],\"max\":[%s,%s,%s]",num(mn[0]).c_str(),num(mn[1]).c_str(),num(mn[2]).c_str(),num(mx[0]).c_str(),num(mx[1]).c_str(),num(mx[2]).c_str());
     int aP=addAcc(vp,5126,vc,"VEC3",mm),aN=addAcc(vn,5126,vc,"VEC3",""),aU=addAcc(vu,5126,vc,"VEC2",""),aJ=addAcc(vj,5121,vc,"VEC4",""),aW=addAcc(vw,5126,vc,"VEC4",""),aI=addAcc(vi,5125,p.ci.size(),"SCALAR","");
-    if(prims.tellp()>0)prims<<',';prims<<"{\"attributes\":{\"POSITION\":"<<aP<<",\"NORMAL\":"<<aN<<",\"TEXCOORD_0\":"<<aU<<",\"JOINTS_0\":"<<aJ<<",\"WEIGHTS_0\":"<<aW<<"},\"indices\":"<<aI<<",\"material\":"<<p.mat<<'}';}
+    if(prims.tellp()>0)prims<<',';prims<<"{\"attributes\":{\"POSITION\":"<<aP<<",\"NORMAL\":"<<aN<<",\"TEXCOORD_0\":"<<aU<<",\"JOINTS_0\":"<<aJ<<",\"WEIGHTS_0\":"<<aW<<"},\"indices\":"<<aI<<",\"material\":"<<p.mat;
+    if(!p.md.empty()&&!m.morphNames.empty()){prims<<",\"targets\":[";for(size_t k=0;k<m.morphNames.size();k++){std::vector<float> d(vc*3,0.f);if(k<p.md.size()&&p.md[k].size()==vc*3)d=p.md[k];float tn[3]={1e9f,1e9f,1e9f},tx[3]={-1e9f,-1e9f,-1e9f};for(size_t i=0;i<vc;i++)for(int c=0;c<3;c++){tn[c]=std::min(tn[c],d[i*3+c]);tx[c]=std::max(tx[c],d[i*3+c]);}
+        char mm2[160];std::snprintf(mm2,sizeof mm2,",\"min\":[%s,%s,%s],\"max\":[%s,%s,%s]",num(tn[0]).c_str(),num(tn[1]).c_str(),num(tn[2]).c_str(),num(tx[0]).c_str(),num(tx[1]).c_str(),num(tx[2]).c_str());
+        int aT=addAcc(addView(d.data(),d.size()*4,34962),5126,vc,"VEC3",mm2);if(k)prims<<',';prims<<"{\"POSITION\":"<<aT<<'}';}prims<<']';}
+    prims<<'}';}
   // ---- inverse bind matrices
   std::vector<float> ib;for(auto& mt:m.ibm)for(int k=0;k<16;k++)ib.push_back(mt.m[k]);int aIB=-1;if(!ib.empty())aIB=addAcc(addView(ib.data(),ib.size()*4,0),5126,m.ibm.size(),"MAT4","");
   // ---- materials, textures
@@ -53,7 +57,7 @@ bool exportGlb(const Model& m,const std::string& path,std::string& err){
     if(!ns)continue;if(na)anims<<',';anims<<"{\"name\":\""<<esc(a.name)<<"\",\"samplers\":["<<sm.str()<<"],\"channels\":["<<ch.str()<<"]}";na++;}
   // ---- skin
   std::ostringstream skin;skin<<"{\"joints\":[";for(size_t i=0;i<m.joints.size();i++){if(i)skin<<',';skin<<m.joints[i];}skin<<']';if(aIB>=0)skin<<",\"inverseBindMatrices\":"<<aIB;skin<<'}';
-  js<<"{\"asset\":{\"version\":\"2.0\",\"generator\":\"Sabak Engine\"},\"scene\":0,\"scenes\":[{\"nodes\":[";for(size_t i=0;i<roots.size();i++)js<<roots[i]<<',';js<<N<<"]}],\"nodes\":["<<nodes.str()<<"],\"meshes\":[{\"name\":\"Body\",\"primitives\":["<<prims.str()<<"]}],\"skins\":["<<skin.str()<<"],\"materials\":["<<mats.str()<<"]";
+  js<<"{\"asset\":{\"version\":\"2.0\",\"generator\":\"Sabak Engine\"},\"scene\":0,\"scenes\":[{\"nodes\":[";for(size_t i=0;i<roots.size();i++)js<<roots[i]<<',';js<<N<<"]}],\"nodes\":["<<nodes.str()<<"],\"meshes\":[{\"name\":\"Body\",\"primitives\":["<<prims.str()<<"]"<<(m.morphNames.empty()?"":([&]{std::string t=",\"extras\":{\"targetNames\":[";for(size_t k=0;k<m.morphNames.size();k++){if(k)t+=',';t+="\""+esc(m.morphNames[k])+"\"";}return t+"]}";})())<<"}],\"skins\":["<<skin.str()<<"],\"materials\":["<<mats.str()<<"]";
   if(ntex)js<<",\"textures\":["<<tex.str()<<"],\"images\":["<<img.str()<<"]";
   if(na)js<<",\"animations\":["<<anims.str()<<"]";
   js<<",\"accessors\":["<<ac.str()<<"],\"bufferViews\":["<<bv.str()<<"],\"buffers\":[{\"byteLength\":"<<bin.d.size()<<"}]}";

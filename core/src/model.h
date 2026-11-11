@@ -8,7 +8,7 @@
 namespace sk {
 extern std::string g_assetDir;                       // folder holding hero.glb, horse.glb and tex/
 struct ModelMat { unsigned tex=0; float col[4]={1,1,1,1}; bool mask=false; std::vector<unsigned char> img; std::string mime; };
-struct ModelPrim { int mesh=-1; int mat=0; std::vector<SkinVertex> cv; std::vector<uint32_t> ci; };
+struct ModelPrim { int mesh=-1; int mat=0; std::vector<SkinVertex> cv; std::vector<uint32_t> ci; std::vector<std::vector<float>> md; };   // md[k] = position deltas (3 per vertex) of morph target k, empty = no effect
 struct TRS { Vec3 t; float r[4]={0,0,0,1}; Vec3 s{1,1,1}; };
 struct AnimChannel { int node=0,path=0; bool step=false; std::vector<float> t,v; };   // path 0 translation, 1 rotation, 2 scale
 struct Anim { std::string name; float dur=0; std::vector<AnimChannel> ch; };
@@ -22,6 +22,7 @@ struct Fx { bool gait=true,breath=true,secondary=true,foot=true; };
 struct Model {
   std::string name; std::vector<ModelPrim> prims; std::vector<ModelMat> mats;
   std::vector<int> parent; std::vector<std::string> nodeName; std::vector<TRS> rest; std::vector<int> joints; std::vector<Mat4> ibm; std::vector<Anim> anims;
+  std::vector<std::string> morphNames; mutable std::vector<float> morphW; void applyMorphs(Renderer& r) const; int morphIndex(const std::string& n) const;
   float fit=1, foot=0, height=1.8f, radius=1.2f;       // fit scales the raw model to `height` metres, foot is the raw min Y
   int animIndex(const std::string& n) const { for(size_t i=0;i<anims.size();i++) if(anims[i].name==n) return (int)i; return -1; }
   void sample(int anim,float t,std::vector<TRS>& out) const;
@@ -50,7 +51,8 @@ struct ModelInst {
 void quatToEuler(const float* q,Vec3& deg);
 void ik2(const Model& m,std::vector<TRS>& p,int end,Vec3 target);   // 2-bone IK: moves `end` to target by rotating its parent and grandparent
 std::string clipFilePath(const std::string& dir,const std::string& id,const std::string& name);
-struct CharDef { std::string name="Character"; float height=1.8f,build=0.5f,muscle=0.4f,head=0.5f,shoulder=0.5f; int hair=1,outfit=0; unsigned col[5]={0xd9a07a,0x3a2418,0x3b6fb6,0x2d3340,0x1c1c1c};   // colors: skin, hair, shirt, pants, shoes
+struct CharDef { std::string name="Character"; float ex[6]={0,0,0,0,0,0};   // expression sliders (not saved): smile, mouth, blink, brows up, angry, sad
+  float height=1.8f,build=0.5f,muscle=0.4f,head=0.5f,shoulder=0.5f; int hair=1,outfit=0; unsigned col[5]={0xd9a07a,0x3a2418,0x3b6fb6,0x2d3340,0x1c1c1c};   // colors: skin, hair, shirt, pants, shoes
   bool save(const std::string& path) const; bool load(const std::string& path); };
 bool buildCharacter(Renderer& r,const CharDef& cd,Model& out);
 struct RigPrim { std::vector<SkinVertex> v; std::vector<uint32_t> idx; int mat=0; };
