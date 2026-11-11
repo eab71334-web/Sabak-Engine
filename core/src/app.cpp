@@ -14,7 +14,7 @@ static const Col WHITE=Col::hex(0xffffff);
 using namespace sk::th;
 static float hash1(float n){float s=std::sin(n*127.1f)*43758.5453f;return s-std::floor(s);}
 static void squish(float p,float&x,float&y,float&w,float&h){float k=1-0.045f*p;x+=w*(1-k)/2;y+=h*(1-k)/2;w*=k;h*=k;}
-static const char* TNAME[4]={"Empty World","Village Demo","Open Terrain","Animation Studio"};
+static const char* TNAME[5]={"Empty World","Village Demo","Open Terrain","Animation Studio","Character Creator"};
 static const char* TDESC[3]={"Flat terrain with a hero. A clean start.","Village, forest and props. A ready scene.","Open hills and dense forest. No buildings."};
 
 bool App::init(Renderer& r,const std::string& data,int w,int h){
@@ -33,10 +33,11 @@ void App::createProject(int tmpl){int n=(int)projects_.size()+1;std::string name
   std::error_code ec;fs::create_directories(d/"scenes",ec);fs::create_directories(d/"assets",ec);
   std::ofstream f(d/"project.json");f<<"{\"name\":\""<<name<<"\",\"template\":"<<tmpl<<",\"created\":"<<(long)std::time(nullptr)<<",\"engine\":\"0.1\"}\n";f.close();
   rescan();for(size_t i=0;i<projects_.size();i++)if(projects_[i].name==name)openProject((int)i);toast("Project created");}
-void App::openProject(int i){if(i<0||i>=(int)projects_.size())return;cur_=i;play_=false;animEd_=false;models_.clear();minst_.clear();mthumbs_.clear();scripts_.clear();sel_=-1;addMenu_=false;expanded_.clear();hierScroll_=0;
+void App::openProject(int i){if(i<0||i>=(int)projects_.size())return;cur_=i;play_=false;animEd_=false;crEd_=false;models_.clear();minst_.clear();mthumbs_.clear();scripts_.clear();sel_=-1;addMenu_=false;expanded_.clear();hierScroll_=0;
   std::string sp=projects_[i].dir+"/scenes/main.scene";if(!scene_.load(sp)){scene_.buildTemplate(projects_[i].tmpl);std::error_code ec;fs::create_directories(projects_[i].dir+"/scenes",ec);scene_.save(sp);}
   ecYaw_=0.8f;ecPitch_=0.5f;ecDist_=26;ecTarget_={0,3,0};rebuildRows();go(EDITOR);
-  if(projects_[i].tmpl==3){for(auto& e:scene_.ents)if(e.prim==P_MODEL){select(e.id);openAnimator();break;}}}
+  if(projects_[i].tmpl==3){for(auto& e:scene_.ents)if(e.prim==P_MODEL){select(e.id);openAnimator();break;}}
+  if(projects_[i].tmpl==4)openCreator();}
 void App::importFound(int i){if(i<0||i>=(int)found_.size())return;std::error_code ec;fs::path src=fs::path(importDir_)/found_[i],dst=fs::path(projDir_)/found_[i];
   fs::copy(src,dst,fs::copy_options::recursive|fs::copy_options::overwrite_existing,ec);if(ec){toast("Import failed");return;}
   // refresh created time so it appears first
@@ -44,14 +45,14 @@ void App::importFound(int i){if(i<0||i>=(int)found_.size())return;std::error_cod
 void App::go(Screen s){scr_=s;tr_=0;trT_=0;held_=-1;heldId_=-1;if(s==IMPORT)rescanImports();if(s==HOME)rescan();}
 void App::onTap(int id){
   if(id==1)go(TEMPLATES);else if(id==2)go(IMPORT);else if(id==3)go(HOME);else if(id==4){rescanImports();toast("Refreshed");}
-  else if(id==5){if(play_)stopPlay();saveScene(true);go(HOME);}
-  else if(id>=100&&id<700)editorTap(id);
-  else if(id>=10&&id<20)openProject(id-10);else if(id>=20&&id<24)createProject(id-20);else if(id>=30&&id<40)importFound(id-30);}
+  else if(id==5){if(crEd_)closeCreator();if(play_)stopPlay();saveScene(true);go(HOME);}
+  else if(id>=100&&id<800)editorTap(id);
+  else if(id>=10&&id<20)openProject(id-10);else if(id>=20&&id<25)createProject(id-20);else if(id>=30&&id<40)importFound(id-30);}
 void App::key(const std::string& k,bool d){int i=k=="W"?0:k=="A"?1:k=="S"?2:3;keyDown_[i]=d;}
 bool App::btn(int id,float x,float y,float w,float h){btns_.push_back({id,x,y+0,w,h});return heldId_==id;}
 
 void App::update(float dt){for(auto& kv:minst_){const Entity* e=nullptr;if(kv.first.first==&scene_)e=scene_.get(kv.first.second);if(e)kv.second.param=e->animParam;if(e&&e->anim=="StateMachine"){Entity* me=scene_.get(kv.first.second);if(me&&!me->trigger.empty()){kv.second.trigger=me->trigger;me->trigger.clear();}kv.second.smTick(e->animParam);}kv.second.update(dt,e?e->animSpeed:1.f);if(!kv.second.fired.empty()){if(e){Entity* me=scene_.get(kv.first.second);if(me)me->event=kv.second.fired.back();}kv.second.fired.clear();}}t_+=dt;trT_+=dt;A_=1;oy_=0;
-  for(int i=0;i<512;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
+  for(int i=0;i<1024;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
   if(toastT_>0)toastT_-=dt;fpsAcc_+=dt;fpsN_++;if(fpsAcc_>0.5f){fps_=fpsN_/fpsAcc_;fpsAcc_=0;fpsN_=0;}
   if(scr_==EDITOR)editorUpdate(dt);}
 
@@ -121,7 +122,8 @@ void App::drawHome(){float W=W_/ui.s();float H=H_/ui.s();
     R(x+24,y+26,3,50,0,ACC,ACC);T("SABAK ENGINE",x+36,y+24,10.5f,ACC,F_BOLD);T("Create your game",x+36,y+40,30,WHITE,F_BOLD);T("Design scenes, place objects and write C++ gameplay.",x+36,y+84,12,TXT2);
     { float bx=x+24,by=y+h-60,bw=170,bh=40;btn(1,bx,by,bw,bh);float k=pressOf(1);R(bx,by,bw,bh,5,ACC.mul(1+0.12f*k),ACC2.mul(1+0.12f*k));RING(bx,by,bw,bh,5,1,ACC.mul(1.3f));ic::plus(ui,bx+24,by+bh/2+oy_,15,WHITE.with(A_));T("New Project",bx+44,by+11,13.5f,WHITE,F_BOLD);}
     { float bx=x+204,by=y+h-60,bw=156,bh=40;btn(2,bx,by,bw,bh);float k=pressOf(2);R(bx,by,bw,bh,5,BG3.with(0.9f).mul(1+0.25f*k),BG2.with(0.9f).mul(1+0.25f*k));RING(bx,by,bw,bh,5,1,LINE2);ic::download(ui,bx+24,by+bh/2+oy_,15,TXT.with(A_));T("Import",bx+44,by+11,13.5f,TXT,F_BOLD);} }
-  { float x=24,y=58,w=500,h=196;float bx=x+370,by=y+h-60,bw=106,bh=40;btn(23,bx,by,bw,bh);float k=pressOf(23);R(bx,by,bw,bh,5,Col::hex(0x3d2b1e).mul(1+0.2f*k),Col::hex(0x2a1f18).mul(1+0.2f*k));RING(bx,by,bw,bh,5,1,Col::hex(0xb87a45));T("Animation",bx+bw/2,by+7,11,Col::hex(0xe0aa70),F_BOLD,1);T("Studio",bx+bw/2,by+22,11,Col::hex(0xe0aa70),F_BOLD,1); }
+  { float x=24,y=58,w=500,h=196;{float bx=x+370,by=y+h-108,bw=106,bh=40;btn(24,bx,by,bw,bh);float k=pressOf(24);R(bx,by,bw,bh,5,Col::hex(0x2a3a22).mul(1+0.2f*k),Col::hex(0x1f2b19).mul(1+0.2f*k));RING(bx,by,bw,bh,5,1,Col::hex(0x6fa85a));T("Character",bx+bw/2,by+7,11,Col::hex(0x9bd67f),F_BOLD,1);T("Creator",bx+bw/2,by+22,11,Col::hex(0x9bd67f),F_BOLD,1);}
+  float bx=x+370,by=y+h-60,bw=106,bh=40;btn(23,bx,by,bw,bh);float k=pressOf(23);R(bx,by,bw,bh,5,Col::hex(0x3d2b1e).mul(1+0.2f*k),Col::hex(0x2a1f18).mul(1+0.2f*k));RING(bx,by,bw,bh,5,1,Col::hex(0xb87a45));T("Animation",bx+bw/2,by+7,11,Col::hex(0xe0aa70),F_BOLD,1);T("Studio",bx+bw/2,by+22,11,Col::hex(0xe0aa70),F_BOLD,1); }
   // ---- quick start templates
   sect(2);T("QUICK START",26,266,10,TXT3,F_BOLD);R(100,272,424,1,0,LINE,LINE);
   for(int i=0;i<3;i++){float x=24+i*(160+10),y=284,w=160,h=94;btn(20+i,x,y,w,h);float k=pressOf(20+i);SH(x,y+2,w,h,6,10,Col::hex(0,0.4f));
@@ -137,7 +139,7 @@ void App::drawHome(){float W=W_/ui.s();float H=H_/ui.s();
     RING(x+4,y+5,96,54,4,1,LINE2);
     T(p.name.size()>16?p.name.substr(0,15)+"..":p.name,x+110,y+12,12.5f,TXT,F_BOLD);
     long days=(long)((std::time(nullptr)-p.created)/86400);std::string when=days<=0?"Today":std::to_string(days)+"d ago";
-    T(std::string(TNAME[std::min(3,std::max(0,p.tmpl))]),x+110,y+30,10.5f,TXT2);T(when,x+110,y+44,10,TXT3);ic::chevronR(ui,x+w-12,y+32+oy_,14,TXT3.with(A_));}
+    T(std::string(TNAME[std::min(4,std::max(0,p.tmpl))]),x+110,y+30,10.5f,TXT2);T(when,x+110,y+44,10,TXT3);ic::chevronR(ui,x+w-12,y+32+oy_,14,TXT3.with(A_));}
 }
 
 void App::drawTemplates(){float W=W_/ui.s();header("New project","Select a template to start from.");

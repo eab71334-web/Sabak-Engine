@@ -47,18 +47,21 @@ static bool loadFbx(Renderer& r,const std::string& path,float targetHeight,Model
 
 // ---- auto-rig: static (unskinned) glTF gets a humanoid skeleton (hero naming) and distance-based skin weights
 static float segDist(const float* p,const float* a,const float* b){float ab[3]={b[0]-a[0],b[1]-a[1],b[2]-a[2]},ap[3]={p[0]-a[0],p[1]-a[1],p[2]-a[2]};float l=ab[0]*ab[0]+ab[1]*ab[1]+ab[2]*ab[2];float t=l>1e-9f?(ap[0]*ab[0]+ap[1]*ab[1]+ap[2]*ab[2])/l:0;t=std::max(0.f,std::min(1.f,t));float d[3]={ap[0]-ab[0]*t,ap[1]-ab[1]*t,ap[2]-ab[2]*t};return std::sqrt(d[0]*d[0]+d[1]*d[1]+d[2]*d[2]);}
+bool rigStatic(Renderer& r,std::vector<RigPrim>& ps,Model& out,float targetHeight);
 static bool autoRigGltf(Renderer& r,cgltf_data* d,Model& out,float targetHeight){
-  struct P{std::vector<SkinVertex> v;std::vector<uint32_t> idx;int mat=0;};std::vector<P> ps;float mn[3]={1e9f,1e9f,1e9f},mx[3]={-1e9f,-1e9f,-1e9f};
+  std::vector<RigPrim> ps;
   for(size_t ni=0;ni<d->nodes_count;ni++){cgltf_node* n=&d->nodes[ni];if(!n->mesh)continue;float wm[16];cgltf_node_transform_world(n,wm);
     for(size_t pi=0;pi<n->mesh->primitives_count;pi++){cgltf_primitive* pr=&n->mesh->primitives[pi];if(pr->type!=cgltf_primitive_type_triangles)continue;cgltf_accessor *ap=nullptr,*an=nullptr,*au=nullptr;
       for(size_t k=0;k<pr->attributes_count;k++){cgltf_attribute* at=&pr->attributes[k];if(at->type==cgltf_attribute_type_position)ap=at->data;else if(at->type==cgltf_attribute_type_normal)an=at->data;else if(at->type==cgltf_attribute_type_texcoord&&at->index==0)au=at->data;}
-      if(!ap)continue;P p;p.v.resize(ap->count);p.mat=pr->material?(int)(pr->material-d->materials):0;
+      if(!ap)continue;RigPrim p;p.v.resize(ap->count);p.mat=pr->material?(int)(pr->material-d->materials):0;
       for(size_t v=0;v<ap->count;v++){SkinVertex& s=p.v[v];float q[3],nn[3]={0,1,0};cgltf_accessor_read_float(ap,v,q,3);if(an)cgltf_accessor_read_float(an,v,nn,3);s.uv[0]=s.uv[1]=0;if(au)cgltf_accessor_read_float(au,v,s.uv,2);
-        for(int k=0;k<3;k++){s.p[k]=wm[k]*q[0]+wm[4+k]*q[1]+wm[8+k]*q[2]+wm[12+k];s.n[k]=wm[k]*nn[0]+wm[4+k]*nn[1]+wm[8+k]*nn[2];mn[k]=std::min(mn[k],s.p[k]);mx[k]=std::max(mx[k],s.p[k]);}
+        for(int k=0;k<3;k++){s.p[k]=wm[k]*q[0]+wm[4+k]*q[1]+wm[8+k]*q[2]+wm[12+k];s.n[k]=wm[k]*nn[0]+wm[4+k]*nn[1]+wm[8+k]*nn[2];}
         float l=std::sqrt(s.n[0]*s.n[0]+s.n[1]*s.n[1]+s.n[2]*s.n[2]);if(l>1e-6f)for(int k=0;k<3;k++)s.n[k]/=l;}
       if(pr->indices){p.idx.resize(pr->indices->count);for(size_t k=0;k<p.idx.size();k++)p.idx[k]=(uint32_t)cgltf_accessor_read_index(pr->indices,k);}else{p.idx.resize(ap->count);for(size_t k=0;k<p.idx.size();k++)p.idx[k]=(uint32_t)k;}
       ps.push_back(std::move(p));}}
-  if(ps.empty())return false;
+  return rigStatic(r,ps,out,targetHeight);}
+bool rigStatic(Renderer& r,std::vector<RigPrim>& ps,Model& out,float targetHeight){
+  if(ps.empty())return false;float mn[3]={1e9f,1e9f,1e9f},mx[3]={-1e9f,-1e9f,-1e9f};for(auto& p:ps)for(auto& v:p.v)for(int k=0;k<3;k++){mn[k]=std::min(mn[k],v.p[k]);mx[k]=std::max(mx[k],v.p[k]);}
   float H=std::max(0.01f,mx[1]-mn[1]),W=mx[0]-mn[0],cx=(mx[0]+mn[0])*0.5f,cz=(mx[2]+mn[2])*0.5f,y0=mn[1];bool tpose=W/H>0.85f;
   struct J{const char* name;int par;float x,y,z;};   // x as +left fraction of H, y fraction of H, z fraction of H (forward)
   float ax1=tpose?0.30f:0.20f,ax2=tpose?std::min(0.47f,0.46f*W/H):0.27f,ay1=tpose?0.79f:0.61f,ay2=tpose?0.79f:0.46f;

@@ -35,10 +35,10 @@ bool Scene::load(const std::string& path){std::ifstream f(path);if(!f)return fal
 static Col H(unsigned h){return Col::hex(h);}
 static Col jit(unsigned h,float seed,float amt){float k=1.0f+(hash((int)seed,7)-0.5f)*2*amt;Col c=Col::hex(h);return Col{std::min(1.f,c.r*k),std::min(1.f,c.g*(1.0f+(hash((int)seed,11)-0.5f)*amt)),std::min(1.f,c.b*k),1};}
 void Scene::buildTemplate(int t){ents.clear();nextId=1;
-  if(t==3){ // Animation Studio: dark stage, one hero
+  if(t==3||t==4){ // Animation Studio / Character Creator: dark stage, one hero
     { auto& f=add(P_PLANE,"StudioFloor");f.pos={0,0,0};f.scale={40,1,40};f.color=H(0x1b1714); }
     { auto& p=add(P_CYL,"Stage");p.pos={0,0.04f,0};p.scale={5.2f,0.08f,5.2f};p.color=H(0x3a2d24); }
-    { auto& hero=add(P_MODEL,"Hero");hero.asset="hero";hero.color=Col{1,1,1,1};hero.pos={0,0.08f,0}; }
+    { auto& hero=add(P_MODEL,"Hero");hero.asset=t==4?"char:C1":"hero";hero.color=Col{1,1,1,1};hero.pos={0,0.08f,0}; }
     return; }
   { auto& g=add(P_TERRAIN,"Terrain");g.color=Col{1,1,1,1}; }
   if(t==1){float hs[5][2]={{-10,-9},{9,-11},{13,6},{-13,8},{0,-17}};

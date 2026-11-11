@@ -40,7 +40,7 @@ private:
   void ensureThumbs(); void renderThumb(Target& t,const Scene& sc,Vec3 cam,Vec3 tg,float fov=0.9f); void cbTap(int id); void drawContent(float x0,float x1); void drawSelection(Vec3 cam,Vec3 tg);
   void drawBackground(); void drawHome(); void drawTemplates(); void drawImport(); void drawHud(); void header(const std::string& title,const std::string& sub);
   bool btn(int id,float x,float y,float w,float h);     // registers a hit area (design units); returns true if held
-  float pressOf(int id){return id>=0&&id<512?press_[id]:0.f;}
+  float pressOf(int id){return id>=0&&id<1024?press_[id]:0.f;}
   void onTap(int id);
   Col C(Col c){c.a*=A_;return c;}
   void R(float x,float y,float w,float h,float r,Col a,Col b){ui.rrect(x,y+oy_,w,h,r,C(a),C(b));}
@@ -51,7 +51,7 @@ private:
   void plusIcon(float cx,float cy,float sz,Col c); void downIcon(float cx,float cy,float sz,Col c); void cubeIcon(float cx,float cy,float sz,float a);
   Renderer* r_=nullptr; UI ui; std::string data_,projDir_,importDir_; int W_=0,H_=0; float trT_=0,t_=0,A_=1,oy_=0,tr_=1,toastT_=0,fps_=60,fpsAcc_=0; int fpsN_=0;
   Screen scr_=HOME; std::string toast_; std::vector<Project> projects_; std::vector<std::string> found_; int cur_=-1;
-  std::vector<Btn> btns_,prevBtns_; float press_[512]={0}; int held_=-1,heldId_=-1;
+  std::vector<Btn> btns_,prevBtns_; float press_[1024]={0}; int held_=-1,heldId_=-1;
   float stickX_=0,stickY_=0; int stickId_=-1,lookId_=-1; float sx0_=0,sy0_=0,lx_=0,ly_=0;
   std::map<std::string,Target> thumbs_; Target tmplT_[3],banner_; bool tmplOk_[3]={false,false,false},bannerOk_=false,thumbDirty_=false,cbOpen_=false; int cbTab_=0; float cbT_=0;
   Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<std::string,std::unique_ptr<Model>> models_; std::map<std::pair<const Scene*,int>,ModelInst> minst_; Model* modelFor(const std::string& name); std::vector<std::string> mdlList_; std::map<std::string,Target> mthumbs_; void refreshModels(); void placeModel(const std::string& id);
@@ -61,6 +61,9 @@ private:
   struct AePose{std::string name,file;std::map<int,std::pair<Vec3,Vec3>> d;bool builtin=false;}; std::vector<AePose> aePoses_;
   int aeTab_=0,aeKeySel_=-1,aeChan_=0,aeGMode_=0,aeGId_=-1,aeSmSel_=0,aeTrSel_=0,aePoseSel_=0,aePoseOff_=0; bool aeOnion_=false,aeCam_=false,aeLook_=false,aeFxPrev_=false,aeLookDrag_=false; float aeGVmax_=15;
   void aeStudioDraw(float W,float H); bool aeStudioPointer(int type,int id,float x,float y); void aeStudioTap(int id); void aeOnionDraw(); void aeCamDraw(float W,float H); void aeLoadPoses();
+  // character creator (creator.cpp)
+  bool crEd_=false,crDirty_=false; CharDef cr_; int crSel_=0,crDrag_=-1,crDragId_=-1; float crT_=0;
+  void openCreator(); void closeCreator(); void crRebuild(); void crSwitch(const std::string& n); void crUpdate(float dt); bool crPointer(int type,int id,float px,float py); void crTap(int id); void drawCreator(float W,float H); Entity* crEntity();
   bool animEd_=false,aePlay_=true,aeImp_=false; int aeBone_=0,aeClip_=-1; float aeT_=0,aeScroll_=0; std::string aePrevAnim_; std::vector<std::string> aeFiles_; std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
   bool play_=false,addMenu_=false,keyDown_[4]={false,false,false,false}; int sel_=-1,mode_=0; float hierScroll_=0,repeatT_=0,pYaw_=0,pPitch_=0.3f,playT_=0;
   float ecYaw_=0.8f,ecPitch_=0.5f,ecDist_=26; Vec3 ecTarget_{0,3,0};

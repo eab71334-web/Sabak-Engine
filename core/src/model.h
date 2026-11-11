@@ -50,6 +50,11 @@ struct ModelInst {
 void quatToEuler(const float* q,Vec3& deg);
 void ik2(const Model& m,std::vector<TRS>& p,int end,Vec3 target);   // 2-bone IK: moves `end` to target by rotating its parent and grandparent
 std::string clipFilePath(const std::string& dir,const std::string& id,const std::string& name);
+struct CharDef { std::string name="Character"; float height=1.8f,build=0.5f,muscle=0.4f,head=0.5f,shoulder=0.5f; int hair=1,outfit=0; unsigned col[5]={0xd9a07a,0x3a2418,0x3b6fb6,0x2d3340,0x1c1c1c};   // colors: skin, hair, shirt, pants, shoes
+  bool save(const std::string& path) const; bool load(const std::string& path); };
+bool buildCharacter(Renderer& r,const CharDef& cd,Model& out);
+struct RigPrim { std::vector<SkinVertex> v; std::vector<uint32_t> idx; int mat=0; };
+bool rigStatic(Renderer& r,std::vector<RigPrim>& ps,Model& out,float targetHeight);   // humanoid auto-rig of unskinned geometry (raw model space, +Y up, facing +Z)
 bool exportGlb(const Model& m,const std::string& path,std::string& err);
 bool loadModel(Renderer& r,const std::string& path,float targetHeight,Model& out);
 }
