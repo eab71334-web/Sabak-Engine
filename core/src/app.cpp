@@ -50,7 +50,7 @@ void App::onTap(int id){
 void App::key(const std::string& k,bool d){int i=k=="W"?0:k=="A"?1:k=="S"?2:3;keyDown_[i]=d;}
 bool App::btn(int id,float x,float y,float w,float h){btns_.push_back({id,x,y+0,w,h});return heldId_==id;}
 
-void App::update(float dt){for(auto& kv:minst_){const Entity* e=nullptr;if(kv.first.first==&scene_)e=scene_.get(kv.first.second);if(e)kv.second.param=e->animParam;kv.second.update(dt,e?e->animSpeed:1.f);if(!kv.second.fired.empty()){if(e){Entity* me=scene_.get(kv.first.second);if(me)me->event=kv.second.fired.back();}kv.second.fired.clear();}}t_+=dt;trT_+=dt;A_=1;oy_=0;
+void App::update(float dt){for(auto& kv:minst_){const Entity* e=nullptr;if(kv.first.first==&scene_)e=scene_.get(kv.first.second);if(e)kv.second.param=e->animParam;if(e&&e->anim=="StateMachine"){Entity* me=scene_.get(kv.first.second);if(me&&!me->trigger.empty()){kv.second.trigger=me->trigger;me->trigger.clear();}kv.second.smTick(e->animParam);}kv.second.update(dt,e?e->animSpeed:1.f);if(!kv.second.fired.empty()){if(e){Entity* me=scene_.get(kv.first.second);if(me)me->event=kv.second.fired.back();}kv.second.fired.clear();}}t_+=dt;trT_+=dt;A_=1;oy_=0;
   for(int i=0;i<512;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
   if(toastT_>0)toastT_-=dt;fpsAcc_+=dt;fpsN_++;if(fpsAcc_>0.5f){fps_=fpsN_/fpsAcc_;fpsAcc_=0;fpsN_=0;}
   if(scr_==EDITOR)editorUpdate(dt);}

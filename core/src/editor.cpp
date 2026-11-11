@@ -25,7 +25,7 @@ int App::meshFor(int prim){int& m=meshIds_[prim];if(m>=0)return m;Vec3 w{1,1,1};
   m=r_->upload(d);return m;}
 
 Model* App::modelFor(const std::string& name){auto it=models_.find(name);if(it!=models_.end())return it->second.get();
-  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();if(!loadModel(*r_,path,h,*m))m.reset();else{if(m->autoRig&&name!="hero"){Model* hero=modelFor("hero");int mp=0;if(hero)m->retargetFrom(*hero,mp,true);}if(cur_>=0&&cur_<(int)projects_.size())m->loadClips(projects_[cur_].dir+"/anims",name);}Model* p=m.get();models_[name]=std::move(m);return p;}
+  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();if(!loadModel(*r_,path,h,*m))m.reset();else{if(m->autoRig&&name!="hero"){Model* hero=modelFor("hero");int mp=0;if(hero)m->retargetFrom(*hero,mp,true);}if(cur_>=0&&cur_<(int)projects_.size()){m->loadClips(projects_[cur_].dir+"/anims",name);m->loadSM(projects_[cur_].dir+"/anims",name);}}Model* p=m.get();models_[name]=std::move(m);return p;}
 
 void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());std::vector<SkinDraw> skin;bool studio=false;for(auto& e:sc.ents)if(e.name=="StudioFloor")studio=true;r_->setStudio(studio);
   for(auto& e:sc.ents){if(e.prim==P_MODEL){if(animEd_&&&sc==&scene_&&e.id!=sel_)continue;Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
@@ -35,7 +35,7 @@ void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vecto
     if(e.prim==P_EMPTY)continue;DrawItem it;it.mesh=meshFor(e.prim);it.model=sc.world(e.id);it.tint={e.color.r,e.color.g,e.color.b};it.castShadow=e.prim!=P_TERRAIN&&e.prim!=P_PLANE;items.push_back(it);}
   r_->setCamera(cam,target,fov);r_->setSun({0.55f,0.52f,0.42f},{target.x,target.y,target.z},55);r_->render(items,skin);}
 
-void App::saveScene(bool quiet){if(cur_<0||cur_>=(int)projects_.size())return;bool ok=scene_.save(projects_[cur_].dir+"/scenes/main.scene");for(auto& kv:models_)if(kv.second&&!kv.second->clips.empty())kv.second->saveClips(projects_[cur_].dir+"/anims",kv.first);thumbDirty_=true;if(!quiet)toast(ok?"Scene saved":"Save failed");}
+void App::saveScene(bool quiet){if(cur_<0||cur_>=(int)projects_.size())return;bool ok=scene_.save(projects_[cur_].dir+"/scenes/main.scene");for(auto& kv:models_)if(kv.second&&!kv.second->clips.empty()){kv.second->saveClips(projects_[cur_].dir+"/anims",kv.first);kv.second->saveSM(projects_[cur_].dir+"/anims",kv.first);}thumbDirty_=true;if(!quiet)toast(ok?"Scene saved":"Save failed");}
 void App::select(int id){sel_=id;}
 void App::rebuildRows(){rows_.clear();std::vector<int> roots;for(auto&e:scene_.ents)if(e.parent<0||!scene_.get(e.parent))roots.push_back(e.id);
   std::function<void(int,int)> walk=[&](int id,int d){rows_.push_back({id,d});if(expanded_.count(id))for(int c:scene_.childrenOf(id))walk(c,d+1);};for(int r:roots)walk(r,0);}
@@ -54,7 +54,7 @@ void App::editorUpdate(float dt){animUpdate(dt);cbT_+=((cbOpen_?1.0f:0.0f)-cbT_)
   // hold-to-repeat on inspector steppers
   if((heldId_>=300&&heldId_<318)||(heldId_>=320&&heldId_<330)){repeatT_+=dt;if(repeatT_>0.45f){repeatT_-=0.07f;editorTap(heldId_);}}else repeatT_=0;}
 
-bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(animEd_)return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182;float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
+bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(animEd_){if(aeCam_)return y<36||y>H_/ui.s()-36;return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182||(aeTab_>0&&x>250&&x<W-244&&y<212);}float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
 
 void App::gizmoUpdate(){gOk_=false;const Entity* e=scene_.get(sel_);if(!e||e->prim==P_TERRAIN||play_||animEd_)return;Vec3 o=scene_.worldPos(sel_);Vec3 c=r_->cameraPos();gL_=len(o-c)*0.14f;
   float sx,sy;if(!r_->project(o,sx,sy))return;gO_[0]=sx;gO_[1]=sy;Vec3 ax[3]={{1,0,0},{0,1,0},{0,0,1}};
@@ -116,14 +116,14 @@ void App::editorTap(int id){
   if(id>=110&&id<=112)mode_=id-110;
   else if(id==113)addMenu_=!addMenu_;
   else if(id==119)openAnimator();
-  else if((id>=120&&id<150)||(id>=320&&id<330)||(id>=600&&id<660))animTap(id);
+  else if((id>=120&&id<150)||(id>=320&&id<330)||(id>=600&&id<660)||(id>=200&&id<300))animTap(id);
   else if(id==114){if(e&&e->prim!=P_TERRAIN){scene_.remove(sel_);sel_=-1;rebuildRows();toast("Deleted");}}
   else if(id==115){if(e&&e->prim!=P_TERRAIN){int n=scene_.duplicate(sel_);select(n);rebuildRows();toast("Duplicated");}}
   else if(id==116)saveScene();
   else if(id==117)startPlay();
   else if(id==118)stopPlay();
   else if(id>=150&&id<158){if(e)e->color=Col::hex(SWATCH[id-150]);}
-  else if(id==161||id==162){if(e&&e->prim==P_MODEL){Model* m=modelFor(e->asset);if(m&&!m->anims.empty()){int n=(int)m->anims.size(),i=std::max(0,m->animIndex(e->anim));i=(i+(id==162?1:n-1))%n;e->anim=m->anims[i].name;}}}
+  else if(id==161||id==162){if(e&&e->prim==P_MODEL){Model* m=modelFor(e->asset);if(m&&!m->anims.empty()){std::vector<std::string> nm;for(auto& a:m->anims)nm.push_back(a.name);if(!m->smStates.empty())nm.push_back("StateMachine");int n=(int)nm.size(),i=0;for(int k=0;k<n;k++)if(nm[k]==e->anim)i=k;i=(i+(id==162?1:n-1))%n;e->anim=nm[i];}}}
   else if(id==160){if(e){std::vector<std::string> names{""};for(auto&kv:scriptRegistry())names.push_back(kv.first);size_t i=0;for(;i<names.size();i++)if(names[i]==e->script)break;e->script=names[(i+1)%names.size()];}}
   else if(id>=300&&id<318){if(e){int k=id-300,idx=k/2,sign=(k%2)?1:-1,grp=idx/3,ax=idx%3;Vec3* v=grp==0?&e->pos:grp==1?&e->rot:&e->scale;float st=grp==0?0.5f:grp==1?5.0f:0.1f;
       float* f=ax==0?&v->x:ax==1?&v->y:&v->z;*f+=sign*st;if(grp==2&&*f<0.05f)*f=0.05f;}}

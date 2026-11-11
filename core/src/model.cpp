@@ -28,7 +28,7 @@ void Model::sample(int ai,float t,std::vector<TRS>& out) const{out=rest;if(ai<0|
 
 void ModelInst::play(const std::string& name,float fade){if(!m||name==cur)return;int i=m->animIndex(name);if(i<0)return;
   prev=a;pt=loco?phase:t;prevLoco=loco;a=i;t=0;phase=0;blend=prev<0?1.f:0.f;cur=name;loco=name=="Locomotion";(void)fade;
-  int ci=i-m->builtin;if(ci>=0&&ci<(int)m->clips.size())loop=m->clips[ci].loop;else loop=!(name.rfind("die",0)==0||name=="mount"||name=="dismount");}
+  int ci=i-m->builtin;if(ci>=0&&ci<(int)m->clips.size())loop=m->clips[ci].loop;else loop=!(name.rfind("die",0)==0||name=="mount"||name=="dismount"||name.rfind("attack",0)==0||name.rfind("jump",0)==0||name.rfind("hit",0)==0);}
 void ModelInst::update(float dt,float speed){lastDt=dt;needStep=true;if(!m||a<0)return;if(a>=(int)m->anims.size()){a=-1;cur.clear();return;}if(prev>=(int)m->anims.size())prev=-1;float d=m->anims[a].dur;float t0=t;
   if(loco){phase+=dt*speed/std::max(0.2f,m->locoCycle(param));phase-=std::floor(phase);}
   else{t+=dt*speed;if(loop){if(d>0)t=std::fmod(t,d);}else t=std::min(t,d);
@@ -83,7 +83,7 @@ static bool autoRigGltf(Renderer& r,cgltf_data* d,Model& out,float targetHeight)
     std::vector<std::pair<float,int>> m;for(auto& c:cand){bool f=false;for(auto& e:m)if(e.second==c.second){e.first=std::max(e.first,c.first);f=true;break;}if(!f)m.push_back(c);}
     std::sort(m.begin(),m.end(),[](const std::pair<float,int>&a,const std::pair<float,int>&b){return a.first>b.first;});float sum=0;for(int k=0;k<4&&k<(int)m.size();k++){best[k]=m[k].first;bj[k]=m[k].second;sum+=best[k];}
     for(int k=0;k<4;k++){v.w[k]=sum>0?best[k]/sum:0;v.j[k]=(unsigned char)bj[k];}}
-    ModelPrim mp;mp.mesh=r.uploadSkin(p.v,p.idx);mp.mat=p.mat;out.prims.push_back(mp);}
+    ModelPrim mp;mp.mesh=r.uploadSkin(p.v,p.idx);mp.mat=p.mat;mp.cv=p.v;mp.ci=p.idx;out.prims.push_back(std::move(mp));}
   float rad=0;for(auto& p:ps)for(auto& v:p.v)rad=std::max(rad,std::sqrt((v.p[0]-cx)*(v.p[0]-cx)+(v.p[2]-cz)*(v.p[2]-cz)));
   out.fit=targetHeight/H;out.foot=y0;out.height=targetHeight;out.radius=std::max(0.5f,rad*out.fit);out.autoRig=true;
   Anim lo;lo.name="Locomotion";lo.dur=1;out.anims.push_back(lo);out.builtin=(int)out.anims.size();return true;}
@@ -101,12 +101,12 @@ bool loadModel(Renderer& r,const std::string& name,float targetHeight,Model& out
   if(d->skins_count>0){cgltf_skin* sk=&d->skins[0];for(size_t j=0;j<sk->joints_count;j++){out.joints.push_back((int)(sk->joints[j]-d->nodes));Mat4 m=Mat4::identity();if(sk->inverse_bind_matrices)cgltf_accessor_read_float(sk->inverse_bind_matrices,j,m.m,16);out.ibm.push_back(m);}}
   bool rig=d->skins_count==0;if(!rig&&(out.joints.empty()||out.joints.size()>80)){cgltf_free(d);return false;}
   // materials + textures
-  std::map<std::string,unsigned> cache;std::vector<unsigned char> white{255,255,255,255};unsigned wt=r.createTexture(white.data(),1,1);
+  std::map<std::string,unsigned> cache;std::vector<unsigned char> white{255,255,255,255};unsigned wt=r.createTexture(white.data(),1,1);std::map<unsigned,std::pair<std::vector<unsigned char>,std::string>> rawImg;
   auto loadImg=[&](cgltf_texture* t)->unsigned{if(!t||!t->image)return wt;std::string key;int w=0,h=0,c=0;unsigned char* px=nullptr;
-    if(t->image->uri&&std::string(t->image->uri).rfind("data:",0)!=0){key=t->image->uri;auto it=cache.find(key);if(it!=cache.end())return it->second;px=stbi_load((base+"/"+key).c_str(),&w,&h,&c,4);}
+    if(t->image->uri&&std::string(t->image->uri).rfind("data:",0)!=0){key=t->image->uri;auto it=cache.find(key);if(it!=cache.end())return it->second;px=stbi_load((base+"/"+key).c_str(),&w,&h,&c,4);if(px){std::ifstream ff(base+"/"+key,std::ios::binary);std::vector<unsigned char> by((std::istreambuf_iterator<char>(ff)),std::istreambuf_iterator<char>());size_t dot=key.rfind('.');std::string ex=dot==std::string::npos?"":key.substr(dot+1);rawImg[0xFFFFFFFFu]={by,(ex=="jpg"||ex=="jpeg")?"image/jpeg":"image/png"};}}
     else if(t->image->buffer_view){const unsigned char* b=(const unsigned char*)t->image->buffer_view->buffer->data+t->image->buffer_view->offset;px=stbi_load_from_memory(b,(int)t->image->buffer_view->size,&w,&h,&c,4);key=std::to_string((size_t)t->image);}
-    if(!px)return wt;unsigned id=r.createTexture(px,w,h);stbi_image_free(px);cache[key]=id;return id;};
-  for(size_t i=0;i<d->materials_count;i++){cgltf_material* m=&d->materials[i];ModelMat mm;if(m->has_pbr_metallic_roughness){for(int j=0;j<4;j++)mm.col[j]=m->pbr_metallic_roughness.base_color_factor[j];mm.tex=loadImg(m->pbr_metallic_roughness.base_color_texture.texture);}else mm.tex=wt;
+    if(!px)return wt;unsigned id=r.createTexture(px,w,h);stbi_image_free(px);cache[key]=id;{auto ri=rawImg.find(0xFFFFFFFFu);if(ri!=rawImg.end()){rawImg[id]=ri->second;rawImg.erase(ri);}else if(t->image->buffer_view){const unsigned char* b=(const unsigned char*)t->image->buffer_view->buffer->data+t->image->buffer_view->offset;std::string mt=t->image->mime_type?t->image->mime_type:"image/png";rawImg[id]={std::vector<unsigned char>(b,b+t->image->buffer_view->size),mt};}}return id;};
+  for(size_t i=0;i<d->materials_count;i++){cgltf_material* m=&d->materials[i];ModelMat mm;if(m->has_pbr_metallic_roughness){for(int j=0;j<4;j++)mm.col[j]=m->pbr_metallic_roughness.base_color_factor[j];mm.tex=loadImg(m->pbr_metallic_roughness.base_color_texture.texture);{auto ri=rawImg.find(mm.tex);if(ri!=rawImg.end()){mm.img=ri->second.first;mm.mime=ri->second.second;}}}else mm.tex=wt;
     mm.mask=m->alpha_mode!=cgltf_alpha_mode_opaque;out.mats.push_back(mm);}
   if(out.mats.empty()){ModelMat mm;mm.tex=wt;out.mats.push_back(mm);}
   if(rig){bool ok=autoRigGltf(r,d,out,targetHeight);cgltf_free(d);return ok;}
@@ -123,7 +123,7 @@ bool loadModel(Renderer& r,const std::string& name,float targetHeight,Model& out
         float sw=s.w[0]+s.w[1]+s.w[2]+s.w[3];if(sw>1e-6f)for(int k=0;k<4;k++)s.w[k]/=sw;else{s.w[0]=1;}
         mn=std::min(mn,s.p[1]);mx=std::max(mx,s.p[1]);rad=std::max(rad,std::sqrt(s.p[0]*s.p[0]+s.p[2]*s.p[2]));}
       std::vector<uint32_t> idx;if(pr->indices){idx.resize(pr->indices->count);for(size_t k=0;k<idx.size();k++)idx[k]=(uint32_t)cgltf_accessor_read_index(pr->indices,k);}else{idx.resize(vc);for(size_t k=0;k<vc;k++)idx[k]=(uint32_t)k;}
-      ModelPrim mp;mp.mesh=r.uploadSkin(vs,idx);mp.mat=pr->material?(int)(pr->material-d->materials):0;out.prims.push_back(mp);}}
+      ModelPrim mp;mp.mesh=r.uploadSkin(vs,idx);mp.mat=pr->material?(int)(pr->material-d->materials):0;mp.cv=vs;mp.ci=idx;out.prims.push_back(std::move(mp));}}
   // animations
   for(size_t ai=0;ai<d->animations_count;ai++){cgltf_animation* a=&d->animations[ai];Anim an;an.name=a->name?a->name:"anim"+std::to_string(ai);
     for(size_t ci=0;ci<a->channels_count;ci++){cgltf_animation_channel* c=&a->channels[ci];if(!c->target_node||!c->sampler)continue;AnimChannel ch;ch.node=(int)(c->target_node-d->nodes);
@@ -141,12 +141,14 @@ namespace sk {
 static void qmul(const float* a,const float* b,float* o){o[0]=a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1];o[1]=a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0];o[2]=a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3];o[3]=a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2];}
 static void qeuler(Vec3 d,float* q){const float D=0.0087266463f;float sx=std::sin(d.x*D),cx=std::cos(d.x*D),sy=std::sin(d.y*D),cy=std::cos(d.y*D),sz=std::sin(d.z*D),cz=std::cos(d.z*D);
   float qx[4]={sx,0,0,cx},qy[4]={0,sy,0,cy},qz[4]={0,0,sz,cz},t[4];qmul(qz,qy,t);qmul(t,qx,q);}
+static float bezEase(const float* b,float x){float lo=0,hi=1,t=x;for(int i=0;i<24;i++){float u=1-t;float bx=3*u*u*t*b[0]+3*u*t*t*b[2]+t*t*t;if(bx<x)lo=t;else hi=t;t=(lo+hi)*0.5f;}float u=1-t;return 3*u*u*t*b[1]+3*u*t*t*b[3]+t*t*t;}
+float easeBz(const float* b,float x){return bezEase(b,x);}
 float easeF(int e,float f){switch(e){case 0:return f;case 2:return f*f;case 3:return 1-(1-f)*(1-f);case 4:return 0;default:return f*f*(3-2*f);}}
 static void keyAt(const std::vector<ClipKey>& ks,float t,Vec3& rot,Vec3& pos);
 void clipEval(const std::vector<ClipKey>& ks,float t,Vec3& rot,Vec3& pos){keyAt(ks,t,rot,pos);}
 static void keyAt(const std::vector<ClipKey>& ks,float t,Vec3& rot,Vec3& pos){rot={};pos={};if(ks.empty())return;
   if(t<=ks.front().t){rot=ks.front().rot;pos=ks.front().pos;return;}if(t>=ks.back().t){rot=ks.back().rot;pos=ks.back().pos;return;}
-  for(size_t i=1;i<ks.size();i++)if(t<=ks[i].t){float f=(t-ks[i-1].t)/std::max(1e-5f,ks[i].t-ks[i-1].t);f=easeF(ks[i-1].ease,f);rot=ks[i-1].rot+(ks[i].rot-ks[i-1].rot)*f;pos=ks[i-1].pos+(ks[i].pos-ks[i-1].pos)*f;return;}}
+  for(size_t i=1;i<ks.size();i++)if(t<=ks[i].t){float f=(t-ks[i-1].t)/std::max(1e-5f,ks[i].t-ks[i-1].t);f=ks[i-1].ease==5?bezEase(ks[i-1].bz,f):easeF(ks[i-1].ease,f);rot=ks[i-1].rot+(ks[i].rot-ks[i-1].rot)*f;pos=ks[i-1].pos+(ks[i].pos-ks[i-1].pos)*f;return;}}
 static std::string roleOf(std::string n);
 static void qnorm(float* q){float l=std::sqrt(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);if(l<1e-8f){q[0]=q[1]=q[2]=0;q[3]=1;return;}for(int i=0;i<4;i++)q[i]/=l;}
 static void qarc(Vec3 u,Vec3 v,float* q){float lu=std::sqrt(u.x*u.x+u.y*u.y+u.z*u.z),lv=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);if(lu<1e-8f||lv<1e-8f){q[0]=q[1]=q[2]=0;q[3]=1;return;}u=u*(1/lu);v=v*(1/lv);
@@ -166,7 +168,7 @@ void ik2(const Model& m,std::vector<TRS>& p,int end,Vec3 T){int b=m.parent[end];
 // ---- post-pose stage: gait boost, breathing, secondary motion, look-at, foot planting
 static void rotAdd(TRS& t,float rx,float ry,float rz){float q[4];qeuler({rx,ry,rz},q);float o[4];qmul(t.r,q,o);qnorm(o);for(int i=0;i<4;i++)t.r[i]=o[i];}
 static void amplifyRot(TRS& t,const TRS& rest,float k){float o[4];nlerp(rest.r,t.r,k,o);for(int i=0;i<4;i++)t.r[i]=o[i];}
-void ModelInst::post(std::vector<TRS>& p){if(!m||p.empty())return;const Model& M=*m;float dt=needStep?std::min(lastDt,0.05f):0;needStep=false;clock+=dt;size_t n=p.size();
+void ModelInst::post(std::vector<TRS>& p){if(!m||p.empty()||fxOff)return;const Model& M=*m;float dt=needStep?std::min(lastDt,0.05f):0;needStep=false;clock+=dt;size_t n=p.size();
   auto find=[&](const char* nm){for(size_t i=0;i<n;i++)if(M.nodeName[i]==nm)return (int)i;return -1;};
   float cyc=loco?phase:(a>=0&&a<(int)M.anims.size()&&M.anims[a].dur>0?t/M.anims[a].dur:0);
   float g=0;if(loco)g=std::min(1.f,param/6.f);else if(cur=="run")g=1;else if(cur=="walk")g=0.5f;
@@ -185,6 +187,13 @@ void ModelInst::post(std::vector<TRS>& p){if(!m||p.empty())return;const Model& M
   if(M.fx.foot){if(!M.footInit){M.footInit=true;for(size_t i=0;i<n;i++){std::string r=M.boneRole((int)i);const std::string& nm=M.nodeName[i];if(r=="footL"||r=="footR"||(nm.size()>2&&nm.compare(nm.size()-2,2,"_h")==0))M.footNodes.push_back((int)i);}
       std::vector<Mat4> w;std::vector<std::array<float,4>> wq;worldPose(M,M.rest,w,wq);for(int f:M.footNodes)M.footRestY.push_back(w[f].m[13]);}
     if(!M.footNodes.empty()){std::vector<Mat4> w;std::vector<std::array<float,4>> wq;worldPose(M,p,w,wq);for(size_t k=0;k<M.footNodes.size();k++){int f=M.footNodes[k];float y=w[f].m[13],ry=M.footRestY[k];if(y<ry-0.02f){Vec3 T{w[f].m[12],ry,w[f].m[14]};ik2(M,p,f,T);worldPose(M,p,w,wq);}}}}}
+
+void ModelInst::smTick(float speed){if(!m||m->smStates.empty())return;const Model& M=*m;int ns=(int)M.smStates.size();if(smState<0||smState>=ns){smState=0;play(M.smStates[0].clip);}
+  bool fin=false;if(a>=0&&a<(int)M.anims.size()&&!loop&&M.anims[a].dur>0&&t>=M.anims[a].dur-0.03f)fin=true;
+  for(auto& tr:M.smTrans){if(tr.from!=-1&&tr.from!=smState)continue;if(tr.to<0||tr.to>=ns||tr.to==smState)continue;bool ok=false;
+    if(tr.kind==0)ok=speed>tr.val;else if(tr.kind==1)ok=speed<tr.val;else if(tr.kind==2)ok=!trigger.empty()&&trigger==tr.trig;else if(tr.kind==3)ok=fin;
+    if(ok){smState=tr.to;if(tr.kind==2)trigger.clear();cur.clear();play(M.smStates[tr.to].clip);return;}}
+  if(!trigger.empty()&&false)trigger.clear();}
 
 std::string Model::boneRole(int n) const{return n>=0&&n<(int)nodeName.size()?roleOf(nodeName[n]):"";}
 int Model::mirrorNode(int n) const{std::string r=boneRole(n);if(r.empty())return n;char s=r.back();if(s!='L'&&s!='R')return n;r.back()=s=='L'?'R':'L';for(size_t i=0;i<nodeName.size();i++)if(boneRole((int)i)==r)return (int)i;return n;}
@@ -217,6 +226,11 @@ void Model::removeClip(int ci){if(ci<0||ci>=(int)clips.size())return;clips.erase
 void Model::clearClips(){clips.clear();rawData.clear();anims.resize(builtin);}
 static std::string safeId(std::string s){for(char& c:s)if(c=='/'||c==':'||c=='\\'||c==' ')c='_';return s;}
 std::string clipFilePath(const std::string& dir,const std::string& id,const std::string& name){return dir+"/"+safeId(id)+"__"+safeId(name)+".anim";}
+bool Model::saveSM(const std::string& dir,const std::string& id) const{if(smStates.empty())return true;std::error_code ec;std::filesystem::create_directories(dir,ec);std::ofstream f(dir+"/"+safeId(id)+"__machine.sm");if(!f)return false;
+  f<<"SABAKSM 1\n";for(auto& s:smStates)f<<"state|"<<s.name<<'|'<<s.clip<<'\n';for(auto& t:smTrans)f<<"trans|"<<t.from<<'|'<<t.to<<'|'<<t.kind<<'|'<<t.val<<'|'<<t.trig<<'\n';return true;}
+void Model::loadSM(const std::string& dir,const std::string& id){std::ifstream f(dir+"/"+safeId(id)+"__machine.sm");if(!f)return;std::string line;std::getline(f,line);if(line.rfind("SABAKSM",0)!=0)return;smStates.clear();smTrans.clear();
+  while(std::getline(f,line)){std::vector<std::string> q;std::string cur;for(char ch:line){if(ch=='|'){q.push_back(cur);cur.clear();}else cur+=ch;}q.push_back(cur);
+    if(q[0]=="state"&&q.size()>=3)smStates.push_back({q[1],q[2]});else if(q[0]=="trans"&&q.size()>=5){SMTrans t;t.from=atoi(q[1].c_str());t.to=atoi(q[2].c_str());t.kind=atoi(q[3].c_str());t.val=(float)atof(q[4].c_str());if(q.size()>5)t.trig=q[5];smTrans.push_back(t);}}}
 bool Model::saveClips(const std::string& dir,const std::string& id) const{std::error_code ec;std::filesystem::create_directories(dir,ec);bool ok=true;
   for(size_t i=0;i<clips.size();i++){const ClipDef& d=clips[i];if(d.lib)continue;std::string fn=dir+"/"+safeId(id)+"__"+safeId(d.name)+".anim";std::ofstream f(fn);if(!f){ok=false;continue;}
     f<<"SABAKANIM 1\n"<<d.name<<'|'<<d.base<<'|'<<d.dur<<'|'<<(d.raw?1:0)<<'|'<<(d.loop?1:0)<<'|'<<(d.inPlace?1:0)<<'|'<<d.overlay<<'|'<<d.mask<<'|'<<d.weight<<'\n';
@@ -230,7 +244,7 @@ void Model::loadClips(const std::string& dir,const std::string& id){std::error_c
   for(auto& fn:files){std::ifstream f(fn);std::string line;std::getline(f,line);if(line.rfind("SABAKANIM",0)!=0)continue;std::getline(f,line);std::vector<std::string> p;{std::string cur;for(char ch:line){if(ch=='|'){p.push_back(cur);cur.clear();}else cur+=ch;}p.push_back(cur);}if(p.size()<4)continue;
     ClipDef d;d.name=p[0];d.base=p[1];d.dur=(float)atof(p[2].c_str());d.raw=p[3]=="1";if(p.size()>=9){d.loop=p[4]!="0";d.inPlace=p[5]=="1";d.overlay=p[6];d.mask=atoi(p[7].c_str());d.weight=(float)atof(p[8].c_str());}if(animIndex(d.name)>=0)continue;Anim raw;raw.name=d.name;raw.dur=d.dur;
     while(std::getline(f,line)){std::vector<std::string> q;std::string cur;for(char ch:line){if(ch=='|'){q.push_back(cur);cur.clear();}else cur+=ch;}q.push_back(cur);
-      if(q[0]=="key"&&q.size()>=9&&byName.count(q[1])){ClipKey k;k.t=(float)atof(q[2].c_str());k.rot={(float)atof(q[3].c_str()),(float)atof(q[4].c_str()),(float)atof(q[5].c_str())};k.pos={(float)atof(q[6].c_str()),(float)atof(q[7].c_str()),(float)atof(q[8].c_str())};if(q.size()>9)k.ease=atoi(q[9].c_str());d.keys[byName[q[1]]].push_back(k);}
+      if(q[0]=="key"&&q.size()>=9&&byName.count(q[1])){ClipKey k;k.t=(float)atof(q[2].c_str());k.rot={(float)atof(q[3].c_str()),(float)atof(q[4].c_str()),(float)atof(q[5].c_str())};k.pos={(float)atof(q[6].c_str()),(float)atof(q[7].c_str()),(float)atof(q[8].c_str())};if(q.size()>9)k.ease=atoi(q[9].c_str());if(q.size()>13)for(int z=0;z<4;z++)k.bz[z]=(float)atof(q[10+z].c_str());d.keys[byName[q[1]]].push_back(k);}
       else if(q[0]=="event"&&q.size()>=3)d.events.push_back({(float)atof(q[1].c_str()),q[2]});
       else if(q[0]=="pin"&&q.size()>=5&&byName.count(q[1]))d.pins.push_back({byName[q[1]],Vec3{(float)atof(q[2].c_str()),(float)atof(q[3].c_str()),(float)atof(q[4].c_str())}});
       else if(q[0]=="ch"&&q.size()>=4&&byName.count(q[1])){AnimChannel c;c.node=byName[q[1]];c.path=atoi(q[2].c_str());size_t n=(size_t)atoi(q[3].c_str());int comp=c.path==1?4:3;std::getline(f,line);{std::istringstream s(line);float v;while(s>>v)c.t.push_back(v);}std::getline(f,line);{std::istringstream s(line);float v;while(s>>v)c.v.push_back(v);}
@@ -310,7 +324,7 @@ static bool loadFbx(Renderer& r,const std::string& path,float targetHeight,Model
       const ufbx_material* mt=slot<me->materials.count?me->materials.data[slot]:nullptr;auto key=std::make_pair(mt,0);int mi;auto it=matIdx.find(key);
       if(it!=matIdx.end())mi=it->second;else{ModelMat mm;mm.tex=wt;if(mt){const ufbx_material_map& bc=mt->pbr.base_color.has_value?mt->pbr.base_color:mt->fbx.diffuse_color;mm.tex=texOf(bc.texture);if(bc.has_value&&!bc.texture){mm.col[0]=(float)bc.value_vec4.x;mm.col[1]=(float)bc.value_vec4.y;mm.col[2]=(float)bc.value_vec4.z;}}
         mi=(int)out.mats.size();out.mats.push_back(mm);matIdx[key]=mi;}
-      ModelPrim mp;mp.mesh=r.uploadSkin(vs,idx);mp.mat=mi;out.prims.push_back(mp);}}
+      ModelPrim mp;mp.mesh=r.uploadSkin(vs,idx);mp.mat=mi;mp.cv=vs;mp.ci=idx;out.prims.push_back(std::move(mp));}}
   if(out.joints.empty()||out.joints.size()>80||out.prims.empty()){ufbx_free_scene(sc);return false;}
   // animations (baked at 30 fps)
   for(size_t si=0;si<sc->anim_stacks.count;si++){ufbx_anim_stack* st=sc->anim_stacks.data[si];Anim an;an.name=std::string(st->name.data,st->name.length);if(an.name.empty())an.name="clip"+std::to_string(si);

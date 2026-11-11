@@ -14,7 +14,7 @@ using namespace sk::th;
 static const Col WHITE=Col::hex(0xffffff);
 static const unsigned AXC[3]={0xe5534b,0x5fb35f,0x4b92e6};
 static const float TL_X0=150,TL_PAD=18,TOOLS_W=244,TL_H=148;
-static const char* EASE_N[5]={"Linear","Smooth","Ease in","Ease out","Step"};
+static const char* EASE_N[6]={"Linear","Smooth","Ease in","Ease out","Step","Bezier"};
 static const char* EV_N[5]={"Footstep","Hit","Sound","Spawn","Custom"};
 static const char* MASK_N[3]={"Upper body","Lower body","Full body"};
 
@@ -35,18 +35,18 @@ std::string App::aeId(){const Entity* e=scene_.get(sel_);return e?e->asset:"";}
 void App::aePush(){Model* m=aeModel();if(!m)return;aeUndo_.push_back(m->clips);if(aeUndo_.size()>40)aeUndo_.erase(aeUndo_.begin());aeRedo_.clear();}
 
 void App::openAnimator(){Entity* e=scene_.get(sel_);if(!e||e->prim!=P_MODEL){toast("Select a model first");return;}Model* m=modelFor(e->asset);if(!m){toast("Model not loaded");return;}
-  animEd_=true;aeBone_=0;aeScroll_=0;aeT_=0;aePlay_=true;aeImp_=false;aePrevAnim_=e->anim;aeClip_=m->clips.empty()?-1:0;aeUndo_.clear();aeRedo_.clear();aeDragId_=-1;
+  animEd_=true;aeBone_=0;aeScroll_=0;aeT_=0;aePlay_=true;aeImp_=false;aePrevAnim_=e->anim;aeClip_=m->clips.empty()?-1:0;aeUndo_.clear();aeRedo_.clear();aeDragId_=-1;aeTab_=0;aeCam_=false;aeLook_=false;aeFxPrev_=false;aeKeySel_=-1;aeGMode_=0;aePoses_.clear();
   Vec3 p=scene_.worldPos(e->id);ecTarget_={p.x,p.y-m->height*0.05f,p.z};ecDist_=std::max(5.2f,m->height*2.9f);ecPitch_=0.12f;
   if(aeClip_>=0)e->anim=m->clips[aeClip_].name;}
-void App::closeAnimator(){Entity* e=scene_.get(sel_);Model* m=aeModel();if(m&&cur_>=0&&cur_<(int)projects_.size())m->saveClips(projects_[cur_].dir+"/anims",aeId());if(e&&!aePrevAnim_.empty())e->anim=aePrevAnim_;if(e)e->animSpeed=1;animEd_=false;aeImp_=false;aeDragId_=-1;}
+void App::closeAnimator(){Entity* e=scene_.get(sel_);Model* m=aeModel();if(m&&cur_>=0&&cur_<(int)projects_.size()){m->saveClips(projects_[cur_].dir+"/anims",aeId());m->saveSM(projects_[cur_].dir+"/anims",aeId());}if(e&&!aePrevAnim_.empty())e->anim=aePrevAnim_;if(e)e->animSpeed=1;{auto it=minst_.find({&scene_,sel_});if(it!=minst_.end()){it->second.fxOff=false;it->second.lookOn=false;}}animEd_=false;aeImp_=false;aeDragId_=-1;aeTab_=0;aeCam_=false;aeLook_=false;aeLookDrag_=false;}
 
 static int keyIndexNear(const std::vector<ClipKey>& ks,float t){for(size_t i=0;i<ks.size();i++)if(std::fabs(ks[i].t-t)<0.04f)return (int)i;return -1;}
 static ClipKey& keyAtTime(std::vector<ClipKey>& ks,float t){int ki=keyIndexNear(ks,t);if(ki<0){ClipKey nk;nk.t=t;clipEval(ks,t,nk.rot,nk.pos);ks.push_back(nk);std::sort(ks.begin(),ks.end(),[](const ClipKey& a,const ClipKey& b){return a.t<b.t;});ki=keyIndexNear(ks,t);}return ks[ki];}
 
 void App::aeSeek(float x){Model* m=aeModel();if(!m)return;ClipDef* c=aeClip_>=0&&aeClip_<(int)m->clips.size()?&m->clips[aeClip_]:nullptr;float W=W_/ui.s();float X0=6+TL_X0,X1=6+(W-248)-TL_PAD;float dur=c?c->dur:1.f;aeT_=clampf((x-X0)/(X1-X0),0,1)*dur;aePlay_=false;}
 
-void App::animUpdate(float dt){(void)dt;if(!animEd_)return;Entity* e=scene_.get(sel_);Model* m=aeModel();if(!e||!m){animEd_=false;return;}
-  auto it=minst_.find({&scene_,sel_});if(it==minst_.end())return;ModelInst& mi=it->second;
+void App::animUpdate(float dt){if(!animEd_)return;Entity* e=scene_.get(sel_);Model* m=aeModel();if(!e||!m){animEd_=false;return;}
+  auto it=minst_.find({&scene_,sel_});if(it==minst_.end())return;ModelInst& mi=it->second;mi.fxOff=!(aeFxPrev_||aeLook_);if(!aeLook_)mi.lookOn=false;if(aeCam_){ecYaw_+=dt*0.35f;ecPitch_=0.14f+0.06f*std::sin(t_*0.5f);}
   if(aeClip_>=0&&aeClip_<(int)m->clips.size()){e->anim=m->clips[aeClip_].name;float d=m->clips[aeClip_].dur;
     if(aePlay_){aeT_=std::min(mi.t,d);e->animSpeed=1;}else{e->animSpeed=0;mi.t=aeT_;}}
   else{e->animSpeed=aePlay_?1.f:0.f;}}
@@ -58,11 +58,14 @@ void App::aeProject(){aeJ_.clear();Entity* e=scene_.get(sel_);Model* m=aeModel()
 
 // ---- direct manipulation: drag a joint. Hips translate, FK aims the parent bone at the finger, IK solves the 2-bone chain, pinned joints move their pin.
 bool App::aePointer(int type,int id,float px,float py){if(!animEd_)return false;float s=ui.s();float x=px/s,y=py/s;Model* m=aeModel();Entity* e=scene_.get(sel_);if(!m||!e)return false;
+  if(aeCam_)return false;if(aeStudioPointer(type,id,x,y))return true;
+  auto lookSet=[&](float lx,float ly){auto it2=minst_.find({&scene_,sel_});if(it2==minst_.end())return;float hx=lx,hy=ly;for(auto& q:aeJ_)if(m->boneRole(m->joints[q.joint])=="head"){hx=q.x;hy=q.y;}float W=W_/s,H=H_/s;it2->second.lookOn=true;it2->second.lookYaw=(lx-hx)/(W*0.2f)*70.f;it2->second.lookPitch=-(ly-hy)/(H*0.2f)*35.f;};
   ClipDef* c=aeClip_>=0&&aeClip_<(int)m->clips.size()?&m->clips[aeClip_]:nullptr;
   if(type==0){if(nearPanel(x,y))return false;int best=-1;float bd=26*26;for(size_t i=0;i<aeJ_.size();i++){float dx=x-aeJ_[i].x,dy=y-aeJ_[i].y;if(dx*dx+dy*dy<bd){bd=dx*dx+dy*dy;best=(int)i;}}
-    if(best<0)return false;aeBone_=aeJ_[best].joint;aeDragId_=id;aeLx_=px;aeLy_=py;aeDragChanged_=false;aePlay_=false;if(!c)toast("Tap + New first, then drag the bones");return true;}
+    if(best<0){if(aeLook_){aeDragId_=id;aeLookDrag_=true;lookSet(x,y);return true;}return false;}aeBone_=aeJ_[best].joint;aeDragId_=id;aeLx_=px;aeLy_=py;aeDragChanged_=false;aePlay_=false;if(!c)toast("Tap + New first, then drag the bones");return true;}
   if(id!=aeDragId_)return false;
-  if(type==2){aeDragId_=-1;return true;}
+  if(type==2){aeDragId_=-1;aeLookDrag_=false;return true;}
+  if(aeLookDrag_){lookSet(x,y);return true;}
   if(!c||c->raw){return true;}
   auto it=minst_.find({&scene_,sel_});if(it==minst_.end())return true;
   int node=m->joints[std::min<int>(aeBone_,(int)m->joints.size()-1)];
@@ -93,6 +96,7 @@ bool App::aePointer(int type,int id,float px,float py){if(!animEd_)return false;
   m->bakeClip(aeClip_);return true;}
 
 void App::animTap(int id){Entity* e=scene_.get(sel_);Model* m=aeModel();if(!e||!m){animEd_=false;return;}
+  if(id>=200&&id<300){aeStudioTap(id);return;}
   auto curClip=[&]()->ClipDef*{return aeClip_>=0&&aeClip_<(int)m->clips.size()?&m->clips[aeClip_]:nullptr;};
   auto selClip=[&](int c){int n=(int)m->clips.size();if(n==0){aeClip_=-1;return;}aeClip_=(c%n+n)%n;aeT_=0;aeUndo_.clear();aeRedo_.clear();};
   auto boneNode=[&](){return m->joints.empty()?0:m->joints[std::min<int>(aeBone_,(int)m->joints.size()-1)];};
@@ -108,7 +112,7 @@ void App::animTap(int id){Entity* e=scene_.get(sel_);Model* m=aeModel();if(!e||!
   else if(id==132){if(ClipDef* c=editable()){auto& ks=c->keys[boneNode()];int k=keyIndexNear(ks,aeT_);if(k>=0){aePush();ks.erase(ks.begin()+k);if(ks.empty())c->keys.erase(boneNode());m->bakeClip(aeClip_);toast("Key deleted");}else toast("No key at this time");}}
   else if(id==133){if(ClipDef* c=editable()){aePush();c->keys.erase(boneNode());m->bakeClip(aeClip_);toast("Bone reset");}}
   else if(id==134){aeImp_=!aeImp_;if(aeImp_){aeFiles_.clear();namespace fs=std::filesystem;std::error_code ec;std::string d=data_+"/Models";if(fs::is_directory(d,ec))for(auto& f:fs::directory_iterator(d,ec)){std::string x=f.path().extension().string();for(char& ch:x)ch=(char)tolower(ch);if(x==".glb"||x==".gltf"||x==".fbx")aeFiles_.push_back(f.path().string());}std::sort(aeFiles_.begin(),aeFiles_.end());}}
-  else if(id==135){if(cur_>=0&&cur_<(int)projects_.size()){m->saveClips(projects_[cur_].dir+"/anims",aeId());toast("Animations saved");}}
+  else if(id==135){if(cur_>=0&&cur_<(int)projects_.size()){m->saveClips(projects_[cur_].dir+"/anims",aeId());m->saveSM(projects_[cur_].dir+"/anims",aeId());toast("Animations saved");}}
   else if(id==149){}
   // ---- tools
   else if(id==170||id==171){auto& from=id==170?aeUndo_:aeRedo_;auto& to=id==170?aeRedo_:aeUndo_;if(from.empty()){toast(id==170?"Nothing to undo":"Nothing to redo");return;}to.push_back(m->clips);m->clips=from.back();from.pop_back();m->rawData.resize(m->clips.size());for(size_t i=0;i<m->clips.size();i++)m->bakeClip((int)i);if(aeClip_>=(int)m->clips.size())aeClip_=(int)m->clips.size()-1;}
@@ -142,7 +146,8 @@ void App::animTap(int id){Entity* e=scene_.get(sel_);Model* m=aeModel();if(!e||!
 
 void App::drawAnimator(float W,float H){Model* m=aeModel();Entity* e=scene_.get(sel_);if(!m||!e)return;ClipDef* c=aeClip_>=0&&aeClip_<(int)m->clips.size()?&m->clips[aeClip_]:nullptr;
   int bone=m->joints.empty()?0:m->joints[std::min<int>(aeBone_,(int)m->joints.size()-1)];
-  aeProject();
+  if(aeCam_){aeCamDraw(W,H);return;}
+  aeProject();aeOnionDraw();
   // ---- bone overlay on the character (touch targets)
   { std::vector<int> jidx(m->nodeName.size(),-1);for(size_t j=0;j<m->joints.size();j++)jidx[m->joints[j]]=(int)j;std::vector<const AeJ*> at(m->joints.size(),nullptr);for(auto& q:aeJ_)at[q.joint]=&q;
     for(size_t j=0;j<m->joints.size();j++){int pn=m->parent[m->joints[j]];if(pn<0||jidx[pn]<0||!at[j]||!at[jidx[pn]])continue;const AeJ* a=at[jidx[pn]];const AeJ* b=at[j];ui.line(a->x,a->y,b->x,b->y,3.4f,Col::hex(0x0b0f14,0.55f));ui.line(a->x,a->y,b->x,b->y,1.8f,Col::hex(0x6fb4ff,0.85f));}
@@ -154,6 +159,7 @@ void App::drawAnimator(float W,float H){Model* m=aeModel();Entity* e=scene_.get(
   fbtn(120,8,6,86,28,"",0);ic::back(ui,22,20,16,WHITE);ui.text("Done",58,13,12,WHITE,F_BOLD,1);
   ui.text("ANIMATOR",108,6,12,TXT,F_BOLD);{std::string t=e->name+"   |   "+std::to_string(m->joints.size())+" bones   |   "+std::to_string(m->anims.size())+" clips";ui.text(t,108,23,10,TXT3);}
   ui.text(aeIK_?"Mode: IK  (drag a hand / foot)":"Mode: FK  (drag a joint)",W-14,14,11,aeIK_?ORG:ACC,F_BOLD,2);
+  aeStudioDraw(W,H);
   // ---- tools panel (left)
   { float x=6,y=44,w=TOOLS_W-8,h=TL_H+26+4;(void)h;float ph=22+7*22+4;ui.shadow(x,y+2,w,ph,5,10,Col::hex(0,0.35f));ui.rrect(x,y,w,ph,5,BG1.with(0.95f),BG1.with(0.95f));ui.ring(x,y,w,ph,5,1,LINE);
     ui.rrect(x+1,y+1,w-2,18,4,BG2,BG2);ui.text("TOOLS",x+10,y+4,10,TXT2,F_BOLD);float bw=(w-18)/2,bx0=x+6,bx1=x+12+bw;float ry=y+22;
@@ -182,7 +188,7 @@ void App::drawAnimator(float W,float H){Model* m=aeModel();Entity* e=scene_.get(
       ui.text("-",mx+17,py,14,TXT2,F_BOLD,1);ui.text("+",mx+mw-15,py,14,TXT2,F_BOLD,1);char b[24];std::snprintf(b,sizeof b,"%.0f cm",pos.y);ui.text(b,mx+mw/2+1,py+3,11,TXT,F_BOLD,1);}
     float by=y+h-26;fbtn(132,x+8,by,102,22,"",1);ui.text("Delete key",x+59,by+4,11,TXT,F_BOLD,1);fbtn(133,x+w-110,by,102,22,"",1);ui.text("Reset bone",x+w-59,by+4,11,TXT,F_BOLD,1);}
   // ---- timeline panel
-  { float x=6,y=H-28-TL_H,w=W-248,h=TL_H;ui.shadow(x,y+2,w,h,5,10,Col::hex(0,0.35f));ui.rrect(x,y,w,h,5,BG1.with(0.96f),BG1.with(0.96f));ui.ring(x,y,w,h,5,1,LINE);
+  if(aeTab_==0){ float x=6,y=H-28-TL_H,w=W-248,h=TL_H;ui.shadow(x,y+2,w,h,5,10,Col::hex(0,0.35f));ui.rrect(x,y,w,h,5,BG1.with(0.96f),BG1.with(0.96f));ui.ring(x,y,w,h,5,1,LINE);
     ui.rrect(x+1,y+1,w-2,24,4,BG2,BG2);ui.rrect(x+1,y+13,w-2,12,0,BG2,BG2);ui.text("TIMELINE",x+12,y+7,10.5f,TXT2,F_BOLD);
     float cx=x+84;ui.rrect(cx,y+3,200,20,3,BG3,BG3);ui.ring(cx,y+3,200,20,3,1,LINE);btn(121,cx,y+3,24,20);btn(122,cx+176,y+3,24,20);ui.text("<",cx+12,y+5,12,TXT2,F_BOLD,1);ui.text(">",cx+188,y+5,12,TXT2,F_BOLD,1);
     { std::string nm=c?c->name:"(no animation yet)";if(nm.size()>22)nm=nm.substr(0,21)+"..";ui.text(nm,cx+100,y+7,11,c?TXT:TXT3,F_BOLD,1);}

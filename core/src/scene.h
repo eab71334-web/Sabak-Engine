@@ -7,7 +7,7 @@
 namespace sk {
 enum Prim { P_EMPTY=0,P_BOX,P_SPHERE,P_CYL,P_CONE,P_PLANE,P_TERRAIN,P_PYRAMID,P_MODEL,P_COUNT };
 extern const char* PRIM_NAME[P_COUNT];
-struct Entity { int id=0,parent=-1; std::string name; int prim=P_BOX; Col color; Vec3 pos,rot,scale{1,1,1}; std::string script; std::string asset,anim="idle"; float animSpeed=1.f,animParam=0.f; std::string event; };
+struct Entity { int id=0,parent=-1; std::string name; int prim=P_BOX; Col color; Vec3 pos,rot,scale{1,1,1}; std::string script; std::string asset,anim="idle"; float animSpeed=1.f,animParam=0.f; std::string event,trigger; };
 class Scene {
 public:
   std::vector<Entity> ents; int nextId=1;
