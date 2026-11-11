@@ -54,7 +54,7 @@ void App::editorUpdate(float dt){animUpdate(dt);crUpdate(dt);cbT_+=((cbOpen_?1.0
   // hold-to-repeat on inspector steppers
   if((heldId_>=300&&heldId_<318)||(heldId_>=320&&heldId_<330)){repeatT_+=dt;if(repeatT_>0.45f){repeatT_-=0.07f;editorTap(heldId_);}}else repeatT_=0;}
 
-bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(crEd_)return y<42||x<246||x>W-172||y>H_/ui.s()-24;if(animEd_){if(aeCam_)return y<36||y>H_/ui.s()-36;return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182||(aeTab_>0&&x>250&&x<W-244&&y<212);}float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
+bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(bhOpen_&&x>=196&&x<=W-246&&y>=44&&y<=330)return true;if(crEd_)return y<42||x<246||x>W-172||y>H_/ui.s()-24;if(animEd_){if(aeCam_)return y<36||y>H_/ui.s()-36;return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182||(aeTab_>0&&x>250&&x<W-244&&y<212);}float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
 
 void App::gizmoUpdate(){gOk_=false;const Entity* e=scene_.get(sel_);if(!e||e->prim==P_TERRAIN||play_||animEd_)return;Vec3 o=scene_.worldPos(sel_);Vec3 c=r_->cameraPos();gL_=len(o-c)*0.14f;
   float sx,sy;if(!r_->project(o,sx,sy))return;gO_[0]=sx;gO_[1]=sy;Vec3 ax[3]={{1,0,0},{0,1,0},{0,0,1}};
@@ -119,6 +119,7 @@ void App::editorTap(int id){
   else if(id==119)openAnimator();
   else if((id>=120&&id<150)||(id>=320&&id<330)||(id>=600&&id<660)||(id>=200&&id<300))animTap(id);
   else if(id>=700&&id<800)crTap(id);
+  else if(id>=800&&id<900)bhTap(id);
   else if(id==114){if(e&&e->prim!=P_TERRAIN){scene_.remove(sel_);sel_=-1;rebuildRows();toast("Deleted");}}
   else if(id==115){if(e&&e->prim!=P_TERRAIN){int n=scene_.duplicate(sel_);select(n);rebuildRows();toast("Duplicated");}}
   else if(id==116)saveScene();
@@ -187,7 +188,7 @@ void App::drawSelection(Vec3 cam,Vec3 tg){(void)cam;(void)tg;const Entity* se=sc
 
 void App::drawEditor(){float W=W_/ui.s();float H=H_/ui.s();A_=1;oy_=0;
   Vec3 cam,tg;
-  if(play_){const Entity* h=nullptr;for(auto&kv:scripts_){const Entity* en=scene_.get(kv.first);if(en&&en->script=="PlayerController"){h=en;break;}}if(!h)h=scene_.find("Hero");
+  if(play_){const Entity* h=nullptr;for(auto&kv:scripts_){const Entity* en=scene_.get(kv.first);if(en&&(en->script=="PlayerController"||(en->script=="Behavior"&&!en->blocks.empty()&&en->blocks[0].type==0))){h=en;break;}}if(!h)h=scene_.find("Hero");
     Vec3 p=h?scene_.worldPos(h->id):Vec3{0,2,0};tg={p.x,p.y+1.4f,p.z};cam=tg+Vec3{std::sin(pYaw_)*std::cos(pPitch_)*7,std::sin(pPitch_)*7,std::cos(pYaw_)*std::cos(pPitch_)*7};
     float gh=scene_.height(cam.x,cam.z)+0.6f;if(cam.y<gh)cam.y=gh;}
   else{tg=ecTarget_;cam=tg+Vec3{std::sin(ecYaw_)*std::cos(ecPitch_)*ecDist_,std::sin(ecPitch_)*ecDist_,std::cos(ecYaw_)*std::cos(ecPitch_)*ecDist_};
@@ -255,10 +256,11 @@ void App::drawEditor(){float W=W_/ui.s();float H=H_/ui.s();A_=1;oy_=0;
         for(int a=0;a<3;a++){float ry=gy+a*18;float v=a==0?vs[g]->x:a==1?vs[g]->y:vs[g]->z;char b[24];std::snprintf(b,sizeof b,g==1?"%.0f":"%.2f",v);
           Col ac=Col::hex(AXC[a]);int idx=g*3+a;float mx=x+74,mw=w-84;ui.rrect(mx,ry,mw,16,3,BG3,BG3);ui.ring(mx,ry,mw,16,3,1,LINE);ui.rrect(mx,ry,3,16,0,ac,ac);
           btn(300+idx*2,mx+3,ry,26,16);btn(301+idx*2,mx+mw-26,ry,26,16);ui.text("-",mx+16,ry-1,13,pressOf(300+idx*2)>0.1f?ACC:TXT2,F_BOLD,1);ui.text("+",mx+mw-13,ry-1,13,pressOf(301+idx*2)>0.1f?ACC:TXT2,F_BOLD,1);ui.text(b,mx+mw/2+1,ry+2,10.5f,TXT,F_BOLD,1);}}
-      float sy=y+h-32;ui.text("Script",x+12,sy+5,10.5f,TXT2,F_BOLD);btn(160,x+62,sy,w-72,22);ui.rrect(x+62,sy,w-72,22,3,BG3,BG3);ui.ring(x+62,sy,w-72,22,3,1,e->script.empty()?LINE:ACC);
-      ui.text(e->script.empty()?"None (tap)":e->script,x+62+(w-72)/2,sy+5,10.5f,e->script.empty()?TXT3:TXT,F_BOLD,1);}}
+      float sy=y+h-32;float sw=e->script=="Behavior"?w-72-64:w-72;ui.text("Script",x+12,sy+5,10.5f,TXT2,F_BOLD);btn(160,x+62,sy,sw,22);ui.rrect(x+62,sy,sw,22,3,BG3,BG3);ui.ring(x+62,sy,sw,22,3,1,e->script.empty()?LINE:ACC);
+      ui.text(e->script.empty()?"None (tap)":e->script,x+62+sw/2,sy+5,10.5f,e->script.empty()?TXT3:TXT,F_BOLD,1);if(e->script=="Behavior"){drawToolBtn(806,x+62+sw+4,sy,56,22,"Blocks",bhOpen_);}}}
   else{ui.text("Select an object to see its details",W-110,H-44,10,TXT3,F_REG,1);}
   // ---- add menu
+  drawBehavior(W,H);
   if(addMenu_){float x=346,y=42,w=170,h=30+7*26+6;ui.shadow(x,y+2,w,h,5,14,Col::hex(0,0.5f));ui.rrect(x,y,w,h,5,BG1.with(0.98f),BG1.with(0.98f));ui.ring(x,y,w,h,5,1,LINE2);
     ui.rrect(x+1,y+1,w-2,24,4,BG2,BG2);ui.rrect(x+1,y+12,w-2,12,0,BG2,BG2);ui.text("ADD OBJECT",x+12,y+7,10,TXT2,F_BOLD);
     int order[7]={P_EMPTY,P_BOX,P_SPHERE,P_CYL,P_CONE,P_PYRAMID,P_PLANE};for(int i=0;i<7;i++){float ry=y+30+i*26;btn(400+order[i],x+4,ry,w-8,24);float k=pressOf(400+order[i]);if(k>0.1f)ui.rrect(x+4,ry,w-8,24,3,ACC.with(0.35f),ACC.with(0.35f));

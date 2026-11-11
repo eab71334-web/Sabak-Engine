@@ -61,6 +61,8 @@ private:
   struct AePose{std::string name,file;std::map<int,std::pair<Vec3,Vec3>> d;bool builtin=false;}; std::vector<AePose> aePoses_;
   int aeTab_=0,aeKeySel_=-1,aeChan_=0,aeGMode_=0,aeGId_=-1,aeSmSel_=0,aeTrSel_=0,aePoseSel_=0,aePoseOff_=0; bool aeOnion_=false,aeCam_=false,aeLook_=false,aeFxPrev_=false,aeLookDrag_=false; float aeGVmax_=15;
   void aeStudioDraw(float W,float H); bool aeStudioPointer(int type,int id,float x,float y); void aeStudioTap(int id); void aeOnionDraw(); void aeCamDraw(float W,float H); void aeLoadPoses();
+  // behavior blocks editor (behaviorui.cpp)
+  bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);
   // character creator (creator.cpp)
   bool crEd_=false,crDirty_=false; CharDef cr_; int crSel_=0,crDrag_=-1,crDragId_=-1; float crT_=0;
   void openCreator(); void closeCreator(); void crRebuild(); void crSwitch(const std::string& n); void crUpdate(float dt); bool crPointer(int type,int id,float px,float py); void crTap(int id); void drawCreator(float W,float H); Entity* crEntity();
