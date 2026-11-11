@@ -5,8 +5,8 @@
 #include "theme.h"
 namespace sk {
 using namespace sk::th;
-extern const char* kBlockNames[10]; extern const char* kBlockA[10]; extern const char* kBlockB[10]; int blockUsesName(int t);
-static const float DEFA[10]={2.4f,2.4f,0,3,45,0.15f,0,0,4,3.5f},DEFB[10]={6,1.5f,0,1.5f,0,1,0,0,1.5f,6};
+extern const char* kBlockNames[12]; extern const char* kBlockA[12]; extern const char* kBlockB[12]; int blockUsesName(int t);
+static const float DEFA[12]={2.4f,2.4f,0,3,45,0.15f,0,0,4,3.5f,0,2.0f},DEFB[12]={6,1.5f,0,1.5f,0,1,0,0,1.5f,6,0,1.2f};
 static const int MAXB=5;
 static std::vector<std::string> entNames(const Scene& sc,const Entity* self){std::vector<std::string> v;for(auto& e:sc.ents)if(&e!=self&&e.prim!=P_TERRAIN)v.push_back(e.name);return v;}
 static std::vector<std::string> animNames(App* a,Model* m){std::vector<std::string> v;if(m){for(auto& an:m->anims)v.push_back(an.name);if(!m->smStates.empty())v.push_back("StateMachine");}(void)a;return v;}
@@ -17,7 +17,7 @@ void App::drawBehavior(float W,float H){(void)H;Entity* e=scene_.get(sel_);if(!b
   Model* m=e->prim==P_MODEL?modelFor(e->asset):nullptr;
   for(int r=0;r<MAXB;r++){float ry=y+32+r*44;ui.rrect(x+6,ry,w-12,40,4,BG0,BG0);ui.ring(x+6,ry,w-12,40,4,1,LINE);
     if(r>=(int)e->blocks.size()){ui.text("(empty slot)",x+16,ry+14,10.5f,TXT3);continue;}
-    Block& b=e->blocks[r];int t=std::max(0,std::min(9,b.type));
+    Block& b=e->blocks[r];int t=std::max(0,std::min(11,b.type));
     drawToolBtn(810+r*10,x+10,ry+4,18,20,"<");ui.rrect(x+30,ry+4,128,20,3,BG3,BG3);ui.text(kBlockNames[t],x+94,ry+9,10.5f,TXT,F_BOLD,1);drawToolBtn(811+r*10,x+160,ry+4,18,20,">");
     int nu=blockUsesName(t);if(nu){drawToolBtn(816+r*10,x+186,ry+4,18,20,"<");ui.rrect(x+206,ry+4,w-206-44,20,3,BG3,BG3);std::string s=b.s.empty()?(nu==1?"(pick object)":"(pick animation)"):b.s;if(s.size()>18)s=s.substr(0,17)+"..";ui.text(s,x+206+(w-206-44)/2,ry+9,10.5f,b.s.empty()?TXT3:ORG,F_BOLD,1);drawToolBtn(817+r*10,x+w-42,ry+4,18,20,">");}
     drawToolBtn(818+r*10,x+w-20-6,ry+16,20,18,"x");
@@ -34,7 +34,7 @@ void App::bhTap(int id){Entity* e=scene_.get(sel_);if(!e)return;
     if(id==802){add(0,2.4f,6);add(7,0,0);}else if(id==803){auto n=entNames(scene_,e);std::string tgt="Hero";for(auto& s:n)if(s=="Hero")tgt=s;add(1,2.4f,1.5f,tgt);add(7,0,0);}else if(id==804){add(3,3,1.5f);add(7,0,0);}else{add(8,4,1.5f);add(7,0,0);}
     toast("Blocks ready. Press Play");return;}
   if(id<810||id>=810+MAXB*10)return;int r=(id-810)/10,k=(id-810)%10;if(r>=(int)e->blocks.size())return;Block& b=e->blocks[r];
-  if(k==0||k==1){b.type=(b.type+(k==1?1:9))%10;setDef(b);return;}
+  if(k==0||k==1){b.type=(b.type+(k==1?1:11))%12;setDef(b);return;}
   if(k==8){e->blocks.erase(e->blocks.begin()+r);return;}
   float st=b.type==4?15.f:(b.type==5&&k<=3)?0.1f:0.5f;
   if(k==2){b.a=std::max(0.f,b.a-st);return;}if(k==3){b.a+=st;return;}

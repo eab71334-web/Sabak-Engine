@@ -1,3 +1,4 @@
+#include <cmath>
 #include "scene.h"
 #include <algorithm>
 #include <cstdlib>
@@ -32,6 +33,22 @@ static Vec3 v3(const std::string& s){auto p=split(s,',');if(p.size()<3)return {}
 bool Scene::load(const std::string& path){std::ifstream f(path);if(!f)return false;std::string line;std::getline(f,line);if(line.rfind("SABAKSCENE",0)!=0)return false;ents.clear();nextId=1;
   while(std::getline(f,line)){auto p=split(line,'|');if(p.size()<9)continue;Entity e;e.id=atoi(p[0].c_str());e.parent=atoi(p[1].c_str());e.prim=std::min(P_COUNT-1,std::max(0,atoi(p[2].c_str())));e.name=p[3];
     Vec3 c=v3(p[4]);e.color=Col{c.x,c.y,c.z,1};e.pos=v3(p[5]);e.rot=v3(p[6]);e.scale=v3(p[7]);e.script=p[8];if(p.size()>10){e.asset=p[9];e.anim=p[10].empty()?"idle":p[10];}if(p.size()>11){for(auto& bs:split(p[11],';')){auto q=split(bs,':');if(q.size()<4)continue;Block b;b.type=atoi(q[0].c_str());b.a=(float)atof(q[1].c_str());b.b=(float)atof(q[2].c_str());b.s=q[3];e.blocks.push_back(b);}}ents.push_back(e);nextId=std::max(nextId,e.id+1);}return true;}
+
+static bool invAffine(const Mat4& a,Mat4& o){const float* m=a.m;float A[3][3]={{m[0],m[4],m[8]},{m[1],m[5],m[9]},{m[2],m[6],m[10]}};
+  float det=A[0][0]*(A[1][1]*A[2][2]-A[1][2]*A[2][1])-A[0][1]*(A[1][0]*A[2][2]-A[1][2]*A[2][0])+A[0][2]*(A[1][0]*A[2][1]-A[1][1]*A[2][0]);if(std::fabs(det)<1e-12f)return false;float id=1.f/det;float I[3][3];
+  I[0][0]=(A[1][1]*A[2][2]-A[1][2]*A[2][1])*id;I[0][1]=(A[0][2]*A[2][1]-A[0][1]*A[2][2])*id;I[0][2]=(A[0][1]*A[1][2]-A[0][2]*A[1][1])*id;
+  I[1][0]=(A[1][2]*A[2][0]-A[1][0]*A[2][2])*id;I[1][1]=(A[0][0]*A[2][2]-A[0][2]*A[2][0])*id;I[1][2]=(A[0][2]*A[1][0]-A[0][0]*A[1][2])*id;
+  I[2][0]=(A[1][0]*A[2][1]-A[1][1]*A[2][0])*id;I[2][1]=(A[0][1]*A[2][0]-A[0][0]*A[2][1])*id;I[2][2]=(A[0][0]*A[1][1]-A[0][1]*A[1][0])*id;
+  for(int i=0;i<16;i++)o.m[i]=0;for(int r=0;r<3;r++)for(int c=0;c<3;c++)o.m[c*4+r]=I[r][c];float t[3]={m[12],m[13],m[14]};for(int r=0;r<3;r++)o.m[12+r]=-(I[r][0]*t[0]+I[r][1]*t[1]+I[r][2]*t[2]);o.m[15]=1;return true;}
+void Scene::buildSolids(){solids.clear();for(auto& e:ents){if(e.prim==P_EMPTY||e.prim==P_PLANE||e.prim==P_TERRAIN||e.prim==P_MODEL||!e.script.empty())continue;const std::string& n=e.name;
+    if(n.rfind("Path",0)==0||n.find("Floor")!=std::string::npos||n.find("Ground")!=std::string::npos||n.find("Stage")!=std::string::npos||n.find("Grass")!=std::string::npos)continue;
+    SolidBox b;b.w=world(e.id);if(!invAffine(b.w,b.inv))continue;const float* m=b.w.m;
+    b.sx=std::sqrt(m[0]*m[0]+m[1]*m[1]+m[2]*m[2]);b.sy=std::sqrt(m[4]*m[4]+m[5]*m[5]+m[6]*m[6]);b.sz=std::sqrt(m[8]*m[8]+m[9]*m[9]+m[10]*m[10]);
+    float hy=0.5f*(std::fabs(m[1])+std::fabs(m[5])+std::fabs(m[9]));b.ymin=m[13]-hy;b.ymax=m[13]+hy;if(b.ymax-b.ymin<0.5f||b.sx<0.2f||b.sz<0.2f)continue;solids.push_back(b);}}
+void Scene::resolve(Vec3& p,float radius,float height) const{for(int it=0;it<2;it++)for(auto& b:solids){if(p.y>b.ymax-0.15f||p.y+height<b.ymin+0.2f)continue;const float* iv=b.inv.m;
+    float lx=iv[0]*p.x+iv[4]*p.y+iv[8]*p.z+iv[12],lz=iv[2]*p.x+iv[6]*p.y+iv[10]*p.z+iv[14];float rx=radius/b.sx,rz=radius/b.sz;float ex=0.5f+rx,ez=0.5f+rz;if(std::fabs(lx)>=ex||std::fabs(lz)>=ez)continue;
+    float px=(ex-std::fabs(lx))*b.sx,pz=(ez-std::fabs(lz))*b.sz;if(px<pz)lx=(lx<0?-ex:ex);else lz=(lz<0?-ez:ez);
+    const float* w=b.w.m;float ly=iv[1]*p.x+iv[5]*p.y+iv[9]*p.z+iv[13];p.x=w[0]*lx+w[4]*ly+w[8]*lz+w[12];p.z=w[2]*lx+w[6]*ly+w[10]*lz+w[14];}}
 static Col H(unsigned h){return Col::hex(h);}
 static Col jit(unsigned h,float seed,float amt){float k=1.0f+(hash((int)seed,7)-0.5f)*2*amt;Col c=Col::hex(h);return Col{std::min(1.f,c.r*k),std::min(1.f,c.g*(1.0f+(hash((int)seed,11)-0.5f)*amt)),std::min(1.f,c.b*k),1};}
 void Scene::buildTemplate(int t){ents.clear();nextId=1;

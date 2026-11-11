@@ -15,6 +15,7 @@ struct PlayerController : Script {
     speed+=(want-speed)*std::min(1.f,dt*8.f);
     if(l>0.1f){ self->pos.x+=wx/l*speed*dt; self->pos.z+=wz/l*speed*dt;
       float a=std::atan2(wx,wz)*57.2957795f, d=a-self->rot.y; while(d>180)d-=360; while(d<-180)d+=360; self->rot.y+=d*std::min(1.f,dt*12.f); }
+    { Vec3 q=self->pos; ctx->scene->resolve(q,0.45f,1.8f); self->pos.x=q.x; self->pos.z=q.z; }
     self->anim="Locomotion"; self->animParam=speed;
     self->pos.y=ctx->scene->height(self->pos.x,self->pos.z);
   }

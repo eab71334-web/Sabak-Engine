@@ -40,7 +40,7 @@ void App::select(int id){sel_=id;}
 void App::rebuildRows(){rows_.clear();std::vector<int> roots;for(auto&e:scene_.ents)if(e.parent<0||!scene_.get(e.parent))roots.push_back(e.id);
   std::function<void(int,int)> walk=[&](int id,int d){rows_.push_back({id,d});if(expanded_.count(id))for(int c:scene_.childrenOf(id))walk(c,d+1);};for(int r:roots)walk(r,0);}
 
-void App::startPlay(){if(play_)return;snap_=scene_;play_=true;addMenu_=false;scripts_.clear();playT_=0;sctx_.time=0;in_=Input();
+void App::startPlay(){if(play_)return;scene_.buildSolids();snap_=scene_;play_=true;addMenu_=false;scripts_.clear();playT_=0;sctx_.time=0;in_=Input();
   for(auto& e:scene_.ents){if(e.script.empty())continue;auto it=scriptRegistry().find(e.script);if(it==scriptRegistry().end())continue;Script* s=it->second();s->self=&e;s->ctx=&sctx_;scripts_[e.id].reset(s);}
   // scripts hold pointers into the entity vector, so start them only after it is final
   for(auto& kv:scripts_){kv.second->self=scene_.get(kv.first);kv.second->onStart();}

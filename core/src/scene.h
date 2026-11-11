@@ -8,7 +8,7 @@ namespace sk {
 enum Prim { P_EMPTY=0,P_BOX,P_SPHERE,P_CYL,P_CONE,P_PLANE,P_TERRAIN,P_PYRAMID,P_MODEL,P_COUNT };
 extern const char* PRIM_NAME[P_COUNT];
 struct Block { int type=0; float a=1,b=1; std::string s; };   // no-compile behavior block (see behavior.cpp)
-struct Entity { int id=0,parent=-1; std::string name; int prim=P_BOX; Col color; Vec3 pos,rot,scale{1,1,1}; std::string script; std::string asset,anim="idle"; float animSpeed=1.f,animParam=0.f; std::string event,trigger; std::vector<Block> blocks; };
+struct Entity { int id=0,parent=-1; std::string name; int prim=P_BOX; Col color; Vec3 pos,rot,scale{1,1,1}; std::string script; std::string asset,anim="idle"; float animSpeed=1.f,animParam=0.f; std::string event,trigger; bool lookOn=false; float lookYaw=0,lookPitch=0; std::vector<Block> blocks; };
 class Scene {
 public:
   std::vector<Entity> ents; int nextId=1;
@@ -20,6 +20,7 @@ public:
   bool save(const std::string& path) const; bool load(const std::string& path);
   void buildTemplate(int t);                         // 0 empty world, 1 village, 2 open terrain
   float height(float x,float z) const; float noise(float x,float z) const;   // smooth 0..1 value noise, used for terrain tinting
+  struct SolidBox{Mat4 w,inv;float sx,sy,sz,ymin,ymax;}; std::vector<SolidBox> solids; void buildSolids(); void resolve(Vec3& p,float radius,float height) const;   // simple wall/house/tree collision
   std::vector<int> childrenOf(int id) const;
   int depthOf(int id) const;
 };
