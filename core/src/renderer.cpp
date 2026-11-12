@@ -11,22 +11,22 @@ static unsigned link(const char* vs,const char* fs){unsigned p=glCreateProgram()
 static const char* VS=R"(#version 300 es
 layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm;
 #ifdef SKIN
-layout(location=2) in vec2 aUV; layout(location=3) in uvec4 aJ; layout(location=4) in vec4 aW; uniform mat4 uJ[80];
+layout(location=2) in vec2 aUV; layout(location=3) in uvec4 aJ; layout(location=4) in vec4 aW; uniform mat4 uJ[80]; layout(location=5) in vec4 aVC;
 #else
 layout(location=2) in vec3 aCol;
 #endif
 uniform mat4 uModel,uVP,uLightVP; uniform vec3 uTint;
-out vec3 vW; out vec3 vN; out vec3 vC; out vec4 vL; out vec2 vUV;
+out vec3 vW; out vec3 vN; out vec3 vC; out vec4 vL; out vec2 vUV; out vec3 vVC;
 void main(){
 #ifdef SKIN
-  mat4 sm=uJ[aJ.x]*aW.x+uJ[aJ.y]*aW.y+uJ[aJ.z]*aW.z+uJ[aJ.w]*aW.w; vec4 lp=sm*vec4(aPos,1.0); vec3 ln=mat3(sm)*aNrm; vC=uTint; vUV=aUV;
+  mat4 sm=uJ[aJ.x]*aW.x+uJ[aJ.y]*aW.y+uJ[aJ.z]*aW.z+uJ[aJ.w]*aW.w; vec4 lp=sm*vec4(aPos,1.0); vec3 ln=mat3(sm)*aNrm; vC=uTint; vVC=aVC.rgb; vUV=aUV;
 #else
-  vec4 lp=vec4(aPos,1.0); vec3 ln=aNrm; vC=pow(aCol*uTint,vec3(2.2)); vUV=vec2(0.0);
+  vec4 lp=vec4(aPos,1.0); vec3 ln=aNrm; vC=pow(aCol*uTint,vec3(2.2)); vUV=vec2(0.0); vVC=vec3(1.0);
 #endif
   vec4 w=uModel*lp; vW=w.xyz; vN=mat3(uModel)*ln; vL=uLightVP*w; gl_Position=uVP*w; })";
 static const char* FS=R"(#version 300 es
 precision highp float; precision highp sampler2DShadow;
-in vec3 vW; in vec3 vN; in vec3 vC; in vec4 vL; in vec2 vUV; out vec4 o;
+in vec3 vW; in vec3 vN; in vec3 vC; in vec4 vL; in vec2 vUV; in vec3 vVC; out vec4 o;
 uniform vec3 uSun,uCam,uFog; uniform sampler2DShadow uShadow;
 #ifdef SKIN
 uniform sampler2D uTex; uniform vec4 uBase; uniform float uMask; uniform int uKind;
@@ -38,7 +38,7 @@ float shadow(){ vec3 p=vL.xyz/vL.w*0.5+0.5; if(p.z>1.0||p.x<0.0||p.x>1.0||p.y<0.
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
 void main(){ vec3 albedo=vC;
 #ifdef SKIN
-  vec4 tc=texture(uTex,vUV)*uBase; if(uMask>0.5&&tc.a<0.5) discard; albedo=pow(tc.rgb,vec3(2.2))*vC;
+  vec4 tc=texture(uTex,vUV)*uBase; if(uMask>0.5&&tc.a<0.5) discard; albedo=pow(tc.rgb,vec3(2.2))*vC; if(uKind==10)albedo*=pow(vVC,vec3(2.2));
 #endif
   vec3 N=normalize(vN); if(!gl_FrontFacing) N=-N; vec3 L=normalize(uSun); vec3 V=normalize(uCam-vW);
   float sssK=0.0, specK=0.15, specP=48.0, sheen=0.0, envK=0.0, envT=0.0; float dist=length(uCam-vW); float lod=clamp(1.3-dist*0.28,0.0,1.0);
@@ -54,6 +54,7 @@ void main(){ vec3 albedo=vC;
     else if(uKind==6){ albedo*=0.05; specK=2.2; specP=260.0; envK=1.0; envT=0.0; }
     else if(uKind==7){ specK=1.4; specP=90.0; envK=0.95; envT=1.0; }
     else if(uKind==8){ float fr=vn(vec2(vUV.x*700.0,vUV.y*700.0)); float fr2=vn(vUV*90.0); albedo*=0.80+0.28*fr+0.12*fr2; N=normalize(N+(T*(fr-0.5)+B*(vn(vUV*700.0+9.0)-0.5))*0.22*lod); specK=0.22; specP=22.0; sheen=0.9; }
+    else if(uKind==10){ specK=0.10; specP=26.0; sssK=0.35; }
     else if(uKind==9){ albedo*=0.7+0.5*vn(vUV*220.0); specK=0.05; specP=10.0; }
   }
 #endif
@@ -140,7 +141,7 @@ int Renderer::uploadSkin(const std::vector<SkinVertex>& v,const std::vector<uint
   glGenBuffers(1,&g.ibo);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,g.ibo);glBufferData(GL_ELEMENT_ARRAY_BUFFER,ix.size()*4,ix.data(),GL_STATIC_DRAW);
   const int S=sizeof(SkinVertex);glEnableVertexAttribArray(0);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,S,(void*)0);glEnableVertexAttribArray(1);glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,S,(void*)12);
   glEnableVertexAttribArray(2);glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,S,(void*)24);glEnableVertexAttribArray(3);glVertexAttribIPointer(3,4,GL_UNSIGNED_BYTE,S,(void*)32);
-  glEnableVertexAttribArray(4);glVertexAttribPointer(4,4,GL_FLOAT,GL_FALSE,S,(void*)36);skinMeshes_.push_back(g);return (int)skinMeshes_.size()-1;}
+  glEnableVertexAttribArray(4);glVertexAttribPointer(4,4,GL_FLOAT,GL_FALSE,S,(void*)36);glEnableVertexAttribArray(5);glVertexAttribPointer(5,4,GL_UNSIGNED_BYTE,GL_TRUE,S,(void*)52);skinMeshes_.push_back(g);return (int)skinMeshes_.size()-1;}
 unsigned Renderer::createTexture(const unsigned char* px,int w,int h){unsigned t=0;glGenTextures(1,&t);glBindTexture(GL_TEXTURE_2D,t);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,px);
   glGenerateMipmap(GL_TEXTURE_2D);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);return t;}

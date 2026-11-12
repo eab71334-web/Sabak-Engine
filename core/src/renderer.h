@@ -5,7 +5,7 @@
 namespace sk {
 struct GpuMesh { unsigned vao=0,vbo=0,ibo=0; int count=0; };
 struct DrawItem { int mesh; Mat4 model; Vec3 tint{1,1,1}; bool castShadow=true; };
-struct SkinVertex { float p[3]; float n[3]; float uv[2]; unsigned char j[4]; float w[4]; };
+struct SkinVertex { float p[3]; float n[3]; float uv[2]; unsigned char j[4]; float w[4]; unsigned char c[4]; };
 struct SkinDraw { int mesh=-1; Mat4 model; unsigned tex=0; float col[4]={1,1,1,1}; bool mask=false; int kind=0; Vec3 tint{1,1,1}; const float* joints=nullptr; int nj=0; };
 struct Stats { int draws=0; long tris=0; };
 struct Target { unsigned fbo=0,tex=0,depth=0; int w=0,h=0; };

@@ -54,7 +54,7 @@ void App::editorUpdate(float dt){animUpdate(dt);crUpdate(dt);cbT_+=((cbOpen_?1.0
   // hold-to-repeat on inspector steppers
   if((heldId_>=300&&heldId_<318)||(heldId_>=320&&heldId_<330)){repeatT_+=dt;if(repeatT_>0.45f){repeatT_-=0.07f;editorTap(heldId_);}}else repeatT_=0;}
 
-bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(bhOpen_&&x>=196&&x<=W-246&&y>=44&&y<=330)return true;if(scEd_)return y<42||x<212||y>H_/ui.s()-24;if(crEd_)return y<42||x<246||x>W-172||y>H_/ui.s()-24;if(animEd_){if(aeCam_)return y<36||y>H_/ui.s()-36;return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182||(aeTab_>0&&x>250&&x<W-244&&y<212);}float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
+bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(bhOpen_&&x>=196&&x<=W-246&&y>=44&&y<=330)return true;if(scEd_)return y<42||x<212||y>H_/ui.s()-24||((sc_.tool==9||sc_.tool==10)&&x>W_/ui.s()-132&&y<270);if(crEd_)return y<42||x<246||x>W-172||y>H_/ui.s()-24;if(animEd_){if(aeCam_)return y<36||y>H_/ui.s()-36;return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182||(aeTab_>0&&x>250&&x<W-244&&y<212);}float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
 
 void App::gizmoUpdate(){gOk_=false;const Entity* e=scene_.get(sel_);if(!e||e->prim==P_TERRAIN||play_||animEd_)return;Vec3 o=scene_.worldPos(sel_);Vec3 c=r_->cameraPos();gL_=len(o-c)*0.14f;
   float sx,sy;if(!r_->project(o,sx,sy))return;gO_[0]=sx;gO_[1]=sy;Vec3 ax[3]={{1,0,0},{0,1,0},{0,0,1}};
