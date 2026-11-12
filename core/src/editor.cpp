@@ -25,7 +25,7 @@ int App::meshFor(int prim){int& m=meshIds_[prim];if(m>=0)return m;Vec3 w{1,1,1};
   m=r_->upload(d);return m;}
 
 Model* App::modelFor(const std::string& name){auto it=models_.find(name);if(it!=models_.end())return it->second.get();
-  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();bool okLoad;if(name.rfind("char:",0)==0){CharDef cd;cd.name=name.substr(5);if(cur_>=0&&cur_<(int)projects_.size())cd.load(projects_[cur_].dir+"/characters/"+cd.name+".char");okLoad=buildCharacter(*r_,cd,*m);}else okLoad=loadModel(*r_,path,h,*m);if(!okLoad)m.reset();else{if(m->autoRig&&name!="hero"){Model* hero=modelFor("hero");int mp=0;if(hero)m->retargetFrom(*hero,mp,true);}if(cur_>=0&&cur_<(int)projects_.size()){m->loadClips(projects_[cur_].dir+"/anims",name);m->loadSM(projects_[cur_].dir+"/anims",name);}}Model* p=m.get();models_[name]=std::move(m);return p;}
+  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();bool okLoad;if(name.rfind("gen:car",0)==0){okLoad=buildCar(*r_,name.size()>8?name.substr(8):"",*m);}else if(name.rfind("gen:horse",0)==0){okLoad=buildHorse(*r_,name.size()>10?name.substr(10):"",*m);}else if(name.rfind("char:",0)==0){CharDef cd;cd.name=name.substr(5);if(cur_>=0&&cur_<(int)projects_.size())cd.load(projects_[cur_].dir+"/characters/"+cd.name+".char");okLoad=buildCharacter(*r_,cd,*m);}else okLoad=loadModel(*r_,path,h,*m);if(!okLoad)m.reset();else{if(m->autoRig&&name!="hero"){Model* hero=modelFor("hero");int mp=0;if(hero)m->retargetFrom(*hero,mp,true);}if(cur_>=0&&cur_<(int)projects_.size()){m->loadClips(projects_[cur_].dir+"/anims",name);m->loadSM(projects_[cur_].dir+"/anims",name);}}Model* p=m.get();models_[name]=std::move(m);return p;}
 
 void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());std::vector<SkinDraw> skin;bool studio=false;for(auto& e:sc.ents)if(e.name=="StudioFloor")studio=true;r_->setStudio(studio);
   for(auto& e:sc.ents){if(e.prim==P_MODEL){if(((animEd_&&e.id!=sel_)||(crEd_&&e.asset.rfind("char:",0)!=0))&&&sc==&scene_)continue;Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
@@ -134,7 +134,7 @@ void App::editorTap(int id){
   else if(id>=450&&id<480)cbTap(id);
 }
 
-void App::refreshModels(){mdlList_={"hero","horse"};namespace fs=std::filesystem;std::error_code ec;
+void App::refreshModels(){mdlList_={"hero","horse","gen:car","gen:horse"};namespace fs=std::filesystem;std::error_code ec;
   if(cur_>=0&&cur_<(int)projects_.size()){std::string d=projects_[cur_].dir+"/models";if(fs::is_directory(d,ec))for(auto& f:fs::directory_iterator(d,ec)){std::string x=f.path().extension().string();for(char& c:x)c=(char)tolower(c);if(x==".glb"||x==".gltf"||x==".fbx")mdlList_.push_back("models/"+f.path().filename().string());}}
   std::string d=data_+"/Models";if(fs::is_directory(d,ec))for(auto& f:fs::directory_iterator(d,ec)){std::string x=f.path().extension().string();for(char& c:x)c=(char)tolower(c);if(x==".glb"||x==".gltf"||x==".fbx")mdlList_.push_back("ext:"+f.path().filename().string());}}
 void App::placeModel(const std::string& id){namespace fs=std::filesystem;std::error_code ec;std::string asset=id,name;
@@ -143,7 +143,7 @@ void App::placeModel(const std::string& id){namespace fs=std::filesystem;std::er
         fs::create_directories(fs::path(projects_[cur_].dir+"/models/"+u).parent_path(),ec);fs::copy_file(data_+"/Models/"+u,projects_[cur_].dir+"/models/"+u,fs::copy_options::overwrite_existing,ec);}}
     asset="models/"+fn;}
   if(!modelFor(asset)){toast("Could not load model");return;}
-  name=asset=="hero"?"Hero":asset=="horse"?"Horse":fs::path(asset).stem().string();
+  name=asset=="hero"?"Hero":asset=="horse"?"Horse":asset=="gen:car"?"Car (generated)":asset=="gen:horse"?"Horse (generated)":fs::path(asset).stem().string();
   Entity& n=scene_.add(P_MODEL,name);n.asset=asset;n.color=Col{1,1,1,1};n.pos=ecTarget_;n.pos.y=scene_.height(n.pos.x,n.pos.z);select(n.id);rebuildRows();toast("Added "+name);}
 void App::cbTap(int id){
   if(id==450)cbOpen_=!cbOpen_;else if(id>=451&&id<=453){cbTab_=id-451;if(cbTab_==1)refreshModels();}

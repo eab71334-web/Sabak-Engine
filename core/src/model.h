@@ -59,6 +59,8 @@ struct CharDef { std::string name="Character"; bool human=true; float ex[6]={0,0
   bool save(const std::string& path) const; bool load(const std::string& path); };
 bool buildCharacter(Renderer& r,const CharDef& cd,Model& out);
 bool buildHuman(Renderer& r,const CharDef& cd,Model& out);
+bool buildCar(Renderer& r,const std::string& spec,Model& out);
+bool buildHorse(Renderer& r,const std::string& spec,Model& out);
 struct RigPrim { std::vector<SkinVertex> v; std::vector<uint32_t> idx; int mat=0; };
 bool rigStatic(Renderer& r,std::vector<RigPrim>& ps,Model& out,float targetHeight);   // humanoid auto-rig of unskinned geometry (raw model space, +Y up, facing +Z)
 bool exportGlb(const Model& m,const std::string& path,std::string& err);

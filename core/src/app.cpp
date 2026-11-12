@@ -103,7 +103,7 @@ void App::header(const std::string& title,const std::string& sub){sect(0);
 void App::renderThumb(Target& t,const Scene& sc,Vec3 cam,Vec3 tg,float fov){r_->pushTarget(t);renderScene(sc,cam,tg,fov);r_->popTarget();}
 void App::ensureThumbs(){
   if(scr_==EDITOR&&cbOpen_&&cbTab_==1){for(auto& n:mdlList_){if(n.rfind("ext:",0)==0)continue;Target& t=mthumbs_[n];if(t.fbo)continue;if(!r_->createTarget(t,128,128))return;Scene tmp;auto& en=tmp.add(P_MODEL,"m");en.asset=n;en.color=Col{1,1,1,1};
-      bool horse=n=="horse";renderThumb(t,tmp,horse?Vec3{3.6f,1.7f,3.8f}:Vec3{2.1f,1.3f,3.3f},{0,horse?1.0f:0.85f,0},0.8f);return;}}
+      bool horse=n=="horse"||n.rfind("gen:horse",0)==0;bool car=n.rfind("gen:car",0)==0;renderThumb(t,tmp,car?Vec3{5.2f,2.2f,5.6f}:horse?Vec3{3.6f,1.7f,3.8f}:Vec3{2.1f,1.3f,3.3f},{0,car?0.7f:horse?1.0f:0.85f,0},0.8f);return;}}
   Vec3 cams[3]={{9,4.5f,14},{15,6.5f,16},{-18,8,18}},tgs[3]={{0,1.5f,0},{-1,2.5f,-5},{0,3,-3}};
   for(int i=0;i<3;i++)if(!tmplOk_[i]){Scene tmp;tmp.buildTemplate(i);if(tmplT_[i].fbo==0&&!r_->createTarget(tmplT_[i],320,180))return;renderThumb(tmplT_[i],tmp,cams[i],tgs[i]);tmplOk_[i]=true;return;}
   if(!bannerOk_){Scene tmp;tmp.buildTemplate(1);if(banner_.fbo==0&&!r_->createTarget(banner_,640,252))return;renderThumb(banner_,tmp,{19,7.5f,23},{-2,2.5f,-6},0.8f);bannerOk_=true;return;}

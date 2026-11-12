@@ -41,7 +41,7 @@ void main(){ vec3 albedo=vC;
   vec4 tc=texture(uTex,vUV)*uBase; if(uMask>0.5&&tc.a<0.5) discard; albedo=pow(tc.rgb,vec3(2.2))*vC;
 #endif
   vec3 N=normalize(vN); if(!gl_FrontFacing) N=-N; vec3 L=normalize(uSun); vec3 V=normalize(uCam-vW);
-  float sssK=0.0, specK=0.15, specP=48.0, sheen=0.0; float dist=length(uCam-vW); float lod=clamp(1.3-dist*0.28,0.0,1.0);
+  float sssK=0.0, specK=0.15, specP=48.0, sheen=0.0, envK=0.0, envT=0.0; float dist=length(uCam-vW); float lod=clamp(1.3-dist*0.28,0.0,1.0);
 #ifdef SKIN
   if(uKind>0){ vec3 T=normalize(cross(N,vec3(0.0,1.0,0.001))); vec3 B=cross(N,T);
     if(uKind==1){ float a=(vn(vUV*1100.0)-0.5), b=(vn(vUV*1100.0+7.3)-0.5), c=vn(vUV*2600.0)-0.5; N=normalize(N+(T*(a+c*0.6)+B*(b+c*0.6))*0.16*lod);
@@ -50,6 +50,11 @@ void main(){ vec3 albedo=vC;
       albedo*=0.86+0.14*mix(1.0,wv,lod); albedo*=0.78+0.40*vn(vUV*38.0); specK=0.04; specP=12.0; sheen=0.55; }
     else if(uKind==3){ float st=vn(vec2(vUV.x*900.0,vUV.y*40.0)); albedo*=mix(1.0,0.45+1.1*st,lod); specK=0.22; specP=40.0; sheen=0.15; }
     else if(uKind==4){ specK=1.2; specP=200.0; }
+    else if(uKind==5){ specK=1.6; specP=140.0; envK=0.85; envT=0.0; albedo*=0.9+0.1*vn(vUV*300.0); }
+    else if(uKind==6){ albedo*=0.05; specK=2.2; specP=260.0; envK=1.0; envT=0.0; }
+    else if(uKind==7){ specK=1.4; specP=90.0; envK=0.95; envT=1.0; }
+    else if(uKind==8){ float fr=vn(vec2(vUV.x*700.0,vUV.y*700.0)); float fr2=vn(vUV*90.0); albedo*=0.80+0.28*fr+0.12*fr2; N=normalize(N+(T*(fr-0.5)+B*(vn(vUV*700.0+9.0)-0.5))*0.22*lod); specK=0.22; specP=22.0; sheen=0.9; }
+    else if(uKind==9){ albedo*=0.7+0.5*vn(vUV*220.0); specK=0.05; specP=10.0; }
   }
 #endif
   float ndl=max(dot(N,L),0.0); float sh=shadow();
@@ -60,6 +65,11 @@ void main(){ vec3 albedo=vC;
   float rim=fres*0.10; vec3 col=albedo*(amb*ao+vec3(1.45,1.22,0.96)*ndl*sh)+spec+vec3(0.55,0.68,0.9)*rim*(N.y*0.5+0.5);
   float wrapT=clamp((dot(N,L)+0.5)/1.5,0.0,1.0); col+=albedo*vec3(0.95,0.28,0.16)*sssK*max(wrapT-ndl,0.0)*0.9*sh+albedo*vec3(0.9,0.3,0.2)*sssK*fres*0.12;
   col+=vec3(0.5,0.55,0.6)*sheen*fres*0.5;
+#ifdef SKIN
+  if(envK>0.0){ vec3 R=reflect(-V,N); vec3 sky=mix(vec3(0.62,0.72,0.86),vec3(0.20,0.38,0.72),clamp(R.y*1.4,0.0,1.0)); vec3 gnd=mix(vec3(0.30,0.28,0.24),vec3(0.10,0.10,0.09),clamp(-R.y*2.0,0.0,1.0));
+    vec3 env=R.y>0.0?sky:gnd; env+=vec3(1.6,1.4,1.1)*pow(max(dot(R,L),0.0),60.0)*sh; float fr=0.12+0.88*pow(1.0-max(dot(N,V),0.0),4.0); vec3 tintC=mix(vec3(1.0),albedo*1.6,envT);
+    col=mix(col,env*tintC,clamp(envK*(fr+0.25*(1.0-envT)),0.0,1.0)); }
+#endif
   float d=length(uCam-vW); float fog=1.0-exp(-d*0.0030); col=mix(col,uFog,clamp(fog,0.0,1.0));
   col=aces(col*1.0); col=mix(vec3(dot(col,vec3(0.299,0.587,0.114))),col,1.08); o=vec4(pow(col,vec3(1.0/2.2)),1.0); })";
 static const char* SVS=R"(#version 300 es

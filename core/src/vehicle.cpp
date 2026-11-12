@@ -1,0 +1,170 @@
+// Sabak Core - procedural realistic car and horse generators (lofted superellipse sections, rigged, with built-in animations).
+#include <cmath>
+#include <algorithm>
+#include <functional>
+#include "model.h"
+namespace sk {
+namespace {
+struct VB{std::vector<SkinVertex> v;std::vector<uint32_t> idx;};
+struct Ring{Vec3 c;float rx,ry;};
+static Vec3 nrm(Vec3 a){float l=std::sqrt(a.x*a.x+a.y*a.y+a.z*a.z);return l<1e-9f?Vec3{0,1,0}:Vec3{a.x/l,a.y/l,a.z/l};}
+static Vec3 crs(Vec3 a,Vec3 b){return Vec3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
+static float sstep(float x){x=std::min(1.f,std::max(0.f,x));return x*x*(3-2*x);}
+using SkinFn=std::function<void(SkinVertex&,int ring,int rings)>;
+static void setW(SkinVertex& s,int b0,float w0,int b1=0,float w1=0){s.j[0]=(unsigned char)b0;s.j[1]=(unsigned char)b1;s.j[2]=s.j[3]=0;s.w[0]=w0;s.w[1]=w1;s.w[2]=s.w[3]=0;}
+// Lofts a closed superellipse tube through rings; side = fixed in-plane axis, the other axis is perpendicular to the path tangent.
+static void loft(VB& m,const std::vector<Ring>& rs,Vec3 side,float expo,const SkinFn& fn,int S=22){
+  int K=(int)rs.size();if(K<2)return;uint32_t base=(uint32_t)m.v.size();
+  for(int k=0;k<K;k++){Vec3 T=nrm(k==0?rs[1].c-rs[0].c:k==K-1?rs[K-1].c-rs[K-2].c:rs[k+1].c-rs[k-1].c);Vec3 U=nrm(crs(T,side));Vec3 sd=nrm(crs(U,T));
+    for(int i=0;i<S;i++){float th=6.2831853f*i/S;float c=std::cos(th),s=std::sin(th);float cx=(c<0?-1.f:1.f)*std::pow(std::fabs(c),2.f/expo),cy=(s<0?-1.f:1.f)*std::pow(std::fabs(s),2.f/expo);
+      SkinVertex v{};Vec3 p=rs[k].c+sd*(rs[k].rx*cx)+U*(rs[k].ry*cy);v.p[0]=p.x;v.p[1]=p.y;v.p[2]=p.z;v.uv[0]=p.z*0.5f+p.x*0.3f;v.uv[1]=p.y*0.5f+p.x*0.2f;setW(v,0,1);fn(v,k,K);m.v.push_back(v);}}
+  auto P=[&](uint32_t i){return Vec3{m.v[i].p[0],m.v[i].p[1],m.v[i].p[2]};};
+  auto addTri=[&](uint32_t a,uint32_t b,uint32_t c,Vec3 ref){Vec3 n=crs(P(b)-P(a),P(c)-P(a));Vec3 ce=(P(a)+P(b)+P(c))*(1.f/3);Vec3 r=ce-ref;if(n.x*r.x+n.y*r.y+n.z*r.z<0)std::swap(b,c);m.idx.push_back(a);m.idx.push_back(b);m.idx.push_back(c);};
+  for(int k=0;k+1<K;k++)for(int i=0;i<S;i++){uint32_t a=base+k*S+i,b=base+k*S+(i+1)%S,c=base+(k+1)*S+i,d=base+(k+1)*S+(i+1)%S;Vec3 ref=(rs[k].c+rs[k+1].c)*0.5f;addTri(a,c,b,ref);addTri(b,c,d,ref);}
+  for(int e=0;e<2;e++){int k=e?K-1:0;uint32_t cv=(uint32_t)m.v.size();SkinVertex v{};v.p[0]=rs[k].c.x;v.p[1]=rs[k].c.y;v.p[2]=rs[k].c.z;setW(v,0,1);fn(v,k,K);m.v.push_back(v);
+    Vec3 ref=e?rs[K-2].c:rs[1].c;for(int i=0;i<S;i++)addTri(cv,base+k*S+i,base+k*S+(i+1)%S,ref);}}
+static void box(VB& m,Vec3 c,Vec3 h,float rotX,const SkinFn& fn){float cs=std::cos(rotX),sn=std::sin(rotX);
+  Vec3 corner[8];for(int i=0;i<8;i++){Vec3 q{(i&1?1.f:-1.f)*h.x,(i&2?1.f:-1.f)*h.y,(i&4?1.f:-1.f)*h.z};corner[i]=c+Vec3{q.x,q.y*cs-q.z*sn,q.y*sn+q.z*cs};}
+  static const int F[6][4]={{0,1,3,2},{4,6,7,5},{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6}};
+  for(int f=0;f<6;f++){uint32_t b=(uint32_t)m.v.size();for(int k=0;k<4;k++){SkinVertex v{};v.p[0]=corner[F[f][k]].x;v.p[1]=corner[F[f][k]].y;v.p[2]=corner[F[f][k]].z;v.uv[0]=(float)(k&1);v.uv[1]=(float)(k>>1);setW(v,0,1);fn(v,0,1);m.v.push_back(v);}
+    Vec3 n=crs(Vec3{m.v[b+1].p[0]-m.v[b].p[0],m.v[b+1].p[1]-m.v[b].p[1],m.v[b+1].p[2]-m.v[b].p[2]},Vec3{m.v[b+2].p[0]-m.v[b].p[0],m.v[b+2].p[1]-m.v[b].p[1],m.v[b+2].p[2]-m.v[b].p[2]});
+    Vec3 fc=(corner[F[f][0]]+corner[F[f][2]])*0.5f-c;bool fl=n.x*fc.x+n.y*fc.y+n.z*fc.z<0;
+    uint32_t t[6]={b,b+1,b+2,b,b+2,b+3};if(fl)for(int k=0;k<6;k+=3)std::swap(t[k+1],t[k+2]);for(int k=0;k<6;k++)m.idx.push_back(t[k]);}}
+// ribbon (hair strand / mane flap): polyline with half-width, double sided
+static void ribbon(VB& m,const std::vector<Vec3>& pts,const std::vector<float>& wd,Vec3 side,const SkinFn& fn){uint32_t b=(uint32_t)m.v.size();
+  for(size_t i=0;i<pts.size();i++)for(int s=-1;s<=1;s+=2){SkinVertex v{};Vec3 p=pts[i]+side*(wd[i]*s);v.p[0]=p.x;v.p[1]=p.y;v.p[2]=p.z;v.uv[0]=(float)i/pts.size();v.uv[1]=s>0;setW(v,0,1);fn(v,(int)i,(int)pts.size());m.v.push_back(v);}
+  for(size_t i=0;i+1<pts.size();i++){uint32_t a=b+i*2;m.idx.insert(m.idx.end(),{a,a+1,a+2,a+1,a+3,a+2});}}
+static void normalsOf(VB& m){std::vector<Vec3> nn(m.v.size(),Vec3{0,0,0});auto P=[&](uint32_t k){return Vec3{m.v[k].p[0],m.v[k].p[1],m.v[k].p[2]};};
+  for(size_t i=0;i+2<m.idx.size();i+=3){Vec3 a=P(m.idx[i]),b=P(m.idx[i+1]),c=P(m.idx[i+2]);Vec3 f=crs(b-a,c-a);for(int k=0;k<3;k++)nn[m.idx[i+k]]=nn[m.idx[i+k]]+f;}
+  for(size_t i=0;i<m.v.size();i++){Vec3 n=nrm(nn[i]);m.v[i].n[0]=n.x;m.v[i].n[1]=n.y;m.v[i].n[2]=n.z;}}
+struct Asm{Model* out;Renderer* r;unsigned wt;
+  void add(VB& m,unsigned col,int kind){if(m.idx.empty())return;normalsOf(m);ModelMat mm;mm.tex=wt;mm.kind=kind;mm.col[0]=((col>>16)&255)/255.f;mm.col[1]=((col>>8)&255)/255.f;mm.col[2]=(col&255)/255.f;mm.col[3]=1;int mi=(int)out->mats.size();out->mats.push_back(mm);
+    ModelPrim mp;mp.mesh=r->uploadSkin(m.v,m.idx);mp.mat=mi;mp.cv=m.v;mp.ci=m.idx;out->prims.push_back(std::move(mp));}};
+static void quatX(float a,float* q){q[0]=std::sin(a*0.5f);q[1]=0;q[2]=0;q[3]=std::cos(a*0.5f);}
+static unsigned parseHex(const std::string& s,unsigned def){if(s.size()<6)return def;try{return (unsigned)std::stoul(s.substr(0,6),nullptr,16);}catch(...){return def;}}
+static unsigned shade(unsigned c,float k){auto ch=[&](int sh){return (unsigned)std::min(255.f,((c>>sh)&255)*k);};return (ch(16)<<16)|(ch(8)<<8)|ch(0);}
+static void skeleton(Model& o,const std::vector<std::string>& names,const std::vector<int>& par,const std::vector<Vec3>& head){size_t n=names.size();o.nodeName=names;o.parent=par;o.rest.resize(n);
+  for(size_t i=0;i<n;i++){TRS t;int p=par[i];t.t=head[i]-(p>=0?head[p]:Vec3{0,0,0});o.rest[i]=t;o.joints.push_back((int)i);o.ibm.push_back(Mat4::translate({-head[i].x,-head[i].y,-head[i].z}));}}
+}
+
+// ---------------------------------------------------------------- CAR
+bool buildCar(Renderer& r,const std::string& spec,Model& out){
+  unsigned paint=parseHex(spec,0xb3202a);std::vector<unsigned char> white{255,255,255,255};
+  out=Model();out.name="Car";Asm A{&out,&r,r.createTexture(white.data(),1,1)};
+  const float WX=0.88f,WZF=1.38f,WZR=-1.30f,WR=0.35f;
+  std::vector<std::string> nm={"root","wheel.FL","wheel.FR","wheel.RL","wheel.RR"};std::vector<int> pa={-1,0,0,0,0};
+  std::vector<Vec3> hd={{0,0,0},{WX,WR,WZF},{-WX,WR,WZF},{WX,WR,WZR},{-WX,WR,WZR}};skeleton(out,nm,pa,hd);
+  SkinFn root=[](SkinVertex& s,int,int){setW(s,0,1);};
+  // lower body
+  VB body;{struct Sct{float z,bot,top,hw;};std::vector<Sct> S={{-2.18f,.46f,.82f,.66f},{-2.12f,.36f,.90f,.80f},{-1.95f,.32f,.97f,.88f},{-1.4f,.30f,1.00f,.93f},{-0.3f,.30f,1.01f,.94f},{0.7f,.30f,1.00f,.94f},{1.25f,.31f,0.97f,.93f},{1.75f,.33f,.88f,.89f},{2.08f,.36f,.76f,.82f},{2.22f,.42f,.64f,.72f},{2.26f,.50f,.58f,.58f}};
+    std::vector<Ring> rs;for(auto& s:S)rs.push_back({{0,(s.bot+s.top)*0.5f,s.z},s.hw,(s.top-s.bot)*0.5f});loft(body,rs,{1,0,0},3.4f,root,28);}
+  A.add(body,paint,5);
+  // cabin glass + roof
+  VB glass;{struct Sct{float z,bot,top,hw;};std::vector<Sct> S={{-1.30f,.98f,1.30f,.70f},{-1.05f,.98f,1.40f,.72f},{-0.55f,.98f,1.46f,.72f},{0.10f,.98f,1.46f,.72f},{0.45f,.98f,1.40f,.72f},{0.92f,.98f,1.12f,.76f},{1.05f,.98f,1.02f,.80f}};
+    std::vector<Ring> rs;for(auto& s:S)rs.push_back({{0,(s.bot+s.top)*0.5f,s.z},s.hw,(s.top-s.bot)*0.5f});loft(glass,rs,{1,0,0},3.0f,root,26);}
+  A.add(glass,0x10151c,6);
+  VB roof;{std::vector<Ring> rs={{{0,1.435f,-1.0f},.50f,.035f},{{0,1.462f,-0.55f},.62f,.032f},{{0,1.462f,0.10f},.62f,.032f},{{0,1.420f,0.42f},.55f,.03f}};loft(roof,rs,{1,0,0},3.0f,root,22);}
+  A.add(roof,paint,5);
+  // door lines, trim, lights, grille, plate
+  VB trim;for(int sd=-1;sd<=1;sd+=2){float x=sd*0.941f;box(trim,{x,0.66f,-0.28f},{.004f,.34f,.008f},0,root);box(trim,{x,0.66f,0.55f},{.004f,.34f,.008f},0,root);box(trim,{x,0.66f,-1.25f},{.004f,.30f,.008f},0,root);box(trim,{x,0.37f,0.0f},{.012f,.025f,1.5f},0,root);
+      box(trim,{sd*0.78f,0.85f,0.67f},{.02f,.02f,.03f},0,root);}
+  box(trim,{0,0.52f,2.268f},{.38f,.11f,.012f},0,root);box(trim,{0,0.38f,2.25f},{.55f,.05f,.02f},0,root);box(trim,{0,0.40f,-2.20f},{.52f,.05f,.02f},0,root);
+  A.add(trim,0x0c0c0e,9);
+  VB chrome;for(int sd=-1;sd<=1;sd+=2){loft(chrome,{{{sd*0.56f,0.70f,2.19f},.001f,.001f},{{sd*0.56f,0.70f,2.185f},.17f,.075f},{{sd*0.56f,0.70f,2.14f},.17f,.075f},{{sd*0.56f,0.70f,2.12f},.001f,.001f}},{1,0,0},2.2f,root,18);
+      box(chrome,{sd*0.96f,0.99f,0.67f},{.05f,.05f,.075f},0,root);}
+  box(chrome,{0,0.52f,2.275f},{.40f,.012f,.004f},0,root);box(chrome,{0,0.56f,2.275f},{.40f,.012f,.004f},0,root);box(chrome,{0,0.60f,2.275f},{.40f,.012f,.004f},0,root);
+  A.add(chrome,0xe8e8ee,7);
+  VB hl;for(int sd=-1;sd<=1;sd+=2)loft(hl,{{{sd*0.62f,0.72f,2.16f},.001f,.001f},{{sd*0.62f,0.72f,2.178f},.14f,.055f},{{sd*0.62f,0.72f,2.20f},.15f,.058f},{{sd*0.62f,0.72f,2.205f},.001f,.001f}},{1,0,0},2.4f,root,18);
+  A.add(hl,0xfff6d8,6);
+  VB tl;for(int sd=-1;sd<=1;sd+=2){box(tl,{sd*0.68f,0.82f,-2.14f},{.20f,.05f,.015f},0,root);}
+  A.add(tl,0xd01820,5);
+  VB plate;box(plate,{0,0.56f,-2.215f},{.26f,.07f,.006f},0,root);A.add(plate,0xe9e9df,9);
+  // wheels
+  struct Wh{int bone;float x;};Wh whs[4]={{1,WX},{2,-WX},{3,WX},{4,-WX}};
+  VB tire,rim,arch;
+  for(auto& w:whs){int b=w.bone;Vec3 c=hd[b];SkinFn fn=[b](SkinVertex& s,int,int){setW(s,b,1);};float sg=w.x>0?1.f:-1.f;
+    // tyre profile (rings along x)
+    std::vector<Ring> tr;float prof[][2]={{-.13f,.22f},{-.125f,.31f},{-.10f,.345f},{-.05f,.355f},{.05f,.355f},{.10f,.345f},{.125f,.31f},{.13f,.22f}};for(auto& p:prof)tr.push_back({{c.x+p[0],c.y,c.z},p[1],p[1]});loft(tire,tr,{0,0,1},2.0f,fn,32);
+    std::vector<Ring> rr={{{c.x+sg*0.118f,c.y,c.z},.001f,.001f},{{c.x+sg*0.122f,c.y,c.z},.235f,.235f},{{c.x+sg*0.132f,c.y,c.z},.225f,.225f},{{c.x+sg*0.118f,c.y,c.z},.001f,.001f}};
+    loft(rim,{{{c.x+sg*0.100f,c.y,c.z},.24f,.24f},{{c.x+sg*0.127f,c.y,c.z},.235f,.235f},{{c.x+sg*0.132f,c.y,c.z},.205f,.205f}},{0,0,1},2.0f,fn,32);
+    for(int k=0;k<5;k++){float a=k*6.2831853f/5;box(rim,{c.x+sg*0.134f,c.y,c.z},{.006f,.20f,.026f},a,fn);}
+    loft(rim,{{{c.x+sg*0.130f,c.y,c.z},.07f,.07f},{{c.x+sg*0.145f,c.y,c.z},.06f,.06f},{{c.x+sg*0.147f,c.y,c.z},.001f,.001f}},{0,0,1},2.0f,fn,20);
+    // dark wheel-arch disc on the body side
+    SkinFn rfn=root;loft(arch,{{{sg*0.915f,c.y+0.02f,c.z},.46f,.46f},{{sg*0.925f,c.y+0.02f,c.z},.46f,.46f}},{0,0,1},2.0f,rfn,32);(void)rr;}
+  A.add(tire,0x151517,9);A.add(rim,0xc9ccd2,7);A.add(arch,0x070708,9);
+  // chassis underside
+  VB under;loft(under,{{{0,0.30f,-2.0f},.62f,.05f},{{0,0.30f,2.0f},.62f,.05f}},{1,0,0},2.0f,root,12);A.add(under,0x060606,9);
+  // animation: wheels spinning
+  Anim dr;dr.name="Drive";dr.dur=0.6f;for(int b=1;b<=4;b++){AnimChannel ch;ch.node=b;ch.path=1;int N=8;for(int i=0;i<=N;i++){ch.t.push_back(dr.dur*i/N);float q[4];quatX(6.2831853f*i/N*(-1.f),q);for(int k=0;k<4;k++)ch.v.push_back(q[k]);}dr.ch.push_back(ch);}
+  out.anims.push_back(dr);out.builtin=(int)out.anims.size();
+  out.fit=1;out.foot=0;out.height=1.47f;out.radius=2.6f;out.autoRig=false;return true;}
+
+// ---------------------------------------------------------------- HORSE
+bool buildHorse(Renderer& r,const std::string& spec,Model& out){
+  unsigned coat=parseHex(spec,0x7a4a2b);unsigned mane=spec.size()>=13?parseHex(spec.substr(7),0x1b120c):shade(coat,0.35f);
+  std::vector<unsigned char> white{255,255,255,255};out=Model();out.name="Horse";Asm A{&out,&r,r.createTexture(white.data(),1,1)};
+  enum{ROOT,SPINE,NECK1,NECK2,HEAD,TAIL1,TAIL2,FLu,FLl,FLf,FRu,FRl,FRf,HLu,HLl,HLf,HRu,HRl,HRf};
+  std::vector<std::string> nm={"root","spine","neck01","neck02","head","tail01","tail02","foreleg_upper.L","foreleg_lower.L","foreleg_foot.L","foreleg_upper.R","foreleg_lower.R","foreleg_foot.R","hindleg_upper.L","hindleg_lower.L","hindleg_foot.L","hindleg_upper.R","hindleg_lower.R","hindleg_foot.R"};
+  std::vector<int> pa={-1,0,1,2,3,0,5,1,7,8,1,10,11,0,13,14,0,16,17};
+  float fx=0.17f,hx=0.19f;
+  std::vector<Vec3> hd={{0,1.0f,0},{0,1.28f,-0.1f},{0,1.50f,0.62f},{0,1.72f,0.92f},{0,1.95f,1.14f},{0,1.50f,-1.03f},{0,1.22f,-1.22f},
+    {fx,1.22f,0.58f},{fx,0.60f,0.62f},{fx,0.17f,0.62f},{-fx,1.22f,0.58f},{-fx,0.60f,0.62f},{-fx,0.17f,0.62f},
+    {hx,1.18f,-0.80f},{hx,0.55f,-0.99f},{hx,0.17f,-0.90f},{-hx,1.18f,-0.80f},{-hx,0.55f,-0.99f},{-hx,0.17f,-0.90f}};
+  // reparent: legs hang off spine/root
+  skeleton(out,nm,pa,hd);
+  SkinFn spine=[](SkinVertex& s,int,int){setW(s,SPINE,1);};
+  // body barrel
+  VB body;{struct S{float z,top,bot,rx;};std::vector<S> ss={{-1.08f,1.47f,1.20f,.12f},{-1.0f,1.55f,1.10f,.24f},{-0.80f,1.58f,1.04f,.31f},{-0.45f,1.53f,0.96f,.31f},{-0.05f,1.50f,0.90f,.31f},{0.32f,1.57f,0.91f,.28f},{0.66f,1.55f,0.97f,.25f},{0.88f,1.47f,1.08f,.18f},{0.98f,1.40f,1.18f,.09f}};
+    std::vector<Ring> rs;for(auto& s:ss)rs.push_back({{0,(s.top+s.bot-0.07f)*0.5f,s.z},s.rx*1.18f,(s.top-s.bot+0.07f)*0.5f});loft(body,rs,{1,0,0},2.3f,spine,26);}
+  // neck
+  VB neck;{std::vector<Ring> rs={{{0,1.34f,0.50f},.24f,.32f},{{0,1.50f,0.70f},.20f,.29f},{{0,1.68f,0.90f},.16f,.23f},{{0,1.86f,1.08f},.125f,.18f},{{0,1.95f,1.14f},.11f,.15f}};
+    loft(neck,rs,{1,0,0},2.3f,[&](SkinVertex& s,int k,int K){float t=(float)k/(K-1);if(t<0.4f)setW(s,SPINE,1-t/0.4f,NECK1,t/0.4f);else if(t<0.8f)setW(s,NECK1,1-(t-0.4f)/0.4f,NECK2,(t-0.4f)/0.4f);else setW(s,NECK2,1-(t-0.8f)/0.2f,HEAD,(t-0.8f)/0.2f);},24);}
+  VB all;{ // merge body+neck+head+legs into one hide mesh
+    all=body;auto app=[&](VB& m){uint32_t b=(uint32_t)all.v.size();all.v.insert(all.v.end(),m.v.begin(),m.v.end());for(uint32_t i:m.idx)all.idx.push_back(i+b);};app(neck);
+    SkinFn hf=[](SkinVertex& s,int,int){setW(s,HEAD,1);};
+    VB head;std::vector<Ring> hr={{{0,1.99f,1.10f},.09f,.13f},{{0,1.92f,1.17f},.115f,.165f},{{0,1.80f,1.29f},.11f,.16f},{{0,1.70f,1.38f},.085f,.115f},{{0,1.61f,1.47f},.072f,.092f},{{0,1.53f,1.545f},.068f,.080f},{{0,1.495f,1.575f},.058f,.060f},{{0,1.485f,1.582f},.02f,.02f}};
+    loft(head,hr,{1,0,0},2.4f,hf,24);app(head);
+    VB ears;for(int sd=-1;sd<=1;sd+=2)loft(ears,{{{sd*0.07f,2.02f,1.06f},.03f,.045f},{{sd*0.085f,2.12f,1.045f},.032f,.05f},{{sd*0.095f,2.22f,1.03f},.018f,.03f},{{sd*0.10f,2.27f,1.03f},.004f,.004f}},{1,0,0},2.2f,hf,12);app(ears);
+    // legs: smooth skin weights across knee and fetlock
+    auto leg=[&](float x,std::vector<Vec3> p,std::vector<float> rx,std::vector<float> ry,int bu,float yK,float yF,float yTop){std::vector<Ring> rs;for(size_t i=0;i<p.size();i++)rs.push_back({{p[i].x+x,p[i].y,p[i].z},rx[i]*1.25f,ry[i]*1.2f});
+      VB lg;loft(lg,rs,{1,0,0},2.4f,[&](SkinVertex& s,int,int){float y=s.p[1];float a=sstep((yK+0.06f-y)/0.12f);float b=sstep((yF+0.05f-y)/0.10f);
+        if(y>yK+0.06f)setW(s,bu,1);else if(y>yK-0.06f)setW(s,bu,1-a,bu+1,a);else if(y>yF+0.05f)setW(s,bu+1,1);else if(y>yF-0.05f)setW(s,bu+1,1-b,bu+2,b);else setW(s,bu+2,1);},20);(void)yTop;app(lg);};
+    for(int sd=-1;sd<=1;sd+=2){int bu=sd>0?FLu:FRu;
+      leg(sd*fx,{{0,1.30f,.56f},{0,1.05f,.60f},{0,.82f,.62f},{0,.62f,.625f},{0,.50f,.62f},{0,.30f,.62f},{0,.18f,.625f},{0,.105f,.64f}},{.125f,.105f,.085f,.074f,.050f,.042f,.050f,.043f},{.16f,.135f,.105f,.085f,.060f,.052f,.060f,.050f},bu,.60f,.17f,1.3f);
+      int bh=sd>0?HLu:HRu;
+      leg(sd*hx,{{0,1.30f,-.80f},{0,1.06f,-.88f},{0,.80f,-.93f},{0,.58f,-.99f},{0,.45f,-.95f},{0,.30f,-.92f},{0,.18f,-.90f},{0,.105f,-.90f}},{.155f,.135f,.095f,.075f,.052f,.042f,.050f,.043f},{.21f,.185f,.12f,.095f,.062f,.050f,.060f,.050f},bh,.55f,.17f,1.3f);}
+  }
+  A.add(all,coat,8);
+  // hooves
+  VB hoof;for(int sd=-1;sd<=1;sd+=2){auto h=[&](float x,float z,int b){loft(hoof,{{{x,0.105f,z},.043f,.05f},{{x,0.085f,z+.004f},.056f,.066f},{{x,0.0f,z+.012f},.062f,.074f}},{1,0,0},2.3f,[b](SkinVertex& s,int,int){setW(s,b,1);},16);};
+    h(sd*fx,.64f,sd>0?FLf:FRf);h(sd*hx,-.90f,sd>0?HLf:HRf);}
+  A.add(hoof,0x1a1613,9);
+  // eyes, nostrils
+  VB eye,dark;SkinFn hf=[](SkinVertex& s,int,int){setW(s,HEAD,1);};
+  for(int sd=-1;sd<=1;sd+=2){loft(eye,{{{sd*0.108f,1.915f,1.19f},.001f,.001f},{{sd*0.114f,1.915f,1.19f},.024f,.020f},{{sd*0.126f,1.915f,1.19f},.012f,.01f},{{sd*0.129f,1.915f,1.19f},.001f,.001f}},{0,0,1},2.0f,hf,14);
+    loft(dark,{{{sd*0.04f,1.545f,1.572f},.001f,.001f},{{sd*0.046f,1.545f,1.575f},.014f,.020f},{{sd*0.052f,1.545f,1.577f},.001f,.001f}},{0,1,0},2.0f,hf,10);}
+  A.add(eye,0x120b07,4);A.add(dark,0x0b0605,9);
+  // mane & tail (ribbons)
+  VB hair;SkinFn nf=[&](SkinVertex& s,int,int){float y=s.p[1];if(y>1.85f)setW(s,HEAD,1);else if(y>1.7f)setW(s,NECK2,1);else setW(s,NECK1,1);};
+  for(int i=0;i<26;i++){float t=i/25.f;Vec3 base{0.012f,1.70f+(t*0.32f)-0.20f+0.0f,0.0f};float z=0.52f+t*0.60f,y=1.60f+t*0.43f;if(t>.96f)y+=0.02f;
+    float len=0.20f+0.06f*std::sin(t*9.f)+(1-t)*0.05f;Vec3 p0{0.02f,y,z-0.02f},p1{0.065f,y-len*0.45f,z-0.05f},p2{0.085f,y-len,z-0.07f};
+    ribbon(hair,{p0,p1,p2},{.03f,.03f,.012f},{0,0,1},nf);}
+  SkinFn tf=[&](SkinVertex& s,int,int){float y=s.p[1];if(y>1.35f)setW(s,TAIL1,1);else setW(s,TAIL1,0.5f,TAIL2,0.5f);};
+  for(int i=0;i<14;i++){float a=(i-6.5f)*0.032f;float lean=std::sin(i*1.7f)*0.03f;float len=0.75f+0.12f*std::sin(i*2.3f);std::vector<Vec3> ps;std::vector<float> ws;
+    for(int k=0;k<6;k++){float t=k/5.f;ps.push_back({a+lean*t,1.50f-t*len,-1.04f-0.14f*std::sin(t*2.2f)-t*0.04f});ws.push_back(0.026f*(1-0.7f*t));}ribbon(hair,ps,ws,{1,0,0},tf);}
+  A.add(hair,mane,9);
+  // idle + walk + trot animations
+  auto gait=[&](const char* name,float dur,float amp,float knee,bool trot){Anim an;an.name=name;an.dur=dur;int N=24;
+    int legs[4][3]={{FLu,FLl,FLf},{FRu,FRl,FRf},{HLu,HLl,HLf},{HRu,HRl,HRf}};float ph[4]={0,trot?3.14159f:1.5708f*3,trot?3.14159f:1.5708f,trot?0.f:1.5708f*2};
+    for(int l=0;l<4;l++){bool hind=l>=2;AnimChannel cu,cl,cf;cu.node=legs[l][0];cl.node=legs[l][1];cf.node=legs[l][2];cu.path=cl.path=cf.path=1;
+      for(int i=0;i<=N;i++){float t=dur*i/N;float f=6.2831853f*i/N+ph[l];float sw=std::sin(f);float lift=std::max(0.f,std::cos(f));float au=-amp*sw*(hind?-1.f:1.f)*-1.f;float al=(hind?-1.f:1.f)*knee*lift;float af=-0.35f*al;
+        float q[4];for(auto* c:{&cu,&cl,&cf}){c->t.push_back(t);}quatX(au,q);for(int k=0;k<4;k++)cu.v.push_back(q[k]);quatX(al,q);for(int k=0;k<4;k++)cl.v.push_back(q[k]);quatX(af,q);for(int k=0;k<4;k++)cf.v.push_back(q[k]);}
+      an.ch.push_back(cu);an.ch.push_back(cl);an.ch.push_back(cf);}
+    AnimChannel hn;hn.node=NECK1;hn.path=1;AnimChannel hh;hh.node=HEAD;hh.path=1;for(int i=0;i<=N;i++){float t=dur*i/N;float q[4];hn.t.push_back(t);quatX(0.06f*std::sin(6.2831853f*i/N*2),q);for(int k=0;k<4;k++)hn.v.push_back(q[k]);hh.t.push_back(t);quatX(-0.05f*std::sin(6.2831853f*i/N*2),q);for(int k=0;k<4;k++)hh.v.push_back(q[k]);}
+    an.ch.push_back(hn);an.ch.push_back(hh);
+    AnimChannel tb;tb.node=TAIL1;tb.path=1;for(int i=0;i<=N;i++){tb.t.push_back(dur*i/N);float q[4];quatX(0.18f*std::sin(6.2831853f*i/N+1.0f),q);for(int k=0;k<4;k++)tb.v.push_back(q[k]);}an.ch.push_back(tb);
+    out.anims.push_back(an);};
+  gait("Walk",1.2f,0.38f,0.55f,false);gait("Trot",0.8f,0.52f,0.8f,true);
+  {Anim an;an.name="Idle";an.dur=3.f;int N=12;AnimChannel hh;hh.node=NECK1;hh.path=1;AnimChannel tb;tb.node=TAIL1;tb.path=1;for(int i=0;i<=N;i++){float t=an.dur*i/N;float q[4];hh.t.push_back(t);quatX(0.03f*std::sin(6.2831853f*i/N),q);for(int k=0;k<4;k++)hh.v.push_back(q[k]);tb.t.push_back(t);quatX(0.12f*std::sin(6.2831853f*i/N*2),q);for(int k=0;k<4;k++)tb.v.push_back(q[k]);}an.ch.push_back(hh);an.ch.push_back(tb);out.anims.push_back(an);}
+  out.builtin=(int)out.anims.size();out.fit=1;out.foot=0;out.height=2.27f;out.radius=1.7f;out.autoRig=false;return true;}
+}
