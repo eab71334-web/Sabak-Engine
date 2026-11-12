@@ -80,14 +80,46 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
     (void)col;(void)cat;};
   Mb shirt,pants,shoes,hair,brow,eyeW,iris;
   auto starts=[](const std::string& n,const char* p){return n.rfind(p,0)==0;};
+  auto sstep=[](float x){x=std::min(1.f,std::max(0.f,x));return x*x*(3-2*x);};
+  // weighted patch: region weight w in (0,1] tapers to 0 at the borders so edges sit flush on the skin (no jagged cut line); offset function gives thickness
+  auto patchF=[&](auto wf,auto of,Mb& dst){std::map<uint32_t,uint32_t> mp;std::vector<float> wv(body.v.size(),-1.f);
+    for(size_t i=0;i<body.v.size();i++){const SkinVertex& s=body.v[i];wv[i]=wf(s,nameOf(dom(s)));}
+    for(size_t i=0;i+2<body.idx.size();i+=3){if(wv[body.idx[i]]<=0||wv[body.idx[i+1]]<=0||wv[body.idx[i+2]]<=0)continue;
+      for(int k=0;k<3;k++){uint32_t o=body.idx[i+k];auto it=mp.find(o);if(it==mp.end()){SkinVertex s=body.v[o];float t=of(s,wv[o]);for(int c=0;c<3;c++)s.p[c]+=s.n[c]*t;mp[o]=(uint32_t)dst.v.size();dst.v.push_back(s);it=mp.find(o);}dst.idx.push_back(it->second);}}};
+  Vec3 hNeck=hp[bidx("neck01")],hUA=hp[bidx("upperarm01.L")],hLA=hp[bidx("lowerarm01.L")],hWr=hp[bidx("wrist.L")];
+  float armEnd=std::fabs(hUA.x)+(std::fabs(hLA.x)-std::fabs(hUA.x))*0.55f;
+  float armEndLong=std::fabs(hWr.x)-0.02f;
+  float sleeveEnd=cd.outfit==1?std::fabs(hUA.x)*0.9f:armEnd;
+  bool longSl=cd.outfit==3;if(longSl)sleeveEnd=armEndLong;
+  float waistY=hp[bidx("spine05")].y;
   if(cd.outfit!=2){
-    patch([&](const SkinVertex& s,const std::string& n){bool torso=starts(n,"spine")||starts(n,"clavicle");bool arm=starts(n,"upperarm");if(cd.outfit==1)return torso&&s.p[1]>Hh*0.55f;return (torso||arm)&&s.p[1]>Hh*0.50f;},0.0035f,{},0,shirt);
-    patch([&](const SkinVertex& s,const std::string& n){bool leg=starts(n,"upperleg")||starts(n,"lowerleg");if(cd.outfit==1)return (leg||n=="root")&&s.p[1]>Hh*0.27f&&s.p[1]<Hh*0.55f;return (leg||n=="root"||starts(n,"spine05"))&&s.p[1]>Hh*0.05f&&s.p[1]<Hh*0.56f;},0.0032f,{},0,pants);
-    patch([&](const SkinVertex& s,const std::string& n){return starts(n,"foot")&&s.p[1]<Hh*0.07f;},0.003f,{},0,shoes);}
-  // hair cap + brows
-  if(cd.hair>0){float off=cd.hair==3?0.002f:0.009f;
-    patch([&](const SkinVertex& s,const std::string& n){bool hd2=n=="head"||n=="jaw";if(hd2&&(s.p[1]>eyeY+0.050f||(cd.hair==2&&s.p[2]<headZ-0.02f&&s.p[1]>eyeY-0.08f)))return true;if(cd.hair==2&&n=="neck01"&&s.p[2]<headZ-0.03f)return true;return false;},off,{},0,hair);}
-  for(int sd=0;sd<2;sd++){Vec3 e=sd?eR:eL;patch([&](const SkinVertex& s,const std::string& n){(void)n;float dy=s.p[1]-e.y;return dy>0.021f&&dy<0.033f&&std::fabs(s.p[0]-e.x)<0.024f&&s.p[2]>e.z+0.004f;},0.0012f,{},0,brow);}
+    float fold=1.f;
+    patchF([&](const SkinVertex& s,const std::string& n){bool torso=starts(n,"spine")||starts(n,"clavicle");bool arm=starts(n,"upperarm")||(longSl&&starts(n,"lowerarm"));
+        if(!torso&&!arm&&n!="neck01")return -1.f;float hemY=waistY-0.10f;float w=sstep((s.p[1]-hemY)/0.05f);
+        if(n=="neck01"||s.p[1]>hNeck.y-0.012f)w=std::min(w,sstep((hNeck.y+0.03f-s.p[1])/0.03f));
+        if(arm||starts(n,"clavicle")){float ax=std::fabs(s.p[0]);w=std::min(w,sstep((sleeveEnd-ax)/0.035f));}
+        if(cd.outfit==1&&arm)return -1.f; return w;},
+      [&](const SkinVertex& s,float w){float f=0.0016f*std::sin(s.p[1]*95.f+s.p[0]*38.f)+0.0010f*std::sin(s.p[1]*41.f-s.p[0]*57.f+s.p[2]*20.f);
+        float loose=0.0045f+0.0035f*sstep((hNeck.y-0.18f-s.p[1])/0.2f)*(s.p[1]<waistY+0.15f?1.f:0.5f);return std::max(0.0030f,(loose+f*fold)*(0.6f+0.4f*w));},shirt);
+    patchF([&](const SkinVertex& s,const std::string& n){bool leg=starts(n,"upperleg")||starts(n,"lowerleg");bool pel=n=="root"||starts(n,"spine05");if(!leg&&!pel)return -1.f;
+        float topY=waistY+0.01f;if(s.p[1]>topY)return -1.f;float w=sstep((topY-s.p[1])/0.03f);
+        float botY=cd.outfit==1?Hh*0.27f:Hh*0.06f;w=std::min(w,sstep((s.p[1]-botY)/0.04f));if(s.p[1]<botY)return -1.f;return std::max(w,0.001f);},
+      [&](const SkinVertex& s,float w){float f=0.0013f*std::sin(s.p[1]*80.f+s.p[0]*45.f)+0.0008f*std::sin(s.p[1]*33.f+s.p[2]*60.f);return std::max(0.0028f,(0.0040f+0.0018f*sstep((waistY-s.p[1])/0.4f)+f)*(0.6f+0.4f*w));},pants);
+    patchF([&](const SkinVertex& s,const std::string& n){if(!starts(n,"foot")&&!starts(n,"toe"))return -1.f;float lim=Hh*0.07f;if(s.p[1]>=lim)return -1.f;return std::max(0.001f,sstep((lim-s.p[1])/0.03f));},
+      [&](const SkinVertex&,float w){return 0.0032f*(0.7f+0.3f*w);},shoes);}
+  // hair: tapered cap with a real hairline, side/back coverage, clumped strand ripples
+  if(cd.hair>0){
+    patchF([&](const SkinVertex& s,const std::string& n){bool hd2=n=="head"||n=="jaw"||(cd.hair==2&&n=="neck01");if(!hd2)return -1.f;
+        float dz=s.p[2]-headZ;float ax=std::fabs(s.p[0]);
+        float hl=eyeY+0.052f+(dz>0.02f?0.012f:0.f)+(ax>0.07f&&dz>-0.01f?0.015f:0.f);       // forehead & temple hairline
+        float w=sstep((s.p[1]-hl)/0.028f);
+        if(cd.hair==2){float back=sstep((-dz-0.015f)/0.03f);float low=eyeY-0.17f;float wb=back*sstep((s.p[1]-low)/0.04f)*(ax<0.075f?1.f:0.f);w=std::max(w,wb);}
+        else if(cd.hair==1){float back=sstep((-dz-0.03f)/0.03f);float wb=back*sstep((s.p[1]-(eyeY-0.03f))/0.03f)*(ax<0.07f?1.f:0.f);w=std::max(w,wb);} // nape
+        if(cd.hair==3)w=std::min(w,sstep((s.p[1]-(eyeY+0.07f))/0.02f));
+        return w;},
+      [&](const SkinVertex& s,float w){float ang=std::atan2(s.p[0],s.p[2]-headZ);float cl=0.0022f*std::sin(ang*26.f+s.p[1]*55.f)+0.0015f*std::sin(ang*53.f-s.p[1]*31.f);
+        float base=cd.hair==3?0.0025f:cd.hair==2?0.016f:0.0115f;float top=sstep((s.p[1]-eyeY)/0.12f);return std::max(0.0022f,(base*(0.5f+0.5f*top)+(cd.hair==3?0.f:cl))*(0.5f+0.5f*w));},hair);}
+  for(int sd=0;sd<2;sd++){Vec3 e=sd?eR:eL;float sgn=sd?-1.f:1.f;patchF([&](const SkinVertex& s,const std::string&){float dx=(s.p[0]-e.x)*sgn;float dy=s.p[1]-e.y-0.026f-0.005f*std::max(0.f,1.f-std::fabs(dx+0.002f)/0.026f)-0.003f*std::max(0.f,-dx/0.026f);if(s.p[2]<e.z+0.004f)return -1.f;float u=dx/0.027f,v=dy/(0.0075f*(1.f-0.35f*std::max(0.f,u)));float q=1.f-(u*u+v*v);return q>0.f?q:-1.f;},[&](const SkinVertex&,float w){return 0.0010f+0.0014f*std::min(1.f,w*2.f);},brow);}
   // eyes: white ball + iris
   auto sphere=[&](Mb& m,Vec3 c,Vec3 rr,int jt){uint32_t base=(uint32_t)m.v.size();int seg=16,rings=10;for(int j=0;j<=rings;j++){float ph=3.14159265f*j/rings;for(int i=0;i<=seg;i++){float th=6.2831853f*i/seg;SkinVertex s{};Vec3 n{std::sin(ph)*std::cos(th),std::cos(ph),std::sin(ph)*std::sin(th)};s.p[0]=c.x+n.x*rr.x;s.p[1]=c.y+n.y*rr.y;s.p[2]=c.z+n.z*rr.z;s.n[0]=n.x;s.n[1]=n.y;s.n[2]=n.z;s.uv[0]=(float)i/seg;s.uv[1]=(float)j/rings;s.j[0]=(unsigned char)jt;s.w[0]=1;m.v.push_back(s);}}
     for(int j=0;j<rings;j++)for(int i=0;i<seg;i++){uint32_t a=base+j*(seg+1)+i,b=a+1,c2=a+seg+1,dd=c2+1;m.idx.push_back(a);m.idx.push_back(c2);m.idx.push_back(b);m.idx.push_back(b);m.idx.push_back(c2);m.idx.push_back(dd);}};
