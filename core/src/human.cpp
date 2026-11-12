@@ -97,7 +97,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
   struct Part{Mb* m;unsigned col;};unsigned skin=cd.col[0];
   auto darker=[&](unsigned c,float k){return ((unsigned)(((c>>16)&255)*k)<<16)|((unsigned)(((c>>8)&255)*k)<<8)|(unsigned)((c&255)*k);};
   Part parts[8]={{&body,skin},{&shirt,cd.col[2]},{&pants,cd.col[3]},{&shoes,cd.col[4]},{&hair,cd.col[1]},{&brow,darker(cd.col[1],0.8f)},{&eyeW,0xf2f2ee},{&iris,0x4a2f1c}};
-  for(int i=0;i<8;i++){Mb& m=*parts[i].m;if(m.idx.empty())continue;if(i>0&&i<6&&i!=0)normals(m);ModelMat mm;mm.tex=wt;unsigned c=parts[i].col;mm.col[0]=((c>>16)&255)/255.f;mm.col[1]=((c>>8)&255)/255.f;mm.col[2]=(c&255)/255.f;mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
+  for(int i=0;i<8;i++){Mb& m=*parts[i].m;if(m.idx.empty())continue;if(i>0&&i<6&&i!=0)normals(m);ModelMat mm;mm.tex=wt;mm.kind=(i==0?1:i<=3?2:i<=5?3:4);unsigned c=parts[i].col;mm.col[0]=((c>>16)&255)/255.f;mm.col[1]=((c>>8)&255)/255.f;mm.col[2]=(c&255)/255.f;mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
     ModelPrim mp;mp.mesh=r.uploadSkin(m.v,m.idx);mp.mat=mi;mp.cv=m.v;mp.ci=m.idx;out.prims.push_back(std::move(mp));}
   // expression morphs (on the body prim = prim 0)
   struct Mix{const char* name;std::vector<std::pair<const char*,float>> u;};

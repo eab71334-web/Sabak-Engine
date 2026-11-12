@@ -7,7 +7,7 @@
 #include "renderer.h"
 namespace sk {
 extern std::string g_assetDir;                       // folder holding hero.glb, horse.glb and tex/
-struct ModelMat { unsigned tex=0; float col[4]={1,1,1,1}; bool mask=false; std::vector<unsigned char> img; std::string mime; };
+struct ModelMat { unsigned tex=0; float col[4]={1,1,1,1}; bool mask=false; int kind=0; std::vector<unsigned char> img; std::string mime; };
 struct ModelPrim { int mesh=-1; int mat=0; std::vector<SkinVertex> cv; std::vector<uint32_t> ci; std::vector<std::vector<float>> md; };   // md[k] = position deltas (3 per vertex) of morph target k, empty = no effect
 struct TRS { Vec3 t; float r[4]={0,0,0,1}; Vec3 s{1,1,1}; };
 struct AnimChannel { int node=0,path=0; bool step=false; std::vector<float> t,v; };   // path 0 translation, 1 rotation, 2 scale
