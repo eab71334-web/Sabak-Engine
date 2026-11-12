@@ -25,10 +25,10 @@ int App::meshFor(int prim){int& m=meshIds_[prim];if(m>=0)return m;Vec3 w{1,1,1};
   m=r_->upload(d);return m;}
 
 Model* App::modelFor(const std::string& name){auto it=models_.find(name);if(it!=models_.end())return it->second.get();
-  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();bool okLoad;if(name.rfind("gen:car",0)==0){okLoad=buildCar(*r_,name.size()>8?name.substr(8):"",*m);}else if(name.rfind("gen:horse",0)==0){okLoad=buildHorse(*r_,name.size()>10?name.substr(10):"",*m);}else if(name.rfind("char:",0)==0){CharDef cd;cd.name=name.substr(5);if(cur_>=0&&cur_<(int)projects_.size())cd.load(projects_[cur_].dir+"/characters/"+cd.name+".char");okLoad=buildCharacter(*r_,cd,*m);}else okLoad=loadModel(*r_,path,h,*m);if(!okLoad)m.reset();else{if(m->autoRig&&name!="hero"){Model* hero=modelFor("hero");int mp=0;if(hero)m->retargetFrom(*hero,mp,true);}if(cur_>=0&&cur_<(int)projects_.size()){m->loadClips(projects_[cur_].dir+"/anims",name);m->loadSM(projects_[cur_].dir+"/anims",name);}}Model* p=m.get();models_[name]=std::move(m);return p;}
+  float h=name=="horse"?2.1f:1.8f;std::string path=name.rfind("models/",0)==0&&cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir+"/"+name:g_assetDir+"/"+name+".glb";auto m=std::make_unique<Model>();bool okLoad;if(name.rfind("gen:car",0)==0){okLoad=buildCar(*r_,name.size()>8?name.substr(8):"",*m);}else if(name.rfind("gen:horse",0)==0){okLoad=buildHorse(*r_,name.size()>10?name.substr(10):"",*m);}else if(name.rfind("sculpt:",0)==0){okLoad=scModel(*m);}else if(name.rfind("char:",0)==0){CharDef cd;cd.name=name.substr(5);if(cur_>=0&&cur_<(int)projects_.size())cd.load(projects_[cur_].dir+"/characters/"+cd.name+".char");okLoad=buildCharacter(*r_,cd,*m);}else okLoad=loadModel(*r_,path,h,*m);if(!okLoad)m.reset();else{if(m->autoRig&&name!="hero"){Model* hero=modelFor("hero");int mp=0;if(hero)m->retargetFrom(*hero,mp,true);}if(cur_>=0&&cur_<(int)projects_.size()){m->loadClips(projects_[cur_].dir+"/anims",name);m->loadSM(projects_[cur_].dir+"/anims",name);}}Model* p=m.get();models_[name]=std::move(m);return p;}
 
 void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vector<DrawItem> items;items.reserve(sc.ents.size());std::vector<SkinDraw> skin;bool studio=false;for(auto& e:sc.ents)if(e.name=="StudioFloor")studio=true;r_->setStudio(studio);
-  for(auto& e:sc.ents){if(e.prim==P_MODEL){if(((animEd_&&e.id!=sel_)||(crEd_&&e.asset.rfind("char:",0)!=0))&&&sc==&scene_)continue;Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
+  for(auto& e:sc.ents){if(e.prim==P_MODEL){if(((animEd_&&e.id!=sel_)||(crEd_&&e.asset.rfind("char:",0)!=0)||(scEd_&&e.asset.rfind("sculpt:",0)!=0))&&&sc==&scene_)continue;Model* m=modelFor(e.asset);if(!m)continue;ModelInst& mi=minst_[{&sc,e.id}];if(mi.m!=m){mi=ModelInst();mi.m=m;}
       mi.param=e.animParam;mi.play(e.anim.empty()?"idle":e.anim);if(mi.a<0)mi.play("idle");mi.evaluate();Mat4 w=sc.world(e.id)*Mat4::scale({m->fit,m->fit,m->fit})*Mat4::translate({0,-m->foot,0});
       for(auto& mp:m->prims){SkinDraw sd;sd.mesh=mp.mesh;sd.model=w;const ModelMat& mm=m->mats[std::min<size_t>(mp.mat,m->mats.size()-1)];sd.tex=mm.tex;for(int k=0;k<4;k++)sd.col[k]=mm.col[k];sd.mask=mm.mask;sd.kind=mm.kind;sd.tint={e.color.r,e.color.g,e.color.b};sd.joints=mi.joints.data();sd.nj=(int)m->joints.size();skin.push_back(sd);}
       continue;}
@@ -54,7 +54,7 @@ void App::editorUpdate(float dt){animUpdate(dt);crUpdate(dt);cbT_+=((cbOpen_?1.0
   // hold-to-repeat on inspector steppers
   if((heldId_>=300&&heldId_<318)||(heldId_>=320&&heldId_<330)){repeatT_+=dt;if(repeatT_>0.45f){repeatT_-=0.07f;editorTap(heldId_);}}else repeatT_=0;}
 
-bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(bhOpen_&&x>=196&&x<=W-246&&y>=44&&y<=330)return true;if(crEd_)return y<42||x<246||x>W-172||y>H_/ui.s()-24;if(animEd_){if(aeCam_)return y<36||y>H_/ui.s()-36;return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182||(aeTab_>0&&x>250&&x<W-244&&y<212);}float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
+bool App::nearPanel(float x,float y) const{float W=W_/ui.s();if(bhOpen_&&x>=196&&x<=W-246&&y>=44&&y<=330)return true;if(scEd_)return y<42||x<212||y>H_/ui.s()-24;if(crEd_)return y<42||x<246||x>W-172||y>H_/ui.s()-24;if(animEd_){if(aeCam_)return y<36||y>H_/ui.s()-36;return y<42||x>W-240||(x<244&&y<218)||y>H_/ui.s()-182||(aeTab_>0&&x>250&&x<W-244&&y<212);}float ph=24+108*cbT_;return y<42||x<190||y>H_/ui.s()-24||(sel_>=0&&x>W-210)||y>=H_/ui.s()-22-ph;}
 
 void App::gizmoUpdate(){gOk_=false;const Entity* e=scene_.get(sel_);if(!e||e->prim==P_TERRAIN||play_||animEd_)return;Vec3 o=scene_.worldPos(sel_);Vec3 c=r_->cameraPos();gL_=len(o-c)*0.14f;
   float sx,sy;if(!r_->project(o,sx,sy))return;gO_[0]=sx;gO_[1]=sy;Vec3 ax[3]={{1,0,0},{0,1,0},{0,0,1}};
@@ -81,13 +81,14 @@ void App::editorPointer(int type,int id,float px,float py){float s=ui.s();float 
     else{if(id==stickId_){stickId_=-1;stickX_=stickY_=0;}if(id==lookId_)lookId_=-1;}
     return;}
   if(crEd_&&crPointer(type,id,px,py))return;
+  if(scEd_&&scPointer(type,id,px,py))return;
   if(animEd_&&aePointer(type,id,px,py))return;
   if(type==0){
     if(addMenu_){addMenu_=false;}
     int sl=slot(id,true);if(sl>=0){ptX_[sl]=px;ptY_[sl]=py;}
     // gizmo handle?
     if(gOk_&&sel_>=0){for(int a=0;a<3;a++){float dx=px-gT_[a][0],dy=py-gT_[a][1];if(dx*dx+dy*dy<26*26*s*s){dragAxis_=a;dragId_=id;lastX_=px;lastY_=py;return;}}}
-    if(!animEd_&&!crEd_&&x>=6&&x<=184&&y>=46&&y<=H_/s-26){hierId_=id;lastY_=py;moved_=false;downX_=px;downY_=py;return;}
+    if(!animEd_&&!crEd_&&!scEd_&&x>=6&&x<=184&&y>=46&&y<=H_/s-26){hierId_=id;lastY_=py;moved_=false;downX_=px;downY_=py;return;}
     if(nearPanel(x,y))return;
     // viewport: orbit / pinch / tap-to-pick
     if(orbitId_<0){orbitId_=id;lastX_=px;lastY_=py;downX_=px;downY_=py;moved_=false;}
@@ -119,6 +120,7 @@ void App::editorTap(int id){
   else if(id==119)openAnimator();
   else if((id>=120&&id<150)||(id>=320&&id<330)||(id>=600&&id<660)||(id>=200&&id<300))animTap(id);
   else if(id>=700&&id<800)crTap(id);
+  else if(id>=900&&id<940)scTap(id);
   else if(id>=800&&id<900)bhTap(id);
   else if(id==114){if(e&&e->prim!=P_TERRAIN){scene_.remove(sel_);sel_=-1;rebuildRows();toast("Deleted");}}
   else if(id==115){if(e&&e->prim!=P_TERRAIN){int n=scene_.duplicate(sel_);select(n);rebuildRows();toast("Duplicated");}}
@@ -195,6 +197,7 @@ void App::drawEditor(){float W=W_/ui.s();float H=H_/ui.s();A_=1;oy_=0;
     float gh=scene_.height(cam.x,cam.z)+1.0f;if(cam.y<gh)cam.y=gh;}
   renderScene(scene_,cam,tg,0.95f);gizmoUpdate();ui.begin(W_,H_);float S=ui.s();
   if(crEd_){drawCreator(W,H);return;}
+  if(scEd_){drawSculpt(W,H);return;}
   if(animEd_){drawAnimator(W,H);return;}
   if(play_){
     R(0,0,W,0,0,BG1,BG1);

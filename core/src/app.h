@@ -9,6 +9,7 @@
 #include "script.h"
 #include "renderer.h"
 #include "model.h"
+#include "sculpt.h"
 #include "ui.h"
 namespace sk {
 struct Project { std::string name,dir; int tmpl=1; long created=0; };
@@ -64,6 +65,7 @@ private:
   // behavior blocks editor (behaviorui.cpp)
   bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);
   // character creator (creator.cpp)
+  bool scEd_=false; Sculpt sc_; int scDrag_=-1,scDragId_=-1,scStroke_=-1,scBase_=0; Entity* scEntity(); void openSculpt(); void closeSculpt(); void scRebuild(); bool scPointer(int type,int id,float px,float py); void scTap(int id); void drawSculpt(float W,float H); void scLive(); void scBuildBase(int b); bool scModel(Model& m);
   bool crEd_=false,crDirty_=false; CharDef cr_; int crSel_=0,crDrag_=-1,crDragId_=-1,crPage_=0; float crT_=0;
   void openCreator(); void closeCreator(); void crRebuild(); void crSwitch(const std::string& n); void crUpdate(float dt); bool crPointer(int type,int id,float px,float py); void crTap(int id); void drawCreator(float W,float H); Entity* crEntity();
   bool animEd_=false,aePlay_=true,aeImp_=false; int aeBone_=0,aeClip_=-1; float aeT_=0,aeScroll_=0; std::string aePrevAnim_; std::vector<std::string> aeFiles_; std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
