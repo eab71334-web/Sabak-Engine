@@ -38,10 +38,11 @@ struct MB{   // mesh builder for one material
 };
 }
 bool CharDef::save(const std::string& path) const{std::error_code ec;std::filesystem::create_directories(std::filesystem::path(path).parent_path(),ec);std::ofstream f(path);if(!f)return false;
-  f<<"SABAKCHAR 1\n"<<height<<' '<<build<<' '<<muscle<<' '<<head<<' '<<shoulder<<' '<<hair<<' '<<outfit<<'\n';for(int i=0;i<5;i++)f<<col[i]<<(i<4?' ':'\n');for(int i=0;i<6;i++)f<<ex[i]<<(i<5?' ':'\n');return true;}
+  f<<"SABAKCHAR 2\n"<<height<<' '<<build<<' '<<muscle<<' '<<head<<' '<<shoulder<<' '<<hair<<' '<<outfit<<'\n';for(int i=0;i<5;i++)f<<col[i]<<(i<4?' ':'\n');for(int i=0;i<6;i++)f<<ex[i]<<(i<5?' ':'\n');for(int i=0;i<40;i++)f<<hv[i]<<(i<39?' ':'\n');return true;}
 bool CharDef::load(const std::string& path){std::ifstream f(path);if(!f)return false;std::string h;std::getline(f,h);if(h.rfind("SABAKCHAR",0)!=0)return false;
-  f>>height>>build>>muscle>>head>>shoulder>>hair>>outfit;for(int i=0;i<5;i++)f>>col[i];if(!f)return false;for(int i=0;i<6;i++){float v=0;if(f>>v)ex[i]=v;}return true;}
+  f>>height>>build>>muscle>>head>>shoulder>>hair>>outfit;for(int i=0;i<5;i++)f>>col[i];if(!f)return false;human=true;bool v2=h.find("CHAR 2")!=std::string::npos;for(int i=0;i<6;i++){float v=0;if(f>>v)ex[i]=v;}if(v2)for(int i=0;i<40;i++){float v=0.5f;if(f>>v)hv[i]=v;}return true;}
 bool buildCharacter(Renderer& r,const CharDef& cd,Model& out){
+  if(cd.human&&humanAvailable()&&buildHuman(r,cd,out))return true;
   const float H=1.8f;float b=0.8f+0.5f*cd.build,mu=0.85f+0.5f*cd.muscle,hs=0.85f+0.4f*cd.head,sh=0.85f+0.35f*cd.shoulder;
   MB skin,hair,shirt,pants,shoes;bool sleeveless=cd.outfit==1,naked=cd.outfit==2;MB& top=naked?skin:shirt;MB& bot=naked?skin:pants;MB& foot=naked?skin:shoes;
   auto P=[&](float x,float y,float z){return Vec3{x*H,y*H,z*H};};

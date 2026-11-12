@@ -64,7 +64,7 @@ private:
   // behavior blocks editor (behaviorui.cpp)
   bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);
   // character creator (creator.cpp)
-  bool crEd_=false,crDirty_=false; CharDef cr_; int crSel_=0,crDrag_=-1,crDragId_=-1; float crT_=0;
+  bool crEd_=false,crDirty_=false; CharDef cr_; int crSel_=0,crDrag_=-1,crDragId_=-1,crPage_=0; float crT_=0;
   void openCreator(); void closeCreator(); void crRebuild(); void crSwitch(const std::string& n); void crUpdate(float dt); bool crPointer(int type,int id,float px,float py); void crTap(int id); void drawCreator(float W,float H); Entity* crEntity();
   bool animEd_=false,aePlay_=true,aeImp_=false; int aeBone_=0,aeClip_=-1; float aeT_=0,aeScroll_=0; std::string aePrevAnim_; std::vector<std::string> aeFiles_; std::map<int,std::unique_ptr<Script>> scripts_; Input in_; ScriptContext sctx_;
   bool play_=false,addMenu_=false,keyDown_[4]={false,false,false,false}; int sel_=-1,mode_=0; float hierScroll_=0,repeatT_=0,pYaw_=0,pPitch_=0.3f,playT_=0;

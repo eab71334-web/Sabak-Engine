@@ -5,7 +5,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 file(GLOB GAME_SCRIPTS ${CMAKE_CURRENT_SOURCE_DIR}/../game/scripts/*.cpp)
-add_library(sabakcore STATIC src/mesh.cpp src/renderer.cpp src/ui.cpp src/app.cpp src/editor.cpp src/scene.cpp src/script.cpp src/model.cpp src/animator.cpp src/animfx.cpp src/glbexport.cpp src/charmaker.cpp src/behavior.cpp src/behaviorui.cpp src/creator.cpp third_party/ufbx.c src/fonts/Inter_SemiBold.cpp src/fonts/Inter_Medium.cpp)
+add_library(sabakcore STATIC src/mesh.cpp src/renderer.cpp src/ui.cpp src/app.cpp src/editor.cpp src/scene.cpp src/script.cpp src/model.cpp src/animator.cpp src/animfx.cpp src/glbexport.cpp src/charmaker.cpp src/behavior.cpp src/behaviorui.cpp src/creator.cpp src/human.cpp third_party/ufbx.c src/fonts/Inter_SemiBold.cpp src/fonts/Inter_Medium.cpp)
 target_include_directories(sabakcore PUBLIC src third_party third_party/khr)
 # headless simulator (Linux): needs libegl1 + libgles2 + mesa runtime
 if(NOT IOS AND NOT APPLE)
