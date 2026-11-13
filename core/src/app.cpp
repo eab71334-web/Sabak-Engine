@@ -36,7 +36,7 @@ void App::createProject(int tmpl){int n=(int)projects_.size()+1;std::string name
   rescan();for(size_t i=0;i<projects_.size();i++)if(projects_[i].name==name)openProject((int)i);toast("Project created");}
 void App::openProject(int i){if(i<0||i>=(int)projects_.size())return;cur_=i;play_=false;animEd_=false;crEd_=false;scEd_=false;models_.clear();minst_.clear();mthumbs_.clear();scripts_.clear();sel_=-1;addMenu_=false;expanded_.clear();hierScroll_=0;
   std::string sp=projects_[i].dir+"/scenes/main.scene";if(!scene_.load(sp)){scene_.buildTemplate(projects_[i].tmpl);std::error_code ec;fs::create_directories(projects_[i].dir+"/scenes",ec);scene_.save(sp);}
-  ecYaw_=0.8f;ecPitch_=0.5f;ecDist_=26;ecTarget_={0,3,0};rebuildRows();go(EDITOR);
+  ecYaw_=0.8f;ecPitch_=0.5f;ecDist_=26;ecTarget_={0,3,0};if(const char* e=getenv("SABAK_CAM")){float a[6]={0};sscanf(e,"%f,%f,%f,%f,%f,%f",&a[0],&a[1],&a[2],&a[3],&a[4],&a[5]);ecDist_=a[0];ecTarget_={a[1],a[2],a[3]};ecYaw_=a[4];ecPitch_=a[5];}rebuildRows();go(EDITOR);
   if(projects_[i].tmpl==3){for(auto& e:scene_.ents)if(e.prim==P_MODEL){select(e.id);openAnimator();break;}}
   if(projects_[i].tmpl==4)openCreator();if(projects_[i].tmpl==5)openSculpt();}
 void App::importFound(int i){if(i<0||i>=(int)found_.size())return;std::error_code ec;fs::path src=fs::path(importDir_)/found_[i],dst=fs::path(projDir_)/found_[i];

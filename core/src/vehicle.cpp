@@ -163,14 +163,14 @@ bool buildCar(Renderer& r,const std::string& spec,Model& out){
   // door lines, trim, lights, grille, plate
   VB trim;for(int sd=-1;sd<=1;sd+=2){float x=sd*0.941f;box(trim,{x,0.37f,0.0f},{.012f,.025f,1.5f},0,root);
       box(trim,{sd*0.78f,0.85f,0.67f},{.02f,.02f,.03f},0,root);}
-  box(trim,{0,0.52f,2.268f},{.38f,.11f,.012f},0,root);box(trim,{0,0.38f,2.25f},{.55f,.05f,.02f},0,root);box(trim,{0,0.40f,-2.20f},{.52f,.05f,.02f},0,root);
+  box(trim,{0,0.53f,2.262f},{.27f,.05f,.012f},0,root);box(trim,{0,0.37f,2.24f},{.50f,.022f,.02f},0,root);box(trim,{0,0.40f,-2.20f},{.45f,.03f,.02f},0,root);
   A.add(trim,0x0c0c0e,9);
   VB chrome;for(int sd=-1;sd<=1;sd+=2){loft(chrome,{{{sd*0.56f,0.70f,2.19f},.001f,.001f},{{sd*0.56f,0.70f,2.185f},.17f,.075f},{{sd*0.56f,0.70f,2.14f},.17f,.075f},{{sd*0.56f,0.70f,2.12f},.001f,.001f}},{1,0,0},2.2f,root,18);
       box(chrome,{sd*0.96f,0.99f,0.67f},{.05f,.05f,.075f},0,root);}
-  box(chrome,{0,0.52f,2.275f},{.40f,.012f,.004f},0,root);box(chrome,{0,0.56f,2.275f},{.40f,.012f,.004f},0,root);box(chrome,{0,0.60f,2.275f},{.40f,.012f,.004f},0,root);
+  box(chrome,{0,0.60f,2.265f},{.29f,.008f,.006f},0,root);box(chrome,{0,0.46f,2.255f},{.29f,.008f,.006f},0,root);box(chrome,{0,0.53f,2.272f},{.006f,.05f,.004f},0,root);
   A.add(chrome,0xe8e8ee,7);
   VB hl;for(int sd=-1;sd<=1;sd+=2)loft(hl,{{{sd*0.62f,0.72f,2.16f},.001f,.001f},{{sd*0.62f,0.72f,2.178f},.14f,.055f},{{sd*0.62f,0.72f,2.20f},.15f,.058f},{{sd*0.62f,0.72f,2.205f},.001f,.001f}},{1,0,0},2.4f,root,18);
-  A.add(hl,0xfff6d8,6);
+  A.add(hl,0xfff1c8,0);
   VB tl;for(int sd=-1;sd<=1;sd+=2){box(tl,{sd*0.68f,0.82f,-2.14f},{.20f,.05f,.015f},0,root);}
   A.add(tl,0xd01820,5);
   VB plate;box(plate,{0,0.56f,-2.215f},{.26f,.07f,.006f},0,root);A.add(plate,0xe9e9df,9);
@@ -186,7 +186,7 @@ bool buildCar(Renderer& r,const std::string& spec,Model& out){
     loft(rim,{{{c.x+sg*0.130f,c.y,c.z},.07f,.07f},{{c.x+sg*0.145f,c.y,c.z},.06f,.06f},{{c.x+sg*0.147f,c.y,c.z},.001f,.001f}},{0,0,1},2.0f,fn,20);
     // dark wheel-arch disc on the body side
     SkinFn rfn=root;loft(arch,{{{sg*0.915f,c.y+0.02f,c.z},.46f,.46f},{{sg*0.925f,c.y+0.02f,c.z},.46f,.46f}},{0,0,1},2.0f,rfn,32);(void)rr;}
-  A.add(tire,0x151517,9);A.add(rim,0xc9ccd2,7);
+  A.add(tire,0x151517,9);A.add(rim,0x9a9ea6,7);
   // chassis underside
   VB under;loft(under,{{{0,0.30f,-2.0f},.62f,.05f},{{0,0.30f,2.0f},.62f,.05f}},{1,0,0},2.0f,root,12);A.add(under,0x060606,9);
   // animation: wheels spinning

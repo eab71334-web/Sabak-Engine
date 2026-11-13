@@ -78,5 +78,5 @@ void Scene::buildTemplate(int t){ents.clear();nextId=1;
       auto& b=add(P_SPHERE,"Bush "+std::to_string(n));float s=0.8f+hash(i,53)*0.8f;b.pos={x,y+0.35f*s,z};b.scale={1.4f*s,0.9f*s,1.4f*s};b.color=jit(0x3f6b3a,i+7,0.2f);}}
   if(t!=2){for(int i=0;i<5;i++){float a=i/5.0f*6.28f,x=std::cos(a)*7,z=std::sin(a)*7;auto& c=add(P_SPHERE,"Crystal "+std::to_string(i+1));c.pos={x,height(x,z)+1.2f,z};c.scale={0.8f,1.6f,0.8f};c.color=H(0x5fb8cc);c.script="Bobber";}}
   { auto& hero=add(P_MODEL,"Hero");hero.asset="hero";hero.color=Col{1,1,1,1};hero.pos={0,height(0,4),4};hero.script="PlayerController"; }
-  if(t!=0){auto& hs=add(P_MODEL,"Horse");hs.asset="horse";hs.color=Col{1,1,1,1};hs.pos={4,height(4,2),2};hs.rot={0,-50,0};} }
+  if(t!=0){auto& hs=add(P_MODEL,"Horse");hs.asset="horse";hs.color=Col{1,1,1,1};hs.pos={4,height(4,2),2};hs.rot={0,-50,0};} if(getenv("SABAK_TESTGEN")){auto& c=add(P_MODEL,"Car");c.asset=getenv("SABAK_TESTGEN");c.color=Col{1,1,1,1};c.pos={-1.2f,height(-1.2f,6),6.5f};c.rot={0,-30,0};} }
 }
