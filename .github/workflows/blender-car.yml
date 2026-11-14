@@ -1,0 +1,18 @@
+name: Blender car
+on:
+  workflow_dispatch:
+  push:
+    paths: ['tools/blender/**', '.github/workflows/blender-car.yml']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Blender
+        run: sudo snap install blender --classic
+      - name: Build car
+        run: blender -b -P tools/blender/car_g82.py -- out 2>&1 | tail -80
+      - uses: actions/upload-artifact@v4
+        with:
+          name: car
+          path: out/*
