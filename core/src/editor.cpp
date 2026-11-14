@@ -136,7 +136,7 @@ void App::editorTap(int id){
   else if(id>=450&&id<480)cbTap(id);
 }
 
-void App::refreshModels(){mdlList_={"hero","horse","gen:car","gen:horse"};namespace fs=std::filesystem;std::error_code ec;
+void App::refreshModels(){mdlList_={"hero","horse","gen:car","gen:car:m4","gen:horse"};namespace fs=std::filesystem;std::error_code ec;
   if(cur_>=0&&cur_<(int)projects_.size()){std::string d=projects_[cur_].dir+"/models";if(fs::is_directory(d,ec))for(auto& f:fs::directory_iterator(d,ec)){std::string x=f.path().extension().string();for(char& c:x)c=(char)tolower(c);if(x==".glb"||x==".gltf"||x==".fbx")mdlList_.push_back("models/"+f.path().filename().string());}}
   std::string d=data_+"/Models";if(fs::is_directory(d,ec))for(auto& f:fs::directory_iterator(d,ec)){std::string x=f.path().extension().string();for(char& c:x)c=(char)tolower(c);if(x==".glb"||x==".gltf"||x==".fbx")mdlList_.push_back("ext:"+f.path().filename().string());}}
 void App::placeModel(const std::string& id){namespace fs=std::filesystem;std::error_code ec;std::string asset=id,name;
@@ -145,7 +145,7 @@ void App::placeModel(const std::string& id){namespace fs=std::filesystem;std::er
         fs::create_directories(fs::path(projects_[cur_].dir+"/models/"+u).parent_path(),ec);fs::copy_file(data_+"/Models/"+u,projects_[cur_].dir+"/models/"+u,fs::copy_options::overwrite_existing,ec);}}
     asset="models/"+fn;}
   if(!modelFor(asset)){toast("Could not load model");return;}
-  name=asset=="hero"?"Hero":asset=="horse"?"Horse":asset=="gen:car"?"Car (generated)":asset=="gen:horse"?"Horse (generated)":fs::path(asset).stem().string();
+  name=asset=="hero"?"Hero":asset=="horse"?"Horse":asset=="gen:car"?"Car (generated)":asset=="gen:car:m4"?"M4 Coupe (generated)":asset=="gen:horse"?"Horse (generated)":fs::path(asset).stem().string();
   Entity& n=scene_.add(P_MODEL,name);n.asset=asset;n.color=Col{1,1,1,1};n.pos=ecTarget_;n.pos.y=scene_.height(n.pos.x,n.pos.z);select(n.id);rebuildRows();toast("Added "+name);}
 void App::cbTap(int id){
   if(id==450)cbOpen_=!cbOpen_;else if(id>=451&&id<=453){cbTab_=id-451;if(cbTab_==1)refreshModels();}

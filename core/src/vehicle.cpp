@@ -39,8 +39,8 @@ static void ribbon(VB& m,const std::vector<Vec3>& pts,const std::vector<float>& 
 static void normalsOf(VB& m){std::vector<Vec3> nn(m.v.size(),Vec3{0,0,0});auto P=[&](uint32_t k){return Vec3{m.v[k].p[0],m.v[k].p[1],m.v[k].p[2]};};
   for(size_t i=0;i+2<m.idx.size();i+=3){Vec3 a=P(m.idx[i]),b=P(m.idx[i+1]),c=P(m.idx[i+2]);Vec3 f=crs(b-a,c-a);for(int k=0;k<3;k++)nn[m.idx[i+k]]=nn[m.idx[i+k]]+f;}
   for(size_t i=0;i<m.v.size();i++){Vec3 n=nrm(nn[i]);m.v[i].n[0]=n.x;m.v[i].n[1]=n.y;m.v[i].n[2]=n.z;}}
-struct Asm{Model* out;Renderer* r;unsigned wt;
-  void add(VB& m,unsigned col,int kind){if(m.idx.empty())return;normalsOf(m);ModelMat mm;mm.tex=wt;mm.kind=kind;mm.col[0]=((col>>16)&255)/255.f;mm.col[1]=((col>>8)&255)/255.f;mm.col[2]=(col&255)/255.f;mm.col[3]=1;int mi=(int)out->mats.size();out->mats.push_back(mm);
+struct Asm{Model* out;Renderer* r;unsigned wt;std::function<void(SkinVertex&)> post;
+  void add(VB& m,unsigned col,int kind){if(m.idx.empty())return;if(post)for(auto& v:m.v)post(v);normalsOf(m);ModelMat mm;mm.tex=wt;mm.kind=kind;mm.col[0]=((col>>16)&255)/255.f;mm.col[1]=((col>>8)&255)/255.f;mm.col[2]=(col&255)/255.f;mm.col[3]=1;int mi=(int)out->mats.size();out->mats.push_back(mm);
     ModelPrim mp;mp.mesh=r->uploadSkin(m.v,m.idx);mp.mat=mi;mp.cv=m.v;mp.ci=m.idx;out->prims.push_back(std::move(mp));}};
 static void quatX(float a,float* q){q[0]=std::sin(a*0.5f);q[1]=0;q[2]=0;q[3]=std::cos(a*0.5f);}
 static unsigned parseHex(const std::string& s,unsigned def){if(s.size()<6)return def;try{return (unsigned)std::stoul(s.substr(0,6),nullptr,16);}catch(...){return def;}}
@@ -182,23 +182,25 @@ static void carCabin(CarPanels& cp,int levels){
 }
 // ---------------------------------------------------------------- CAR
 bool buildCar(Renderer& r,const std::string& spec,Model& out){
-  unsigned paint=parseHex(spec,0xb3202a);std::vector<unsigned char> white{255,255,255,255};
-  out=Model();out.name="Car";Asm A{&out,&r,r.createTexture(white.data(),1,1)};
-  const float WX=0.88f,WZF=1.38f,WZR=-1.30f,WR=0.35f;
+  bool m4=spec.rfind("m4",0)==0;std::string cs=m4?(spec.size()>3?spec.substr(3):std::string()):spec;unsigned paint=parseHex(cs,m4?0x2a4a8c:0xb3202a);std::vector<unsigned char> white{255,255,255,255};
+  out=Model();out.name=m4?"M4 Coupe":"Car";Asm A{&out,&r,r.createTexture(white.data(),1,1),nullptr};
+  const float sx=m4?1.03f:1.f,sz=m4?1.064f:1.f,sy=m4?0.86f:1.f;
+  const float WX=m4?0.905f:0.88f,WZF=m4?1.48f:1.38f,WZR=m4?-1.38f:-1.30f,WR=0.35f;
+  if(m4)A.post=[=](SkinVertex& v){v.p[0]*=sx;v.p[2]*=sz;if(v.p[1]>0.98f)v.p[1]=0.98f+(v.p[1]-0.98f)*sy;};
   std::vector<std::string> nm={"root","wheel.FL","wheel.FR","wheel.RL","wheel.RR"};std::vector<int> pa={-1,0,0,0,0};
   std::vector<Vec3> hd={{0,0,0},{WX,WR,WZF},{-WX,WR,WZF},{WX,WR,WZR},{-WX,WR,WZR}};skeleton(out,nm,pa,hd);
   SkinFn root=[](SkinVertex& s,int,int){setW(s,0,1);};
   // lower body
-  CarPanels cp;carBody(cp,WR,WR,WZF,WZR,root,2);A.add(cp.panels,paint,5);A.add(cp.under,0x050506,9);
+  CarPanels cp;carBody(cp,WR,WR,WZF/sz,WZR/sz,root,2);A.add(cp.panels,paint,5);A.add(cp.under,0x050506,9);
   carCabin(cp,2);A.add(cp.cabin,paint,5);A.add(cp.glass,0x0b0f14,6);A.add(cp.seams,0x050506,9);A.add(cp.liner,0xb8b1a3,2);
   carInterior(A,root);
   // door lines, trim, lights, grille, plate
   VB trim;for(int sd=-1;sd<=1;sd+=2){float x=sd*0.941f;box(trim,{x,0.37f,0.0f},{.012f,.025f,1.5f},0,root);
       box(trim,{sd*0.78f,0.85f,0.67f},{.02f,.02f,.03f},0,root);}
-  box(trim,{0,0.53f,2.262f},{.27f,.05f,.012f},0,root);box(trim,{0,0.37f,2.24f},{.50f,.022f,.02f},0,root);box(trim,{0,0.40f,-2.20f},{.45f,.03f,.02f},0,root);
+  if(!m4)box(trim,{0,0.53f,2.262f},{.27f,.05f,.012f},0,root);box(trim,{0,0.37f,2.24f},{.50f,.022f,.02f},0,root);box(trim,{0,0.40f,-2.20f},{.45f,.03f,.02f},0,root);
   A.add(trim,0x0c0c0e,9);
   VB chrome;for(int sd=-1;sd<=1;sd+=2){loft(chrome,{{{sd*0.56f,0.70f,2.19f},.001f,.001f},{{sd*0.56f,0.70f,2.185f},.17f,.075f},{{sd*0.56f,0.70f,2.14f},.17f,.075f},{{sd*0.56f,0.70f,2.12f},.001f,.001f}},{1,0,0},2.2f,root,18);
-      box(chrome,{sd*0.96f,0.99f,0.67f},{.05f,.05f,.075f},0,root);}
+      if(!m4)box(chrome,{sd*0.96f,0.99f,0.67f},{.05f,.05f,.075f},0,root);}
   box(chrome,{0,0.60f,2.265f},{.29f,.008f,.006f},0,root);box(chrome,{0,0.46f,2.255f},{.29f,.008f,.006f},0,root);box(chrome,{0,0.53f,2.272f},{.006f,.05f,.004f},0,root);
   A.add(chrome,0xe8e8ee,7);
   { VB hlg,hlr,hle,bez;for(int sd=-1;sd<=1;sd+=2){float x=sd*0.62f;
@@ -212,6 +214,20 @@ bool buildCar(Renderer& r,const std::string& spec,Model& out){
     box(tlc,{0,0.82f,-2.15f},{.45f,.006f,.006f},0,root);A.add(tlc,0xd9dce2,7);A.add(tlr,0x500a0e,5);A.add(tle,0xff2a2a,12);}
   VB plate;box(plate,{0,0.56f,-2.215f},{.26f,.07f,.006f},0,root);A.add(plate,0xe9e9df,9);
   // wheels
+  if(m4){VB mir;for(int sd=-1;sd<=1;sd+=2)loft(mir,{{{sd*0.90f,0.97f,0.66f},.001f,.001f},{{sd*0.94f,1.0f,0.66f},.03f,.040f},{{sd*1.03f,1.02f,0.66f},.05f,.043f},{{sd*1.065f,1.02f,0.66f},.001f,.001f}},{0,0,1},2.2f,root,16);A.add(mir,0x0e0e10,5);}
+  if(m4){ // coupe specifics: twin kidney grille, hood ridge, fender gills, quad exhaust, diffuser, lip spoiler, black mirrors
+    VB kf,kd,ks,ridge,gill,exh,exi,dif;
+    for(int sd=-1;sd<=1;sd+=2){float x=sd*0.112f;
+      loft(kf,{{{x,0.60f,2.246f},.099f,.128f},{{x,0.60f,2.272f},.099f,.128f}},{1,0,0},2.4f,root,24,false);
+      loft(kd,{{{x,0.60f,2.258f},.001f,.001f},{{x,0.60f,2.262f},.088f,.117f},{{x,0.60f,2.266f},.001f,.001f}},{1,0,0},2.4f,root,24);
+      for(int k=-3;k<=3;k++)box(ks,{x+k*0.0235f,0.60f,2.272f},{.0045f,.108f,.005f},0,root);}
+    A.add(kf,0xdadde3,7);A.add(kd,0x070708,9);A.add(ks,0x2b2c30,7);
+    loft(ridge,{{{0,0.985f,0.95f},.15f,.012f},{{0,0.975f,1.35f},.20f,.020f},{{0,0.925f,1.85f},.15f,.016f},{{0,0.87f,2.10f},.08f,.008f}},{1,0,0},2.6f,root,18);A.add(ridge,paint,5);
+    for(int sd=-1;sd<=1;sd+=2){box(gill,{sd*0.958f,0.70f,1.20f},{.004f,.030f,.085f},0,root);for(int k=-2;k<=2;k++)box(gill,{sd*0.962f,0.70f,1.20f+k*0.03f},{.002f,.026f,.006f},0,root);}A.add(gill,0x101012,7);
+    for(int sd=-1;sd<=1;sd+=2)for(int q=0;q<2;q++){float x=sd*(0.36f+q*0.20f);loft(exh,{{{x,0.37f,-2.23f},.048f,.048f},{{x,0.37f,-2.30f},.052f,.052f},{{x,0.37f,-2.31f},.050f,.050f}},{1,0,0},2.0f,root,20,false);loft(exi,{{{x,0.37f,-2.22f},.040f,.040f},{{x,0.37f,-2.31f},.040f,.040f}},{1,0,0},2.0f,root,16);}
+    A.add(exh,0xc9ccd3,7);A.add(exi,0x040404,9);
+    box(dif,{0,0.37f,-2.20f},{.62f,.045f,.05f},0,root);A.add(dif,0x0e0e10,9);
+    VB lip;box(lip,{0,0.985f,-1.98f},{.60f,.012f,.06f},-0.12f,root);A.add(lip,0x0d0d0f,5);}
   struct Wh{int bone;float x;};Wh whs[4]={{1,WX},{2,-WX},{3,WX},{4,-WX}};
   VB tire,rim,arch,disc,caliper;
   for(auto& w:whs){int b=w.bone;Vec3 c=hd[b];SkinFn fn=[b](SkinVertex& s,int,int){setW(s,b,1);};float sg=w.x>0?1.f:-1.f;
