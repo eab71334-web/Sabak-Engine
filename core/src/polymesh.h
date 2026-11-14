@@ -37,4 +37,5 @@ struct PolyMesh {
  private:
   void syncFromFaces(); void syncFromVerts();
 };
+void buildCarPoly(PolyMesh& pm); void bakeWheelArches(PolyMesh& pm);
 }

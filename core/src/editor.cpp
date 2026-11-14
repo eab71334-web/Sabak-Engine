@@ -122,7 +122,7 @@ void App::editorTap(int id){
   else if((id>=120&&id<150)||(id>=320&&id<330)||(id>=600&&id<660)||(id>=200&&id<300))animTap(id);
   else if(id>=700&&id<800)crTap(id);
   else if(id>=900&&id<940)scTap(id);
-  else if(id>=940&&id<980)pmTap(id);
+  else if(id>=940&&id<990)pmTap(id);
   else if(id>=800&&id<900)bhTap(id);
   else if(id==114){if(e&&e->prim!=P_TERRAIN){scene_.remove(sel_);sel_=-1;rebuildRows();toast("Deleted");}}
   else if(id==115){if(e&&e->prim!=P_TERRAIN){int n=scene_.duplicate(sel_);select(n);rebuildRows();toast("Duplicated");}}

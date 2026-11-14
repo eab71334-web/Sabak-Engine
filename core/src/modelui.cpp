@@ -123,6 +123,7 @@ void App::pmTap(int id){std::string dir=cur_>=0&&cur_<(int)projects_.size()?proj
   if(id==954){pm_.mirrorX=!pm_.mirrorX;pmRebuild();return;}
   if(id==955){pm_.subLevels=(pm_.subLevels+1)%4;pmRebuild();return;}
   if(id==956){pmWire_=!pmWire_;return;}
+  if(id==979){pm_.snapshot();buildCarPoly(pm_);pm_.snapshot();bakeWheelArches(pm_);pmRebuild();toast("G82 car built (arches cut)");return;}
   if(id==957||id==958||id==959){pm_.snapshot();pmPrim(id-957);pmRebuild();return;}
   if(id>=961&&id<=964){pmAxis_=id-961;return;}
   if(id==960){if(pm_.undo())pmRebuild();else toast("Nothing to undo");return;}
@@ -152,7 +153,7 @@ void App::drawModelStudio(float W,float H){
   B(949,0,3,"Delete");B(950,1,3,"Flip");B(960,2,3,"Undo");
   B(951,0,4,"Scale +");B(952,1,4,"Scale -");B(953,2,4,pmMulti_?"Multi ON":"Multi",pmMulti_);
   B(954,0,5,pm_.mirrorX?"Mirror ON":"Mirror",pm_.mirrorX);{char b[16];std::snprintf(b,sizeof b,"Subd %d",pm_.subLevels);B(955,1,5,b,pm_.subLevels>0);}B(956,2,5,pmWire_?"Wire ON":"Wire",pmWire_);
-  B(957,0,6,"Cube");B(958,1,6,"Cylinder");B(959,2,6,"Grid");
+  {float bw4=44;const char* pn[4]={"Cube","Cyl","Grid","Car"};int pid[4]={957,958,959,979};for(int i=0;i<4;i++)drawToolBtn(pid[i],gx+i*(bw4+4),y+27+6*24,bw4,21,pn[i]);}
   {float aw=44;const char* an[4]={"X","Y","Z","Free"};for(int i=0;i<4;i++)drawToolBtn(961+i,gx+i*(aw+4),y+27+7*24,aw,21,an[i],pmAxis_==i);}
   const char* nm[2]={"Amount (extrude/inset/crease)","Soft radius (proportional)"};float val[2]={(pmAmt_+0.5f),pmProp_/1.5f};
   for(int i=0;i<2;i++){float ry=268+i*24;ui.text(nm[i],x+14,ry+1,10,TXT2,F_BOLD);float t=std::max(0.f,std::min(1.f,val[i]));ui.rrect(18,ry+14,176,5,2,BG0,BG0);ui.rrect(18,ry+14,176*t,5,2,ACC,ACC);ui.circle(18+176*t,ry+16.5f,6,Col::hex(0xffffff),Col::hex(0xffffff));}
@@ -161,7 +162,7 @@ void App::drawModelStudio(float W,float H){
   // ---- cutter wire (red) when editing the model
   if(pmWire_&&pmObj_==0){float S=ui.s();std::set<ull> seen;for(auto& f:pmOther_.d.F)for(size_t i=0;i<f.size();i++){int a=f[i],b=f[(i+1)%f.size()];if(!seen.insert(PolyMesh::key(a,b)).second)continue;float x0,y0,x1,y1;if(!pmProj(pmOther_.d.V[a],x0,y0)||!pmProj(pmOther_.d.V[b],x1,y1))continue;ui.line(x0/S,y0/S,x1/S,y1/S,1.1f,Col::hex(0xff5a5a,0.9f));}}
   // ---- wire / vertex overlay
-  if(pmWire_){float S=ui.s();Col wc=Col::hex(0xdfe6ff,0.55f),sc=Col::hex(0xffa23a,0.95f);std::set<ull> seen;
+  if(pmWire_&&pm_.d.F.size()<=2500){float S=ui.s();Col wc=Col::hex(0xdfe6ff,0.55f),sc=Col::hex(0xffa23a,0.95f);std::set<ull> seen;
     for(auto& f:pm_.d.F)for(size_t i=0;i<f.size();i++){int a=f[i],b=f[(i+1)%f.size()];ull k=PolyMesh::key(a,b);if(!seen.insert(k).second)continue;float x0,y0,x1,y1;if(!pmProj(pm_.d.V[a],x0,y0)||!pmProj(pm_.d.V[b],x1,y1))continue;
       bool se=pm_.selE.count(k)>0;auto cr=pm_.d.crease.find(k);Col c=se?sc:(cr!=pm_.d.crease.end()?Col::hex(0xff5a8a,0.9f):wc);ui.line(x0/S,y0/S,x1/S,y1/S,se?1.6f:0.9f,c);}
     for(int f:pm_.selF){auto& F=pm_.d.F[f];for(size_t i=1;i+1<F.size();i++){float a[3],b[3];int ids[3]={F[0],F[i],F[i+1]};bool ok=true;for(int k=0;k<3;k++)if(!pmProj(pm_.d.V[ids[k]],a[k],b[k]))ok=false;if(ok)ui.tri(a[0]/S,b[0]/S,a[1]/S,b[1]/S,a[2]/S,b[2]/S,Col::hex(0xffa23a,0.35f));}}

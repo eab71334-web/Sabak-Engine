@@ -143,13 +143,21 @@ struct Node{bool has=false;CPlane pl;std::vector<CPoly> polys;std::unique_ptr<No
 };
 static std::vector<CPoly> toPolys(const PolyData& m){std::vector<CPoly> o;for(auto& f:m.F)for(size_t i=1;i+1<f.size();i++){CPoly p;p.v={m.V[f[0]],m.V[f[i]],m.V[f[i+1]]};Vec3 n=cross(p.v[1]-p.v[0],p.v[2]-p.v[0]);if(dot(n,n)<1e-14f)continue;p.p=planeOf(p.v);o.push_back(p);}return o;}
 }
-PolyData PolyMesh::boolean(const PolyData& A,const PolyData& B,int op){
+PolyData PolyMesh::boolean(const PolyData& A0,const PolyData& B,int op){
+  // locality: only faces of A that touch B's bounding box go through the BSP (subtract/intersect keep the rest untouched / drop it)
+  PolyData A=A0;std::vector<std::vector<int>> farF;
+  if(!B.V.empty()&&op==0){Vec3 lo=B.V[0],hi=B.V[0];for(auto& v:B.V){lo.x=std::min(lo.x,v.x);lo.y=std::min(lo.y,v.y);lo.z=std::min(lo.z,v.z);hi.x=std::max(hi.x,v.x);hi.y=std::max(hi.y,v.y);hi.z=std::max(hi.z,v.z);}
+    float m=0.03f;lo=lo-Vec3{m,m,m};hi=hi+Vec3{m,m,m};std::vector<std::vector<int>> nearF;
+    for(auto& f:A0.F){Vec3 fl=A0.V[f[0]],fh=fl;for(int k:f){Vec3 v=A0.V[k];fl.x=std::min(fl.x,v.x);fl.y=std::min(fl.y,v.y);fl.z=std::min(fl.z,v.z);fh.x=std::max(fh.x,v.x);fh.y=std::max(fh.y,v.y);fh.z=std::max(fh.z,v.z);}
+      bool hit=!(fh.x<lo.x||fl.x>hi.x||fh.y<lo.y||fl.y>hi.y||fh.z<lo.z||fl.z>hi.z);(hit?nearF:farF).push_back(f);}
+    A.F=nearF;}
   Node a,b;a.build(toPolys(A));b.build(toPolys(B));
   if(op==0){a.invert();a.clipTo(b);b.clipTo(a);b.invert();b.clipTo(a);b.invert();std::vector<CPoly> bp;b.all(bp);a.build(bp);a.invert();}
   else if(op==1){a.clipTo(b);b.clipTo(a);b.invert();b.clipTo(a);b.invert();std::vector<CPoly> bp;b.all(bp);a.build(bp);}
   else{a.invert();b.clipTo(a);b.invert();a.clipTo(b);b.clipTo(a);std::vector<CPoly> bp;b.all(bp);a.build(bp);a.invert();}
   std::vector<CPoly> res;a.all(res);PolyData o;std::map<std::array<long long,3>,int> wm;auto W=[&](Vec3 p){std::array<long long,3> k{(long long)std::llround(p.x*20000),(long long)std::llround(p.y*20000),(long long)std::llround(p.z*20000)};auto it=wm.find(k);if(it!=wm.end())return it->second;int i=(int)o.V.size();o.V.push_back(p);wm[k]=i;return i;};
   for(auto& p:res){std::vector<int> f;for(auto& v:p.v){int i=W(v);if(f.empty()||f.back()!=i)f.push_back(i);}while(f.size()>1&&f.front()==f.back())f.pop_back();if(f.size()>=3)o.F.push_back(f);}
+  for(auto& f:farF){std::vector<int> g;for(int k:f)g.push_back(W(A0.V[k]));o.F.push_back(g);}
   return o;}
 bool PolyMesh::save(const std::string& path) const{FILE* f=fopen(path.c_str(),"wb");if(!f)return false;int n=(int)d.V.size(),nf=(int)d.F.size(),nc=(int)d.crease.size();fwrite("PLY1",1,4,f);fwrite(&n,4,1,f);fwrite(d.V.data(),sizeof(Vec3),n,f);fwrite(&nf,4,1,f);
   for(auto& F:d.F){int k=(int)F.size();fwrite(&k,4,1,f);fwrite(F.data(),4,k,f);}fwrite(&nc,4,1,f);for(auto& kv:d.crease){fwrite(&kv.first,8,1,f);fwrite(&kv.second,4,1,f);}fwrite(&mirrorX,1,1,f);fwrite(&subLevels,4,1,f);fclose(f);return true;}
