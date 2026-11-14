@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     paths: ['tools/blender/**', '.github/workflows/blender-car.yml']
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,3 +18,8 @@ jobs:
         with:
           name: car
           path: out/*
+      - name: Commit results
+        run: |
+          mkdir -p assets/generated && cp out/car.glb out/*.png assets/generated/
+          git config user.name "blender-ci" && git config user.email "ci@users.noreply.github.com"
+          git add assets/generated && git commit -m "CI: car render + glb" && git pull --rebase && git push || true
