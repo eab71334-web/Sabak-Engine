@@ -15,7 +15,7 @@ static float sstep(float x){x=std::min(1.f,std::max(0.f,x));return x*x*(3-2*x);}
 using SkinFn=std::function<void(SkinVertex&,int ring,int rings)>;
 static void setW(SkinVertex& s,int b0,float w0,int b1=0,float w1=0){s.j[0]=(unsigned char)b0;s.j[1]=(unsigned char)b1;s.j[2]=s.j[3]=0;s.w[0]=w0;s.w[1]=w1;s.w[2]=s.w[3]=0;}
 // Lofts a closed superellipse tube through rings; side = fixed in-plane axis, the other axis is perpendicular to the path tangent.
-static void loft(VB& m,const std::vector<Ring>& rs,Vec3 side,float expo,const SkinFn& fn,int S=22){
+static void loft(VB& m,const std::vector<Ring>& rs,Vec3 side,float expo,const SkinFn& fn,int S=22,bool caps=true){
   int K=(int)rs.size();if(K<2)return;uint32_t base=(uint32_t)m.v.size();
   for(int k=0;k<K;k++){Vec3 T=nrm(k==0?rs[1].c-rs[0].c:k==K-1?rs[K-1].c-rs[K-2].c:rs[k+1].c-rs[k-1].c);Vec3 U=nrm(crs(T,side));Vec3 sd=nrm(crs(U,T));
     for(int i=0;i<S;i++){float th=6.2831853f*i/S;float c=std::cos(th),s=std::sin(th);float cx=(c<0?-1.f:1.f)*std::pow(std::fabs(c),2.f/expo),cy=(s<0?-1.f:1.f)*std::pow(std::fabs(s),2.f/expo);
@@ -23,7 +23,7 @@ static void loft(VB& m,const std::vector<Ring>& rs,Vec3 side,float expo,const Sk
   auto P=[&](uint32_t i){return Vec3{m.v[i].p[0],m.v[i].p[1],m.v[i].p[2]};};
   auto addTri=[&](uint32_t a,uint32_t b,uint32_t c,Vec3 ref){Vec3 n=crs(P(b)-P(a),P(c)-P(a));Vec3 ce=(P(a)+P(b)+P(c))*(1.f/3);Vec3 r=ce-ref;if(n.x*r.x+n.y*r.y+n.z*r.z<0)std::swap(b,c);m.idx.push_back(a);m.idx.push_back(b);m.idx.push_back(c);};
   for(int k=0;k+1<K;k++)for(int i=0;i<S;i++){uint32_t a=base+k*S+i,b=base+k*S+(i+1)%S,c=base+(k+1)*S+i,d=base+(k+1)*S+(i+1)%S;Vec3 ref=(rs[k].c+rs[k+1].c)*0.5f;addTri(a,c,b,ref);addTri(b,c,d,ref);}
-  for(int e=0;e<2;e++){int k=e?K-1:0;uint32_t cv=(uint32_t)m.v.size();SkinVertex v{};v.p[0]=rs[k].c.x;v.p[1]=rs[k].c.y;v.p[2]=rs[k].c.z;setW(v,0,1);fn(v,k,K);m.v.push_back(v);
+  if(caps)for(int e=0;e<2;e++){int k=e?K-1:0;uint32_t cv=(uint32_t)m.v.size();SkinVertex v{};v.p[0]=rs[k].c.x;v.p[1]=rs[k].c.y;v.p[2]=rs[k].c.z;setW(v,0,1);fn(v,k,K);m.v.push_back(v);
     Vec3 ref=e?rs[K-2].c:rs[1].c;for(int i=0;i<S;i++)addTri(cv,base+k*S+i,base+k*S+(i+1)%S,ref);}}
 static void box(VB& m,Vec3 c,Vec3 h,float rotX,const SkinFn& fn){float cs=std::cos(rotX),sn=std::sin(rotX);
   Vec3 corner[8];for(int i=0;i<8;i++){Vec3 q{(i&1?1.f:-1.f)*h.x,(i&2?1.f:-1.f)*h.y,(i&4?1.f:-1.f)*h.z};corner[i]=c+Vec3{q.x,q.y*cs-q.z*sn,q.y*sn+q.z*cs};}
@@ -92,7 +92,7 @@ static void ccToVB(VB& vb,const SubMesh& m,float ay,float insetGap=0.f,Vec3 shif
   for(size_t i=0;i<P.size();i++){SkinVertex v{};Vec3 p=P[i]+shift;v.p[0]=p.x;v.p[1]=p.y;v.p[2]=p.z;v.uv[0]=p.z*0.5f+p.x*0.3f;v.uv[1]=p.y*0.5f+p.x*0.2f;setW(v,0,1);if(fn)(*fn)(v,0,1);vb.v.push_back(v);}
   for(uint32_t i:I)vb.idx.push_back(i+b);}
 // car body cage: ring stations along z, profile around the cross-section, wheel arches cut by lifting the lower profile, panels split by region
-struct CarPanels{VB panels,under,seams,cabin,glass;};
+struct CarPanels{VB panels,under,seams,cabin,glass,liner;};
 static void carBody(CarPanels& cp,float WYc,float WR,float zF,float zR,const SkinFn& fn,int levels){
   struct St{float z,yb,yBelt,yDeck,hw;};
   std::vector<float> zs={-2.25f,-2.20f,-2.10f,-2.02f,-1.85f,-1.72f,-1.60f,-1.45f,-1.30f,-1.15f,-1.02f,-0.88f,-0.60f,-0.32f,0.10f,0.40f,0.68f,0.85f,0.98f,1.08f,1.25f,1.38f,1.50f,1.62f,1.75f,2.00f,2.10f,2.19f,2.25f};
@@ -117,11 +117,11 @@ static void carBody(CarPanels& cp,float WYc,float WR,float zF,float zR,const Ski
   std::vector<int> panelOf;
   auto classify=[&](float z,int j,float y)->int{
     if(z>2.0f||z<-2.02f)return 6;
-    bool top=(j>=7&&j<=12);if(top){if(z>0.98f)return 1;if(z<-1.12f)return 2;return 0;}
+    bool top=(j>=7&&j<=12);if(top&&j>=8&&j<=11&&z>-1.12f&&z<0.98f)return -1;if(top){if(z>0.98f)return 1;if(z<-1.12f)return 2;return 0;}
     bool dR=(j>=3&&j<=6),dL=(j>=13&&j<=16);if((dR||dL)&&z>-0.32f&&z<0.68f)return dR?3:4;
     if(j>=2&&j<=6)return 5;if(j>=13&&j<=17)return 5;(void)y;return 0;};
   std::vector<std::vector<int>> faceIdx;
-  for(size_t s=0;s+1<zs.size();s++)for(int j=0;j<K;j++){int j2=(j+1)%K;m.F.push_back({idx[s][j],idx[s][j2],idx[s+1][j2],idx[s+1][j]});float zc=(zs[s]+zs[s+1])*0.5f;panelOf.push_back(classify(zc,j,0));}
+  for(size_t s=0;s+1<zs.size();s++)for(int j=0;j<K;j++){int j2=(j+1)%K;m.F.push_back({idx[s][j],idx[s][j2],idx[s+1][j2],idx[s+1][j]});float zc=(zs[s]+zs[s+1])*0.5f;int pc=classify(zc,j,0);if(pc<0){m.F.pop_back();continue;}panelOf.push_back(pc);}
   {std::vector<int> a(idx.front().begin(),idx.front().end()),b(idx.back().rbegin(),idx.back().rend());m.F.push_back(a);panelOf.push_back(6);m.F.push_back(b);panelOf.push_back(6);}
   // creases: shoulder and sill lines
   for(size_t s=0;s+1<zs.size();s++)for(int j:{2,6,17}){int a=idx[s][j],b=idx[s+1][j];m.crease[ekey(a,b)]=1.f;}
@@ -131,6 +131,37 @@ static void carBody(CarPanels& cp,float WYc,float WR,float zF,float zR,const Ski
     if(pm.F.empty())continue;for(auto& kv:m.crease){int a=kv.first>>32,b=kv.first&0xffffffff;auto ia=remap.find(a),ib=remap.find(b);if(ia!=remap.end()&&ib!=remap.end())pm.crease[ekey(ia->second,ib->second)]=kv.second;}
     SubMesh sm=ccSub(pm,levels);ccToVB(cp.panels,sm,0.7f,0.f,{0,0,0},0.f,nullptr,&cp.seams,0.0025f);}
   (void)fn;}
+
+static void carInterior(Asm& A,const SkinFn& root){
+  VB seat,trimL,dash,glow,wheel,metal,floorB,carpet;
+  auto cushion=[&](float x,float zc,float rx){loft(seat,{{{x,0.545f,zc-0.28f},rx*0.7f,0.03f},{{x,0.57f,zc-0.24f},rx,0.075f},{{x,0.585f,zc+0.0f},rx,0.085f},{{x,0.57f,zc+0.22f},rx*0.95f,0.07f},{{x,0.54f,zc+0.30f},rx*0.7f,0.035f}},{1,0,0},2.6f,root,22);};
+  auto back=[&](float x,float zc,float rx,float top){loft(seat,{{{x,0.60f,zc-0.27f},rx*0.95f,0.07f},{{x,0.80f,zc-0.31f},rx,0.075f},{{x,top-0.06f,zc-0.36f},rx*0.98f,0.065f},{{x,top,zc-0.375f},rx*0.8f,0.04f}},{1,0,0},2.6f,root,22);
+    loft(seat,{{{x,top+0.03f,zc-0.385f},0.075f,0.035f},{{x,top+0.12f,zc-0.395f},0.095f,0.055f},{{x,top+0.22f,zc-0.40f},0.085f,0.045f}},{1,0,0},2.4f,root,18);
+    loft(trimL,{{{x-rx*0.0f,0.63f,zc-0.285f},rx*0.62f,0.012f},{{x,0.86f,zc-0.325f},rx*0.62f,0.012f},{{x,top-0.10f,zc-0.355f},rx*0.58f,0.012f}},{1,0,0},2.0f,root,14);};
+  for(int sd=-1;sd<=1;sd+=2){cushion(sd*0.36f,-0.12f,0.225f);back(sd*0.36f,-0.12f,0.215f,1.03f);}
+  cushion(0,-0.80f,0.56f);back(0,-0.80f,0.55f,1.0f);
+  A.add(seat,0x4a3226,11);A.add(trimL,0x2a1c15,11);
+  // dashboard + instrument hood + centre console
+  loft(dash,{{{-0.72f,0.84f,0.80f},0.15f,0.07f},{{-0.60f,0.90f,0.79f},0.18f,0.10f},{{0,0.93f,0.78f},0.19f,0.11f},{{0.60f,0.90f,0.79f},0.18f,0.10f},{{0.72f,0.84f,0.80f},0.15f,0.07f}},{0,0,1},2.4f,root,22);
+  loft(dash,{{{0.36f-0.17f,1.00f,0.73f},0.03f,0.03f},{{0.36f,1.02f,0.73f},0.18f,0.045f},{{0.36f+0.17f,1.00f,0.73f},0.03f,0.03f}},{0,0,1},2.0f,root,14);
+  loft(dash,{{{0,0.60f,-0.30f},0.10f,0.06f},{{0,0.68f,0.15f},0.12f,0.075f},{{0,0.72f,0.60f},0.13f,0.08f}},{1,0,0},2.4f,root,18);
+  A.add(dash,0x1c1a19,11);
+  // gear stick
+  VB gs;loft(gs,{{{0,0.72f,0.12f},0.012f,0.012f},{{0,0.86f,0.14f},0.012f,0.012f}},{1,0,0},2.0f,root,10);loft(gs,{{{0,0.86f,0.14f},0.001f,0.001f},{{0,0.875f,0.14f},0.03f,0.03f},{{0,0.915f,0.14f},0.028f,0.028f},{{0,0.93f,0.14f},0.001f,0.001f}},{1,0,0},2.0f,root,14);A.add(gs,0x9a9ea6,7);
+  // steering wheel (torus), spokes, hub and column
+  Vec3 hub{0.36f,0.92f,0.40f},n=nrm(Vec3{0,0.55f,-0.83f}),e1{1,0,0},e2=nrm(crs(n,e1));float R=0.185f;
+  {std::vector<Ring> rs;for(int k=0;k<=28;k++){float th=6.2831853f*k/28;Vec3 c=hub+e1*(std::cos(th)*R)+e2*(std::sin(th)*R);rs.push_back({c,0.016f,0.016f});}loft(wheel,rs,n,2.0f,root,12);}
+  for(int sp=0;sp<3;sp++){float th=sp==0?3.1416f:sp==1?0.f:-1.5708f;Vec3 tip=hub+e1*(std::cos(th)*R*0.96f)+e2*(std::sin(th)*R*0.96f);loft(wheel,{{hub,0.016f,0.012f},{(hub+tip)*0.5f,0.014f,0.010f},{tip,0.016f,0.012f}},n,2.0f,root,10);}
+  loft(wheel,{{hub-n*0.015f,0.001f,0.001f},{hub-n*0.012f,0.05f,0.05f},{hub+n*0.02f,0.05f,0.05f},{hub+n*0.026f,0.001f,0.001f}},n,2.0f,root,18);
+  loft(wheel,{{hub-n*0.02f,0.03f,0.03f},{{0.36f,0.84f,0.62f},0.035f,0.035f}},{1,0,0},2.0f,root,12);
+  A.add(wheel,0x141414,11);
+  // screens and ambient light strips (emissive)
+  box(glow,{0.36f,1.005f,0.71f},{0.115f,0.035f,0.003f},-0.35f,root);
+  VB scr;box(scr,{0.0f,0.99f,0.80f},{0.13f,0.07f,0.004f},-0.5f,root);A.add(scr,0x2b8fd6,12);A.add(glow,0xffb04a,12);
+  VB amb;box(amb,{0,0.835f,0.66f},{0.62f,0.004f,0.004f},0,root);box(amb,{0.66f,0.55f,0.0f},{0.004f,0.004f,0.85f},0,root);box(amb,{-0.66f,0.55f,0.0f},{0.004f,0.004f,0.85f},0,root);A.add(amb,0x5b8cff,12);
+  // floor carpet
+  box(carpet,{0,0.40f,-0.10f},{0.66f,0.01f,1.05f},0,root);A.add(carpet,0x1a1a1c,2);
+}
 
 static void carCabin(CarPanels& cp,int levels){
   const int K=13;SubMesh m;std::vector<std::array<int,K>> idx;
@@ -146,7 +177,7 @@ static void carCabin(CarPanels& cp,int levels){
   for(size_t s=0;s+1<zs.size();s++)for(int j=0;j<K;j++){int j2=(j+1)%K;m.F.push_back({idx[s][j],idx[s][j2],idx[s+1][j2],idx[s+1][j]});panelOf.push_back(cls((zs[s]+zs[s+1])*0.5f,j));}
   {std::vector<int> a(idx.front().begin(),idx.front().end()),b(idx.back().rbegin(),idx.back().rend());m.F.push_back(a);panelOf.push_back(0);m.F.push_back(b);panelOf.push_back(0);}
   for(int pid=0;pid<2;pid++){SubMesh pm;std::map<int,int> remap;for(size_t f=0;f<m.F.size();f++)if(panelOf[f]==pid){std::vector<int> nf;for(int v:m.F[f]){auto it=remap.find(v);if(it==remap.end()){remap[v]=(int)pm.V.size();pm.V.push_back(m.V[v]);it=remap.find(v);}nf.push_back(it->second);}pm.F.push_back(nf);}
-    if(pm.F.empty())continue;SubMesh sm=ccSub(pm,levels);if(pid==0)ccToVB(cp.cabin,sm,1.2f,0.f,{0,0,0},0.f,nullptr,&cp.seams,0.0022f);else ccToVB(cp.glass,sm,1.2f,0.f,{0,0,0},-0.006f,nullptr,&cp.seams,0.0022f);}
+    if(pm.F.empty())continue;SubMesh sm=ccSub(pm,levels);if(pid==0){ccToVB(cp.cabin,sm,1.2f,0.f,{0,0,0},0.f,nullptr,&cp.seams,0.0022f);ccToVB(cp.liner,sm,1.2f,0.f,{0,0,0},-0.014f);}else ccToVB(cp.glass,sm,1.2f,0.f,{0,0,0},-0.006f,nullptr,&cp.seams,0.0022f);}
 }
 }
 // ---------------------------------------------------------------- CAR
@@ -159,7 +190,8 @@ bool buildCar(Renderer& r,const std::string& spec,Model& out){
   SkinFn root=[](SkinVertex& s,int,int){setW(s,0,1);};
   // lower body
   CarPanels cp;carBody(cp,WR,WR,WZF,WZR,root,2);A.add(cp.panels,paint,5);A.add(cp.under,0x050506,9);
-  carCabin(cp,2);A.add(cp.cabin,paint,5);A.add(cp.glass,0x0b0f14,6);A.add(cp.seams,0x050506,9);
+  carCabin(cp,2);A.add(cp.cabin,paint,5);A.add(cp.glass,0x0b0f14,6);A.add(cp.seams,0x050506,9);A.add(cp.liner,0xb8b1a3,2);
+  carInterior(A,root);
   // door lines, trim, lights, grille, plate
   VB trim;for(int sd=-1;sd<=1;sd+=2){float x=sd*0.941f;box(trim,{x,0.37f,0.0f},{.012f,.025f,1.5f},0,root);
       box(trim,{sd*0.78f,0.85f,0.67f},{.02f,.02f,.03f},0,root);}
@@ -169,24 +201,31 @@ bool buildCar(Renderer& r,const std::string& spec,Model& out){
       box(chrome,{sd*0.96f,0.99f,0.67f},{.05f,.05f,.075f},0,root);}
   box(chrome,{0,0.60f,2.265f},{.29f,.008f,.006f},0,root);box(chrome,{0,0.46f,2.255f},{.29f,.008f,.006f},0,root);box(chrome,{0,0.53f,2.272f},{.006f,.05f,.004f},0,root);
   A.add(chrome,0xe8e8ee,7);
-  VB hl;for(int sd=-1;sd<=1;sd+=2)loft(hl,{{{sd*0.62f,0.72f,2.16f},.001f,.001f},{{sd*0.62f,0.72f,2.178f},.14f,.055f},{{sd*0.62f,0.72f,2.20f},.15f,.058f},{{sd*0.62f,0.72f,2.205f},.001f,.001f}},{1,0,0},2.4f,root,18);
-  A.add(hl,0xfff1c8,0);
-  VB tl;for(int sd=-1;sd<=1;sd+=2){box(tl,{sd*0.68f,0.82f,-2.14f},{.20f,.05f,.015f},0,root);}
-  A.add(tl,0xd01820,5);
+  { VB hlg,hlr,hle,bez;for(int sd=-1;sd<=1;sd+=2){float x=sd*0.62f;
+      loft(bez,{{{x,0.72f,2.150f},.001f,.001f},{{x,0.72f,2.168f},.158f,.066f},{{x,0.72f,2.200f},.158f,.066f},{{x,0.72f,2.204f},.001f,.001f}},{1,0,0},2.4f,root,24);   // chrome bezel
+      loft(hlr,{{{x,0.72f,2.170f},.001f,.001f},{{x,0.72f,2.178f},.145f,.056f},{{x,0.72f,2.196f},.145f,.056f},{{x,0.72f,2.198f},.001f,.001f}},{1,0,0},2.4f,root,24);   // reflector bowl
+      box(hle,{x,0.745f,2.201f},{.105f,.007f,.004f},0,root);box(hle,{x,0.700f,2.201f},{.08f,.005f,.004f},0,root);                                                      // LED strips
+      loft(hle,{{{x-sd*0.06f,0.72f,2.190f},.001f,.001f},{{x-sd*0.06f,0.72f,2.200f},.032f,.032f},{{x-sd*0.06f,0.72f,2.204f},.001f,.001f}},{1,0,0},2.0f,root,14);          // projector lens
+      loft(hlg,{{{x,0.72f,2.205f},.001f,.001f},{{x,0.72f,2.207f},.152f,.060f},{{x,0.72f,2.209f},.001f,.001f}},{1,0,0},2.4f,root,24);}                                    // clear lens cover
+    A.add(bez,0xd9dce2,7);A.add(hlr,0x6d7076,7);A.add(hle,0xeaf6ff,12);A.add(hlg,0x10151a,6);}
+  { VB tlr,tle,tlg,tlc;for(int sd=-1;sd<=1;sd+=2){float x=sd*0.68f;box(tlc,{x,0.82f,-2.145f},{.205f,.058f,.012f},0,root);box(tlr,{x,0.82f,-2.157f},{.19f,.045f,.006f},0,root);box(tle,{x,0.835f,-2.162f},{.15f,.008f,.004f},0,root);box(tle,{x,0.805f,-2.162f},{.15f,.006f,.004f},0,root);}
+    box(tlc,{0,0.82f,-2.15f},{.45f,.006f,.006f},0,root);A.add(tlc,0xd9dce2,7);A.add(tlr,0x500a0e,5);A.add(tle,0xff2a2a,12);}
   VB plate;box(plate,{0,0.56f,-2.215f},{.26f,.07f,.006f},0,root);A.add(plate,0xe9e9df,9);
   // wheels
   struct Wh{int bone;float x;};Wh whs[4]={{1,WX},{2,-WX},{3,WX},{4,-WX}};
-  VB tire,rim,arch;
+  VB tire,rim,arch,disc,caliper;
   for(auto& w:whs){int b=w.bone;Vec3 c=hd[b];SkinFn fn=[b](SkinVertex& s,int,int){setW(s,b,1);};float sg=w.x>0?1.f:-1.f;
     // tyre profile (rings along x)
-    std::vector<Ring> tr;float prof[][2]={{-.13f,.22f},{-.125f,.31f},{-.10f,.345f},{-.05f,.355f},{.05f,.355f},{.10f,.345f},{.125f,.31f},{.13f,.22f}};for(auto& p:prof)tr.push_back({{c.x+p[0],c.y,c.z},p[1],p[1]});loft(tire,tr,{0,0,1},2.0f,fn,32);
+    std::vector<Ring> tr;float prof[][2]={{-.13f,.22f},{-.126f,.30f},{-.108f,.343f},{-.098f,.356f},{-.070f,.356f},{-.064f,.341f},{-.046f,.341f},{-.040f,.356f},{-.012f,.356f},{-.006f,.341f},{.012f,.341f},{.018f,.356f},{.046f,.356f},{.052f,.341f},{.070f,.341f},{.076f,.356f},{.098f,.356f},{.108f,.343f},{.126f,.30f},{.13f,.22f}};for(auto& p:prof)tr.push_back({{c.x+p[0],c.y,c.z},p[1],p[1]});loft(tire,tr,{0,0,1},2.0f,fn,40,false);
     std::vector<Ring> rr={{{c.x+sg*0.118f,c.y,c.z},.001f,.001f},{{c.x+sg*0.122f,c.y,c.z},.235f,.235f},{{c.x+sg*0.132f,c.y,c.z},.225f,.225f},{{c.x+sg*0.118f,c.y,c.z},.001f,.001f}};
-    loft(rim,{{{c.x+sg*0.100f,c.y,c.z},.24f,.24f},{{c.x+sg*0.127f,c.y,c.z},.235f,.235f},{{c.x+sg*0.132f,c.y,c.z},.205f,.205f}},{0,0,1},2.0f,fn,32);
-    for(int k=0;k<5;k++){float a=k*6.2831853f/5;box(rim,{c.x+sg*0.134f,c.y,c.z},{.006f,.20f,.026f},a,fn);}
-    loft(rim,{{{c.x+sg*0.130f,c.y,c.z},.07f,.07f},{{c.x+sg*0.145f,c.y,c.z},.06f,.06f},{{c.x+sg*0.147f,c.y,c.z},.001f,.001f}},{0,0,1},2.0f,fn,20);
+    loft(rim,{{{c.x+sg*0.060f,c.y,c.z},.226f,.226f},{{c.x+sg*0.125f,c.y,c.z},.232f,.232f},{{c.x+sg*0.135f,c.y,c.z},.245f,.245f},{{c.x+sg*0.139f,c.y,c.z},.236f,.236f}},{0,0,1},2.0f,fn,40,false);
+    for(int k=0;k<7;k++){float a=k*6.2831853f/7;box(rim,{c.x+sg*0.118f,c.y,c.z},{.010f,.205f,.020f},a,fn);box(rim,{c.x+sg*0.118f,c.y,c.z},{.010f,.205f,.020f},a+0.22f,fn);}
+    loft(rim,{{{c.x+sg*0.105f,c.y,c.z},.075f,.075f},{{c.x+sg*0.140f,c.y,c.z},.065f,.065f},{{c.x+sg*0.146f,c.y,c.z},.001f,.001f}},{0,0,1},2.0f,fn,24);
+    loft(disc,{{{c.x-sg*0.078f,c.y,c.z},.205f,.205f},{{c.x-sg*0.050f,c.y,c.z},.205f,.205f}},{0,0,1},2.0f,fn,40);
+    box(caliper,{c.x-sg*0.064f,c.y+0.185f,c.z+0.01f},{.036f,.058f,.075f},0,root);
     // dark wheel-arch disc on the body side
     SkinFn rfn=root;loft(arch,{{{sg*0.915f,c.y+0.02f,c.z},.46f,.46f},{{sg*0.925f,c.y+0.02f,c.z},.46f,.46f}},{0,0,1},2.0f,rfn,32);(void)rr;}
-  A.add(tire,0x151517,9);A.add(rim,0x9a9ea6,7);
+  A.add(tire,0x151517,9);A.add(rim,0x9a9ea6,7);A.add(disc,0x74777c,7);A.add(caliper,0xc0161e,5);
   // chassis underside
   VB under;loft(under,{{{0,0.30f,-2.0f},.62f,.05f},{{0,0.30f,2.0f},.62f,.05f}},{1,0,0},2.0f,root,12);A.add(under,0x060606,9);
   // animation: wheels spinning

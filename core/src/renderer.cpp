@@ -54,6 +54,7 @@ void main(){ vec3 albedo=vC;
     else if(uKind==6){ albedo*=0.05; specK=2.2; specP=260.0; envK=0.07; envT=0.0; }
     else if(uKind==7){ specK=1.4; specP=90.0; envK=0.80; envT=1.0; }
     else if(uKind==8){ float fr=vn(vec2(vUV.x*700.0,vUV.y*700.0)); float fr2=vn(vUV*90.0); albedo*=0.80+0.28*fr+0.12*fr2; N=normalize(N+(T*(fr-0.5)+B*(vn(vUV*700.0+9.0)-0.5))*0.22*lod); specK=0.22; specP=22.0; sheen=0.9; }
+    else if(uKind==11){ float pr=vn(vUV*520.0); albedo*=0.80+0.35*pr; N=normalize(N+(T*(pr-0.5)+B*(vn(vUV*520.0+5.0)-0.5))*0.25*lod); float row=abs(fract(vUV.y*11.0)-0.5); float stl=smoothstep(0.035,0.0,abs(row-0.455))*step(0.5,fract(vUV.x*70.0)); float seam=smoothstep(0.02,0.0,abs(row-0.5)); albedo=mix(albedo,vec3(0.72,0.66,0.55),stl*0.85); albedo*=1.0-0.45*seam; specK=0.38; specP=16.0; sheen=0.5; }
     else if(uKind==10){ specK=0.10; specP=26.0; sssK=0.35; }
     else if(uKind==9){ albedo*=0.7+0.5*vn(vUV*220.0); specK=0.05; specP=10.0; }
   }
@@ -67,12 +68,18 @@ void main(){ vec3 albedo=vC;
   float wrapT=clamp((dot(N,L)+0.5)/1.5,0.0,1.0); col+=albedo*vec3(0.95,0.28,0.16)*sssK*max(wrapT-ndl,0.0)*0.9*sh+albedo*vec3(0.9,0.3,0.2)*sssK*fres*0.12;
   col+=vec3(0.5,0.55,0.6)*sheen*fres*0.5;
 #ifdef SKIN
+  if(uKind==5){ vec2 cell=floor(vUV*140.0); float hh=h21(cell); vec3 fn=normalize(N+(vec3(h21(cell+3.1),h21(cell+7.7),h21(cell+11.3))-0.5)*1.1); col+=albedo*2.2*pow(max(dot(fn,H),0.0),36.0)*step(0.5,hh)*sh*0.45; col+=vec3(1.0)*pow(max(dot(N,H),0.0),420.0)*1.4*sh; }
+  if(uKind==12)col=albedo*1.8;
   if(envK>0.0){ vec3 R=reflect(-V,N); vec3 sky=mix(vec3(0.62,0.72,0.86),vec3(0.20,0.38,0.72),clamp(R.y*1.4,0.0,1.0)); vec3 gnd=mix(vec3(0.30,0.28,0.24),vec3(0.10,0.10,0.09),clamp(-R.y*2.0,0.0,1.0));
-    vec3 env=R.y>0.0?sky:gnd; env+=vec3(1.6,1.4,1.1)*pow(max(dot(R,L),0.0),60.0)*sh; float fr=envK+(1.0-envK)*pow(1.0-max(dot(N,V),0.0),5.0); vec3 tintC=mix(vec3(1.0),albedo*1.6,envT);
+    vec3 env=R.y>0.0?sky:gnd; if(uKind==6)env*=0.45; env+=vec3(1.6,1.4,1.1)*pow(max(dot(R,L),0.0),60.0)*sh; float fr=envK+(1.0-envK)*pow(1.0-max(dot(N,V),0.0),5.0); vec3 tintC=mix(vec3(1.0),albedo*1.6,envT);
     col=mix(col,env*tintC,clamp(fr,0.0,1.0)); }
 #endif
   float d=length(uCam-vW); float fog=1.0-exp(-d*0.0030); col=mix(col,uFog,clamp(fog,0.0,1.0));
-  col=aces(col*1.0); col=mix(vec3(dot(col,vec3(0.299,0.587,0.114))),col,1.08); o=vec4(pow(col,vec3(1.0/2.2)),1.0); })";
+  col=aces(col*1.0); col=mix(vec3(dot(col,vec3(0.299,0.587,0.114))),col,1.08); float ga=1.0;
+#ifdef SKIN
+  if(uKind==6)ga=clamp(0.10+0.8*pow(1.0-max(dot(N,V),0.0),3.0),0.0,0.7);
+#endif
+  o=vec4(pow(col,vec3(1.0/2.2)),ga); })";
 static const char* SVS=R"(#version 300 es
 layout(location=0) in vec3 aPos;
 #ifdef SKIN
@@ -163,7 +170,7 @@ void Renderer::render(const std::vector<DrawItem>& items,const std::vector<SkinD
   for(auto&it:items){if(!it.castShadow)continue;auto&g=meshes_[it.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(uM,1,GL_FALSE,it.model.m);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
   if(!skin.empty()){glUseProgram(skinShProg_);glUniformMatrix4fv(glGetUniformLocation(skinShProg_,"uLightVP"),1,GL_FALSE,lightVP_.m);int sM=glGetUniformLocation(skinShProg_,"uModel"),sJ=glGetUniformLocation(skinShProg_,"uJ"),sMk=glGetUniformLocation(skinShProg_,"uMask");
     glActiveTexture(GL_TEXTURE1);glUniform1i(glGetUniformLocation(skinShProg_,"uTex"),1);
-    for(auto&s:skin){auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(sM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(sJ,s.nj,GL_FALSE,s.joints);glUniform1f(sMk,s.mask?1.f:0.f);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
+    for(auto&s:skin){if(s.kind==6)continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(sM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(sJ,s.nj,GL_FALSE,s.joints);glUniform1f(sMk,s.mask?1.f:0.f);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
     glActiveTexture(GL_TEXTURE0);}
   glDisable(GL_POLYGON_OFFSET_FILL);
   // 2) main pass
@@ -182,8 +189,10 @@ void Renderer::render(const std::vector<DrawItem>& items,const std::vector<SkinD
     glUniform3f(glGetUniformLocation(skinProg_,"uFog"),studio_?0.035f:0.74f,studio_?0.040f:0.78f,studio_?0.050f:0.84f);glUniform3f(glGetUniformLocation(skinProg_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);glUniform3f(glGetUniformLocation(skinProg_,"uCam"),camPos_.x,camPos_.y,camPos_.z);
     glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,shTex_);glUniform1i(glGetUniformLocation(skinProg_,"uShadow"),0);glUniform1i(glGetUniformLocation(skinProg_,"uTex"),1);
     int kM=glGetUniformLocation(skinProg_,"uModel"),kJ=glGetUniformLocation(skinProg_,"uJ"),kT=glGetUniformLocation(skinProg_,"uTint"),kB=glGetUniformLocation(skinProg_,"uBase"),kMk=glGetUniformLocation(skinProg_,"uMask"),kK=glGetUniformLocation(skinProg_,"uKind");
-    for(auto&s:skin){auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);glUniform1f(kMk,s.mask?1.f:0.f);glUniform1i(kK,s.kind);
+    for(int pass=0;pass<2;pass++){if(pass==1){glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);}
+    for(auto&s:skin){if((s.kind==6)!=(pass==1))continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);glUniform1f(kMk,s.mask?1.f:0.f);glUniform1i(kK,s.kind);
       glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);stats.draws++;stats.tris+=g.count/3;}
+    }glDisable(GL_BLEND);glDepthMask(GL_TRUE);
     glActiveTexture(GL_TEXTURE0);}
 }
 void Renderer::present(unsigned t,int tw,int th){glBindFramebuffer(GL_READ_FRAMEBUFFER,fbo_);glBindFramebuffer(GL_DRAW_FRAMEBUFFER,t);
