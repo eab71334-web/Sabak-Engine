@@ -22,17 +22,34 @@ static void addLoft(PolyMesh& pm,const std::vector<float>& st,int nr,const std::
   for(int i=0;i+1<S;i++)for(int j:creaseRings)if(j+1<nr){d.crease[PolyMesh::key(id(i,j),id(i+1,j))]=cr;}
   if(caps){for(int e:{0,S-1}){std::vector<int> q;for(int j=0;j<nr;j++)q.push_back(id(e,j));float zz=st[e];d.F.push_back(outward(q,{0,0.7f,zz>0?zz-1.f:zz+1.f}));}}
 }
-void buildCarPoly(PolyMesh& pm){
+// cross-section half-width vs height, measured from the blueprint FRONT view silhouette (metres)
+static const float WFT[][2]={{0.0f,.91f},{.05f,.93f},{.12f,.937f},{.40f,.937f},{.70f,.937f},{.80f,.93f},{.90f,.895f},{.99f,.87f},{1.06f,.82f},{1.13f,.74f},{1.20f,.68f},{1.27f,.65f},{1.34f,.60f},{1.38f,.54f},{1.403f,.40f}};
+static float wf(float h){const int N=sizeof(WFT)/sizeof(WFT[0]);if(h<=WFT[0][0])return WFT[0][1];for(int i=0;i+1<N;i++)if(h<=WFT[i+1][0]){float u=(h-WFT[i][0])/(WFT[i+1][0]-WFT[i][0]);return WFT[i][1]*(1-u)+WFT[i+1][1]*u;}return WFT[N-1][1];}
+// resample a polyline to n points evenly by arc length (first and last kept)
+static std::vector<Vec3> resample(const std::vector<Vec3>& p,int n){std::vector<float> L(1,0.f);for(size_t i=1;i<p.size();i++)L.push_back(L.back()+std::sqrt(dot(p[i]-p[i-1],p[i]-p[i-1]))+1e-7f);std::vector<Vec3> o;float tot=L.back();size_t k=0;
+  for(int i=0;i<n;i++){float t=tot*i/(n-1);while(k+2<p.size()&&L[k+1]<t)k++;float u=(t-L[k])/(L[k+1]-L[k]);u=std::max(0.f,std::min(1.f,u));o.push_back(p[k]*(1-u)+p[k+1]*u);}return o;}
+static void buildCarOnce(PolyMesh& pm,const std::vector<float>& corr){
   pm.clear();pm.mirrorX=true;pm.subLevels=2;
-  std::vector<float> stB={2.397f,2.36f,2.30f,2.20f,2.05f,1.85f,1.65f,1.45f,1.25f,1.05f,.85f,.6f,.3f,0.f,-.3f,-.6f,-.9f,-1.2f,-1.5f,-1.8f,-2.0f,-2.15f,-2.28f,-2.397f};
-  const float BELT=0.985f;
-  addLoft(pm,stB,10,[&](float f,std::vector<Vec3>& p){float hw=halfW(f),deck=std::min(topH(f),BELT);float zb=0.16f+(std::fabs(f)<2.0f?0.f:0.10f*(std::fabs(f)-2.0f)/0.4f);
-      float zs[10]={zb,zb,zb+0.06f,0.40f,0.68f,deck-0.12f,deck-0.03f,deck-0.006f,deck-0.004f,deck};float us[10]={0,0.80f,0.96f,1.0f,1.0f,0.985f,0.92f,deck>0.95f?0.865f:0.6f,0.45f,0};
-      for(int k=0;k<10;k++)p.push_back({us[k]*hw,zs[k],f});},{2,6},1.f,true);
-  std::vector<float> stC={1.0f,.9f,.75f,.55f,.35f,.1f,-.15f,-.4f,-.65f,-.9f,-1.1f,-1.3f,-1.5f,-1.65f,-1.78f};
-  addLoft(pm,stC,6,[&](float f,std::vector<Vec3>& p){auto tp=[](float t){t=std::max(0.f,std::min(1.f,t));return t*t*(3-2*t);};float hw=halfW(f)*(0.45f+0.55f*tp((f+1.8f)/0.8f)*tp((1.04f-f)/0.55f));float roof=std::max(topH(f),BELT+0.02f);float base=BELT-0.01f;
-      float us[6]={0,0.86f,0.80f,0.66f,0.40f,0};float zs[6]={base,base,base+0.10f*(roof-base)/0.4f+0.12f,roof-0.07f,roof-0.015f,roof};for(int k=0;k<6;k++)p.push_back({us[k]*hw,zs[k],f});},{1,3},1.f,true);
+  const float BELT=0.985f;const int N1=10,N2=9;const int NR=N1+N2-1; // lower piece N1 points (last = shoulder), upper piece N2 points (first = shoulder, last = centre)
+  std::vector<float> st;for(float f=2.397f;f>-2.39f;f-=0.15f)st.push_back(f);st.push_back(-2.397f);
+  auto cf=[&](float f){if(corr.empty())return 1.f;size_t bi=0;float bd=1e9f;for(size_t i=0;i<st.size();i++){float d=std::fabs(st[i]-f);if(d<bd){bd=d;bi=i;}}return corr[bi];};
+  addLoft(pm,st,NR,[&](float f,std::vector<Vec3>& out){
+      float hw=halfW(f),H=topH(f);if(H>BELT+0.03f)H=BELT+(H-BELT)*cf(f);else H*=cf(f);float zb=0.16f+(std::fabs(f)<2.0f?0.f:0.10f*(std::fabs(f)-2.0f)/0.4f);bool green=H>BELT+0.03f;
+      float hb=green?BELT:std::max(zb+0.2f,H-0.07f);
+      std::vector<Vec3> lo;lo.push_back({0,zb,f});lo.push_back({0.80f*hw,zb,f});lo.push_back({0.955f*hw,zb+0.05f,f});
+      for(int k=0;k<=8;k++){float h=zb+0.10f+(hb-zb-0.10f)*k/8.f;lo.push_back({wf(h)/0.937f*hw,h,f});}
+      std::vector<Vec3> up;
+      if(green){auto tp=[](float t){t=std::max(0.f,std::min(1.f,t));return t*t*(3-2*t);};float gk=0.55f+0.45f*tp((f+1.8f)/0.7f)*tp((1.15f-f)/0.5f);
+        up.push_back(lo.back());for(int k=1;k<=10;k++){float h=hb+(H-hb)*k/10.f;float u=wf(h)/0.937f*hw*(h<hb+0.01f?1.f:gk);if(k==10)u*=0.55f;up.push_back({u,h,f});}up.push_back({0,H,f});}
+      else{up.push_back(lo.back());up.push_back({0.975f*hw,H-0.035f,f});up.push_back({0.90f*hw,H-0.008f,f});up.push_back({0.55f*hw,H-0.002f,f});up.push_back({0,H,f});}
+      std::vector<Vec3> a=resample(lo,N1),b=resample(up,N2);for(auto& v:a)out.push_back(v);for(size_t i=1;i<b.size();i++)out.push_back(b[i]);},{2,N1-1},1.f,true);
   pm.selectNone();}
+// build, then compare the subdivided top silhouette with the blueprint and re-fit station heights (2 passes)
+void buildCarPoly(PolyMesh& pm){
+  std::vector<float> st;for(float f=2.397f;f>-2.39f;f-=0.15f)st.push_back(f);st.push_back(-2.397f);std::vector<float> corr(st.size(),1.f);
+  for(int it=0;it<3;it++){buildCarOnce(pm,corr);PolyData e=pm.evaluate(pm.subLevels);
+    for(size_t i=0;i<st.size();i++){float best=0;for(auto& v:e.V)if(std::fabs(v.z-st[i])<0.075f&&v.y>best)best=v.y;if(best<0.3f)continue;float want=topH(st[i]);corr[i]=std::max(0.85f,std::min(1.35f,corr[i]*want/best));}}
+  buildCarOnce(pm,corr);}
 void bakeWheelArches(PolyMesh& pm){
   PolyData A=pm.evaluate(pm.subLevels);PolyMesh cu;cu.mirrorX=false;
   for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){PolyMesh c;c.cylinder({0,0,0},0.43f,0.45f,40);PolyData cd=c.d; // axis Y -> rotate to X
