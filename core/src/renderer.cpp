@@ -38,7 +38,7 @@ float shadow(){ vec3 p=vL.xyz/vL.w*0.5+0.5; if(p.z>1.0||p.x<0.0||p.x>1.0||p.y<0.
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
 void main(){ vec3 albedo=vC;
 #ifdef SKIN
-  vec4 tc=texture(uTex,vUV)*uBase; if(uMask>0.5&&tc.a<0.5) discard; albedo=pow(tc.rgb,vec3(2.2))*vC; if(uKind==10)albedo*=pow(vVC,vec3(2.2));
+  vec4 tc=texture(uTex,vUV)*uBase; if(uMask>0.5&&tc.a<0.5) discard; if(uKind==13){ o=vec4(tc.rgb*1.15,0.85*tc.a); return; } albedo=pow(tc.rgb,vec3(2.2))*vC; if(uKind==10)albedo*=pow(vVC,vec3(2.2));
 #endif
   vec3 N=normalize(vN); if(!gl_FrontFacing) N=-N; vec3 L=normalize(uSun); vec3 V=normalize(uCam-vW);
   float sssK=0.0, specK=0.15, specP=48.0, sheen=0.0, envK=0.0, envT=0.0; float dist=length(uCam-vW); float lod=clamp(1.3-dist*0.28,0.0,1.0);
@@ -170,7 +170,7 @@ void Renderer::render(const std::vector<DrawItem>& items,const std::vector<SkinD
   for(auto&it:items){if(!it.castShadow)continue;auto&g=meshes_[it.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(uM,1,GL_FALSE,it.model.m);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
   if(!skin.empty()){glUseProgram(skinShProg_);glUniformMatrix4fv(glGetUniformLocation(skinShProg_,"uLightVP"),1,GL_FALSE,lightVP_.m);int sM=glGetUniformLocation(skinShProg_,"uModel"),sJ=glGetUniformLocation(skinShProg_,"uJ"),sMk=glGetUniformLocation(skinShProg_,"uMask");
     glActiveTexture(GL_TEXTURE1);glUniform1i(glGetUniformLocation(skinShProg_,"uTex"),1);
-    for(auto&s:skin){if(s.kind==6)continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(sM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(sJ,s.nj,GL_FALSE,s.joints);glUniform1f(sMk,s.mask?1.f:0.f);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
+    for(auto&s:skin){if(s.kind==6||s.kind==13)continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(sM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(sJ,s.nj,GL_FALSE,s.joints);glUniform1f(sMk,s.mask?1.f:0.f);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
     glActiveTexture(GL_TEXTURE0);}
   glDisable(GL_POLYGON_OFFSET_FILL);
   // 2) main pass
@@ -190,7 +190,7 @@ void Renderer::render(const std::vector<DrawItem>& items,const std::vector<SkinD
     glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,shTex_);glUniform1i(glGetUniformLocation(skinProg_,"uShadow"),0);glUniform1i(glGetUniformLocation(skinProg_,"uTex"),1);
     int kM=glGetUniformLocation(skinProg_,"uModel"),kJ=glGetUniformLocation(skinProg_,"uJ"),kT=glGetUniformLocation(skinProg_,"uTint"),kB=glGetUniformLocation(skinProg_,"uBase"),kMk=glGetUniformLocation(skinProg_,"uMask"),kK=glGetUniformLocation(skinProg_,"uKind");
     for(int pass=0;pass<2;pass++){if(pass==1){glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);}
-    for(auto&s:skin){if((s.kind==6)!=(pass==1))continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);glUniform1f(kMk,s.mask?1.f:0.f);glUniform1i(kK,s.kind);
+    for(auto&s:skin){if((s.kind==6||s.kind==13)!=(pass==1))continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);glUniform1f(kMk,s.mask?1.f:0.f);glUniform1i(kK,s.kind);
       glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);stats.draws++;stats.tris+=g.count/3;}
     }glDisable(GL_BLEND);glDepthMask(GL_TRUE);
     glActiveTexture(GL_TEXTURE0);}

@@ -5,6 +5,7 @@
 #include <filesystem>
 #include "app.h"
 #include "theme.h"
+#include "stb_image.h"
 namespace sk {
 using namespace sk::th;
 namespace fs=std::filesystem;
@@ -40,8 +41,30 @@ void App::openModel(){if(cur_<0||cur_>=(int)projects_.size())return;std::string 
   Entity* e=pmEntity();if(!e){Entity& ne=scene_.add(P_MODEL,"PolyModel");ne.asset="pmodel:M1";ne.pos={0,0.08f,0};e=scene_.get(ne.id);rebuildRows();}
   pm_=PolyMesh();if(!pm_.load(pdir(dir)+"/M1.ply"))pmPrim(0);pm_.subLevels=std::max(pm_.subLevels,0);pmEd_=true;pmDrag_=-1;scEd_=false;animEd_=false;crEd_=false;select(e->id);pmRebuild();
   Vec3 p=scene_.worldPos(e->id);ecTarget_={p.x,p.y+0.9f,p.z};ecDist_=4.2f;ecPitch_=0.35f;ecYaw_=0.7f;}
-void App::closeModel(){if(cur_>=0&&cur_<(int)projects_.size())pm_.save(pdir(projects_[cur_].dir)+"/M1.ply");pmEd_=false;}
+void App::closeModel(){if(cur_>=0&&cur_<(int)projects_.size())pm_.save(pdir(projects_[cur_].dir)+"/M1.ply");pmRefClear();pmEd_=false;}
 
+
+// ---- reference (blueprint) planes: real-scale drawings shown behind/around the model
+bool App::pmRefModel(const std::string& nm,Model& m){
+  std::string path=g_assetDir+"/reference/g82_"+nm+".png";if(cur_>=0&&cur_<(int)projects_.size()){std::string pp=projects_[cur_].dir+"/pmodels/ref_"+nm+".png";if(fs::exists(pp))path=pp;}
+  int w=0,h=0,c=0;unsigned char* px=stbi_load(path.c_str(),&w,&h,&c,4);if(!px)return false;
+  m=Model();m.name="Ref";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
+  ModelMat mm;mm.kind=13;mm.col[0]=mm.col[1]=mm.col[2]=mm.col[3]=1;if(r_)mm.tex=r_->createTexture(px,w,h);stbi_image_free(px);m.mats.push_back(mm);
+  std::vector<SkinVertex> v;std::vector<uint32_t> idx;
+  auto V=[&](Vec3 p,float u,float t){SkinVertex s{};s.p[0]=p.x;s.p[1]=p.y;s.p[2]=p.z;s.n[1]=1;s.uv[0]=u;s.uv[1]=t;s.j[0]=0;s.w[0]=1;v.push_back(s);};
+  Vec3 a,b,cc,d; // corners: top-left, top-right, bottom-right, bottom-left as seen from the front face
+  if(nm=="side"){float L=2.46f,H=1.48f;a={0,H,L};b={0,H,-L};cc={0,0,-L};d={0,0,L};}
+  else if(nm=="front"){float Wd=1.065f,H=1.481f;a={-Wd,H,2.5f};b={Wd,H,2.5f};cc={Wd,0,2.5f};d={-Wd,0,2.5f};}
+  else{float L=2.46f,Wd=0.985f;float y=0.25f;a={-Wd,y,L};b={-Wd,y,-L};cc={Wd,y,-L};d={Wd,y,L};}
+  V(a,0,0);V(b,1,0);V(cc,1,1);V(d,0,1);V(b,0,0);V(a,1,0);V(d,1,1);V(cc,0,1);
+  for(uint32_t q:{0u,1u,2u,0u,2u,3u,4u,5u,6u,4u,6u,7u})idx.push_back(q);
+  // order: front-face winding differs per plane; draw both orientations so it is visible from either side
+  for(uint32_t q:{0u,2u,1u,0u,3u,2u,4u,6u,5u,4u,7u,6u})idx.push_back(q);
+  ModelPrim mp;mp.mat=0;mp.cv=v;mp.ci=idx;if(r_)mp.mesh=r_->uploadSkin(v,idx);m.prims.push_back(std::move(mp));m.fit=1;m.foot=0;m.height=1.5f;m.radius=3;m.autoRig=false;return true;}
+void App::pmRefToggle(int i){const char* nm[3]={"side","front","top"};std::string as=std::string("pmref:")+nm[i];Entity* ex=nullptr;for(auto& e:scene_.ents)if(e.asset==as)ex=&e;
+  if(ex){int id=ex->id;scene_.remove(id);rebuildRows();return;}
+  Entity& ne=scene_.add(P_MODEL,std::string("Ref_")+nm[i]);ne.asset=as;ne.pos={0,0.08f,0};}
+void App::pmRefClear(){std::vector<int> ids;for(auto& e:scene_.ents)if(e.asset.rfind("pmref:",0)==0)ids.push_back(e.id);for(int id:ids)scene_.remove(id);}
 // ---- picking in screen space (framebuffer pixels)
 bool App::pmProj(Vec3 p,float& x,float& y) const{Entity* e=const_cast<App*>(this)->pmEntity();Vec3 o=e?scene_.worldPos(e->id):Vec3{0,0,0};return r_->project(p+o,x,y);}
 int App::pmPickVert(float px,float py) const{int best=-1;float bd=26*ui.s();bd*=bd;for(size_t i=0;i<pm_.d.V.size();i++){float x,y;if(!pmProj(pm_.d.V[i],x,y))continue;float dd=(x-px)*(x-px)+(y-py)*(y-py);if(dd<bd){bd=dd;best=(int)i;}}return best;}
@@ -99,12 +122,15 @@ void App::pmTap(int id){std::string dir=cur_>=0&&cur_<(int)projects_.size()?proj
   if(id==960){if(pm_.undo())pmRebuild();else toast("Nothing to undo");return;}
   if(id==965){Model m;pmModel(m);std::string err,out=data_+"/Models/Exports/PolyModel.glb";if(exportGlb(m,out,err))toast("Exported: Files > SabakEngine > Models > Exports");else toast("Export failed: "+err);return;}
   if(id==966){if(!dir.empty()){pm_.save(pdir(dir)+"/M1.ply");saveScene(true);toast("Model saved");}return;}
+  if(id>=972&&id<=974){float yw[3]={1.5708f,0.f,0.f},pt[3]={0.f,0.f,1.5f};ecYaw_=yw[id-972];ecPitch_=pt[id-972];ecDist_=std::max(ecDist_,id==972?6.f:5.f);return;}
+  if(id>=969&&id<=971){pmRefToggle(id-969);return;}
   if(id==967){ecDist_=std::max(0.6f,ecDist_*0.8f);return;} if(id==968){ecDist_=std::min(30.f,ecDist_*1.25f);return;}
 }
 
 void App::drawModelStudio(float W,float H){
   ui.rrect(0,0,W,40,0,BG1.with(0.97f),BG1.with(0.97f));ui.rrect(0,39,W,1,0,LINE,LINE);
   fbtn(5,10,7,100,26,"",0);ui.text("Done",60,12,12,Col::hex(0xffffff),F_BOLD,1);ui.text("MODEL STUDIO",122,8,12,TXT,F_BOLD);ui.text("Tap to select  |  drag empty space to orbit  |  Move tool drags the selection",122,24,10,TXT3);
+  drawToolBtn(972,W-322,8,52,24,"Side");drawToolBtn(973,W-266,8,52,24,"Front");drawToolBtn(974,W-210,8,52,24,"Top");
   drawToolBtn(967,W-136,8,56,24,"Zoom +");drawToolBtn(968,W-76,8,66,24,"Zoom -");
   float x=6,y=46,w=200,h=H-46-28;ui.shadow(x,y+2,w,h,5,10,Col::hex(0,0.35f));ui.rrect(x,y,w,h,5,BG1.with(0.96f),BG1.with(0.96f));ui.ring(x,y,w,h,5,1,LINE);ui.rrect(x+1,y+1,w-2,22,4,BG2,BG2);
   ui.text("POLY TOOLS",x+12,y+7,10.5f,TXT2,F_BOLD);
@@ -120,7 +146,8 @@ void App::drawModelStudio(float W,float H){
   {float aw=44;const char* an[4]={"X","Y","Z","Free"};for(int i=0;i<4;i++)drawToolBtn(961+i,gx+i*(aw+4),y+27+7*24,aw,21,an[i],pmAxis_==i);}
   const char* nm[2]={"Amount (extrude/inset/crease)","Soft radius (proportional)"};float val[2]={(pmAmt_+0.5f),pmProp_/1.5f};
   for(int i=0;i<2;i++){float ry=268+i*24;ui.text(nm[i],x+14,ry+1,10,TXT2,F_BOLD);float t=std::max(0.f,std::min(1.f,val[i]));ui.rrect(18,ry+14,176,5,2,BG0,BG0);ui.rrect(18,ry+14,176*t,5,2,ACC,ACC);ui.circle(18+176*t,ry+16.5f,6,Col::hex(0xffffff),Col::hex(0xffffff));}
-  drawToolBtn(965,gx,322,92,21,"Export GLB");drawToolBtn(966,gx+96,322,92,21,"Save");
+  {bool hs=false,hf=false,ht=false;for(auto& e:scene_.ents){if(e.asset=="pmref:side")hs=true;if(e.asset=="pmref:front")hf=true;if(e.asset=="pmref:top")ht=true;}drawToolBtn(969,gx,321,60,19,"Ref side",hs);drawToolBtn(970,gx+64,321,60,19,"Ref front",hf);drawToolBtn(971,gx+128,321,60,19,"Ref top",ht);}
+  drawToolBtn(965,gx,343,92,19,"Export GLB");drawToolBtn(966,gx+96,343,92,19,"Save");
   // ---- wire / vertex overlay
   if(pmWire_){float S=ui.s();Col wc=Col::hex(0xdfe6ff,0.55f),sc=Col::hex(0xffa23a,0.95f);std::set<ull> seen;
     for(auto& f:pm_.d.F)for(size_t i=0;i<f.size();i++){int a=f[i],b=f[(i+1)%f.size()];ull k=PolyMesh::key(a,b);if(!seen.insert(k).second)continue;float x0,y0,x1,y1;if(!pmProj(pm_.d.V[a],x0,y0)||!pmProj(pm_.d.V[b],x1,y1))continue;
