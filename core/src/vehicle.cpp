@@ -103,6 +103,9 @@ static void ccBox(VB& vb,Vec3 c,Vec3 h,float rx,float cr,int levels,const SkinFn
   for(auto& f:sm.F)for(size_t i=1;i+1<f.size();i++){int a=f[0],e=f[i],d=f[i+1];Vec3 n=crs(sm.V[e]-sm.V[a],sm.V[d]-sm.V[a]);Vec3 ce=(sm.V[a]+sm.V[e]+sm.V[d])*(1.f/3);bool fl=dot(n,ce)<0;vb.idx.push_back(b+a);vb.idx.push_back(b+(fl?d:e));vb.idx.push_back(b+(fl?e:d));}}
 // car body cage: ring stations along z, profile around the cross-section, wheel arches cut by lifting the lower profile, panels split by region
 struct CarPanels{VB panels,under,seams,cabin,glass,liner;};
+static const float BPT[][2]={{2.397f,.713f},{2.305f,.747f},{2.212f,.793f},{2.12f,.828f},{2.027f,.851f},{1.935f,.885f},{1.843f,.908f},{1.75f,.931f},{1.658f,.943f},{1.565f,.955f},{1.473f,.955f},{1.381f,.966f},{1.288f,.978f},{1.196f,.978f},{1.103f,.989f},{1.011f,.989f},{.919f,1.0f},{.826f,1.058f},{.734f,1.104f},{.641f,1.161f},{.549f,1.208f},{.457f,1.242f},{.364f,1.299f},{.272f,1.334f},{.179f,1.369f},{.087f,1.38f},{-.005f,1.403f},{-.098f,1.403f},{-.19f,1.38f},{-.283f,1.38f},{-.375f,1.38f},{-.467f,1.403f},{-.56f,1.403f},{-.652f,1.391f},{-.745f,1.38f},{-.837f,1.369f},{-.929f,1.38f},{-1.022f,1.391f},{-1.114f,1.311f},{-1.207f,1.288f},{-1.299f,1.265f},{-1.391f,1.23f},{-1.484f,1.208f},{-1.576f,1.173f},{-1.669f,1.15f},{-1.761f,1.104f},{-1.853f,1.081f},{-1.946f,1.069f},{-2.038f,1.046f},{-2.131f,1.035f},{-2.223f,1.035f},{-2.315f,1.012f}};
+static const int NBP=(int)(sizeof(BPT)/sizeof(BPT[0]));
+static bool g_fast=false; // fastback greenhouse (M4 coupe)
 static void carBody(CarPanels& cp,float WYc,float WR,float zF,float zR,const SkinFn& fn,int levels){
   struct St{float z,yb,yBelt,yDeck,hw;};
   std::vector<float> zs={-2.25f,-2.20f,-2.10f,-2.02f,-1.85f,-1.72f,-1.60f,-1.45f,-1.30f,-1.15f,-1.02f,-0.88f,-0.60f,-0.32f,0.10f,0.40f,0.68f,0.85f,0.98f,1.08f,1.25f,1.38f,1.50f,1.62f,1.75f,2.00f,2.10f,2.19f,2.25f};
@@ -127,7 +130,7 @@ static void carBody(CarPanels& cp,float WYc,float WR,float zF,float zR,const Ski
   std::vector<int> panelOf;
   auto classify=[&](float z,int j,float y)->int{
     if(z>2.0f||z<-2.02f)return 6;
-    bool top=(j>=7&&j<=12);if(top&&j>=8&&j<=11&&z>-1.12f&&z<0.98f)return -1;if(top){if(z>0.98f)return 1;if(z<-1.12f)return 2;return 0;}
+    bool top=(j>=7&&j<=12);if(top&&j>=8&&j<=11&&z>(g_fast?-1.66f:-1.12f)&&z<0.98f)return -1;if(top){if(z>0.98f)return 1;if(z<(g_fast?-1.66f:-1.12f))return 2;return 0;}
     bool dR=(j>=3&&j<=6),dL=(j>=13&&j<=16);if((dR||dL)&&z>-0.32f&&z<0.68f)return dR?3:4;
     if(j>=2&&j<=6)return 5;if(j>=13&&j<=17)return 5;(void)y;return 0;};
   std::vector<std::vector<int>> faceIdx;
@@ -181,15 +184,18 @@ static void carInterior(Asm& A,const SkinFn& root){
 
 static void carCabin(CarPanels& cp,int levels){
   const int K=13;SubMesh m;std::vector<std::array<int,K>> idx;
-  std::vector<float> zs={-1.20f,-1.08f,-0.95f,-0.80f,-0.55f,-0.32f,-0.10f,0.15f,0.32f,0.45f,0.62f,0.80f,0.95f,1.05f};
-  auto roofY=[&](float z){std::vector<std::pair<float,float>> k={{-1.20f,1.00f},{-1.05f,1.20f},{-0.90f,1.34f},{-0.70f,1.425f},{-0.4f,1.455f},{0.2f,1.46f},{0.45f,1.42f},{0.62f,1.30f},{0.80f,1.15f},{0.95f,1.04f},{1.05f,1.0f}};if(z<=k.front().first)return k.front().second;for(size_t i=0;i+1<k.size();i++)if(z<=k[i+1].first){float t=(z-k[i].first)/(k[i+1].first-k[i].first);t=t*t*(3-2*t);return k[i].second*(1-t)+k[i+1].second*t;}return k.back().second;};
-  auto hwAt=[&](float z){float e=std::min(z+1.20f,1.05f-z);float t=std::max(0.f,std::min(1.f,e/0.25f));return 0.40f+0.40f*t;};
+  std::vector<float> zs=g_fast?std::vector<float>{-1.72f,-1.60f,-1.45f,-1.28f,-1.10f,-0.95f,-0.80f,-0.55f,-0.32f,-0.10f,0.15f,0.32f,0.45f,0.62f,0.80f,0.95f,1.05f}:std::vector<float>{-1.20f,-1.08f,-0.95f,-0.80f,-0.55f,-0.32f,-0.10f,0.15f,0.32f,0.45f,0.62f,0.80f,0.95f,1.05f};
+  auto roofY=[&](float z){std::vector<std::pair<float,float>> k;
+    if(g_fast){k.push_back({-1.72f,1.09f});for(int i=NBP-1;i>=0;i--){float zf=BPT[i][0];if(zf<-1.70f||zf>0.95f)continue;float y=0.98f+(BPT[i][1]-0.98f)/0.86f;k.push_back({zf/1.064f,std::max(0.99f,y)});}k.push_back({1.05f,1.0f});}
+    else k={{-1.20f,1.00f},{-1.05f,1.20f},{-0.90f,1.34f},{-0.70f,1.425f},{-0.4f,1.455f},{0.2f,1.46f},{0.45f,1.42f},{0.62f,1.30f},{0.80f,1.15f},{0.95f,1.04f},{1.05f,1.0f}};
+    if(z<=k.front().first)return k.front().second;for(size_t i=0;i+1<k.size();i++)if(z<=k[i+1].first){float t=(z-k[i].first)/(k[i+1].first-k[i].first);t=t*t*(3-2*t);return k[i].second*(1-t)+k[i+1].second*t;}return k.back().second;};
+  auto hwAt=[&](float z){float e=std::min(z+(g_fast?1.72f:1.20f),1.05f-z);float t=std::max(0.f,std::min(1.f,e/(g_fast?0.55f:0.25f)));return 0.40f+0.40f*t;};
   const float T[7]={0,0.10f,0.36f,0.76f,0.965f,0.995f,1.0f},U[7]={.90f,.87f,.82f,.74f,.55f,.28f,0.f};
   for(float z:zs){float y0=0.985f,yr=roofY(z),hw=hwAt(z);float X[7],Y[7];for(int i=0;i<7;i++){X[i]=U[i]*hw;Y[i]=y0+(yr-y0)*T[i];}
     std::array<int,K> row;int n=0;for(int i=0;i<7;i++){row[n++]=(int)m.V.size();m.V.push_back({X[i],Y[i],z});}for(int i=5;i>=0;i--){row[n++]=(int)m.V.size();m.V.push_back({-X[i],Y[i],z});}idx.push_back(row);}
   std::vector<int> panelOf;
   auto cls=[&](float z,int j)->int{bool win=(j==1||j==2||j==3||j==8||j==9||j==10);bool top=(j>=4&&j<=7);
-    if(win&&z>-0.92f&&z<0.42f)return 1;if(top&&z>0.45f)return 1;if(top&&z<-0.78f)return 1;return 0;};
+    if(win&&z>-0.92f&&z<0.42f)return 1;if(top&&z>0.45f)return 1;if(top&&z<(g_fast?-1.02f:-0.78f))return 1;return 0;};
   for(size_t s=0;s+1<zs.size();s++)for(int j=0;j<K;j++){int j2=(j+1)%K;m.F.push_back({idx[s][j],idx[s][j2],idx[s+1][j2],idx[s+1][j]});panelOf.push_back(cls((zs[s]+zs[s+1])*0.5f,j));}
   {std::vector<int> a(idx.front().begin(),idx.front().end()),b(idx.back().rbegin(),idx.back().rend());m.F.push_back(a);panelOf.push_back(0);m.F.push_back(b);panelOf.push_back(0);}
   for(int pid=0;pid<2;pid++){SubMesh pm;std::map<int,int> remap;for(size_t f=0;f<m.F.size();f++)if(panelOf[f]==pid){std::vector<int> nf;for(int v:m.F[f]){auto it=remap.find(v);if(it==remap.end()){remap[v]=(int)pm.V.size();pm.V.push_back(m.V[v]);it=remap.find(v);}nf.push_back(it->second);}pm.F.push_back(nf);}
@@ -198,7 +204,7 @@ static void carCabin(CarPanels& cp,int levels){
 }
 // ---------------------------------------------------------------- CAR
 bool buildCar(Renderer& r,const std::string& spec,Model& out){
-  bool m4=spec.rfind("m4",0)==0;std::string cs=m4?(spec.size()>3?spec.substr(3):std::string()):spec;unsigned paint=parseHex(cs,m4?0x2a4a8c:0xb3202a);std::vector<unsigned char> white{255,255,255,255};
+  bool m4=spec.rfind("m4",0)==0;g_fast=m4;std::string cs=m4?(spec.size()>3?spec.substr(3):std::string()):spec;unsigned paint=parseHex(cs,m4?0x2a4a8c:0xb3202a);std::vector<unsigned char> white{255,255,255,255};
   out=Model();out.name=m4?"M4 Coupe":"Car";Asm A{&out,&r,r.createTexture(white.data(),1,1),nullptr};
   const float sx=m4?1.03f:1.f,sz=m4?1.064f:1.f,sy=m4?0.86f:1.f;
   const float WX=m4?0.905f:0.88f,WZF=m4?1.48f:1.38f,WZR=m4?-1.38f:-1.30f,WR=0.35f;
@@ -207,8 +213,23 @@ bool buildCar(Renderer& r,const std::string& spec,Model& out){
   std::vector<Vec3> hd={{0,0,0},{WX,WR,WZF},{-WX,WR,WZF},{WX,WR,WZR},{-WX,WR,WZR}};skeleton(out,nm,pa,hd);
   SkinFn root=[](SkinVertex& s,int,int){setW(s,0,1);};
   // lower body
-  CarPanels cp;carBody(cp,WR,WR,WZF/sz,WZR/sz,root,2);A.add(cp.panels,paint,5);A.add(cp.under,0x050506,9);
-  carCabin(cp,2);A.add(cp.cabin,paint,5);A.add(cp.glass,0x0b0f14,6);A.add(cp.seams,0x050506,9);A.add(cp.liner,0xb8b1a3,2);
+  CarPanels cp;carBody(cp,WR,WR,WZF/sz,WZR/sz,root,2);carCabin(cp,2);
+  if(m4&&!getenv("SABAK_NOFIT")){ // fit the upper silhouette to the real G82 side blueprint (z,height in metres, front = +z)
+    const int NB=NBP;
+    auto T=[&](float z){if(z>=BPT[0][0])return BPT[0][1];for(int i=0;i+1<NB;i++)if(z>=BPT[i+1][0]){float t=(z-BPT[i+1][0])/(BPT[i][0]-BPT[i+1][0]);return BPT[i+1][1]*(1-t)+BPT[i][1]*t;}return BPT[NB-1][1];};
+    VB* vbs[]={&cp.panels,&cp.under,&cp.cabin,&cp.glass,&cp.seams,&cp.liner};VB* fitv[]={&cp.panels,&cp.under};
+    for(VB* vb:vbs)for(auto& v:vb->v){v.p[0]*=sx;v.p[2]*=sz;if(v.p[1]>0.98f)v.p[1]=0.98f+(v.p[1]-0.98f)*sy;}
+    const int NBIN=96;float mt[NBIN];for(int i=0;i<NBIN;i++)mt[i]=0;auto binOf=[&](float z){return std::max(0,std::min(NBIN-1,(int)((z+2.5f)/5.f*NBIN)));};
+    for(VB* vb:fitv)for(auto& v:vb->v)if(v.p[1]>0.7f){int b=binOf(v.p[2]);mt[b]=std::max(mt[b],v.p[1]);}
+    for(int i=1;i<NBIN;i++)if(mt[i]<0.1f)mt[i]=mt[i-1];for(int i=NBIN-2;i>=0;i--)if(mt[i]<0.1f)mt[i]=mt[i+1];
+    float f[NBIN];for(int i=0;i<NBIN;i++){float z=-2.5f+(i+0.5f)*5.f/NBIN;f[i]=T(z)/std::max(0.5f,mt[i]);}
+    for(int i=0;i<NBIN;i++){float z=-2.5f+(i+0.5f)*5.f/NBIN;float w=std::max(0.f,std::min(1.f,std::min((z+1.65f)/0.3f,(1.05f-z)/0.2f)));w=w*w*(3-2*w);f[i]=f[i]*(1-w)+1.f*w;}
+    for(int p=0;p<3;p++){float g[NBIN];for(int i=0;i<NBIN;i++)g[i]=(f[std::max(0,i-1)]+f[i]*2+f[std::min(NBIN-1,i+1)])*0.25f;for(int i=0;i<NBIN;i++)f[i]=g[i];}
+    if(getenv("SABAK_DBG"))for(int i=0;i<NBIN;i+=4)fprintf(stderr,"bin %d z=%.2f mt=%.2f f=%.2f\n",i,-2.5f+(i+0.5f)*5.f/NBIN,mt[i],f[i]);
+    for(VB* vb:fitv)for(auto& v:vb->v){float u=(v.p[2]+2.5f)/5.f*NBIN-0.5f;int i0=std::max(0,std::min(NBIN-1,(int)std::floor(u)));int i1=std::min(NBIN-1,i0+1);float t=std::max(0.f,std::min(1.f,u-i0));float ff=f[i0]*(1-t)+f[i1]*t;
+      float w=std::max(0.f,std::min(1.f,(v.p[1]-0.55f)/0.35f));v.p[1]*=1+(ff-1)*w;}
+    auto saved=A.post;A.post=nullptr;A.add(cp.panels,paint,5);A.add(cp.under,0x050506,9);A.add(cp.cabin,paint,5);A.add(cp.glass,0x0b0f14,6);A.add(cp.seams,0x050506,9);A.add(cp.liner,0xb8b1a3,2);A.post=saved;
+  }else{A.add(cp.panels,paint,5);A.add(cp.under,0x050506,9);A.add(cp.cabin,paint,5);A.add(cp.glass,0x0b0f14,6);A.add(cp.seams,0x050506,9);A.add(cp.liner,0xb8b1a3,2);}
   carInterior(A,root);
   // door lines, trim, lights, grille, plate
   VB trim;for(int sd=-1;sd<=1;sd+=2){float x=sd*0.941f;box(trim,{x,0.37f,0.0f},{.012f,.025f,1.5f},0,root);
