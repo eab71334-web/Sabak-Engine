@@ -31,6 +31,7 @@ struct PolyMesh {
   // evaluation: mirror + subdivision -> triangles with smooth normals
   PolyData evaluate(int levels) const;
   static void triangulate(const PolyData& m,std::vector<Vec3>& P,std::vector<Vec3>& N,std::vector<uint32_t>& I);
+  static PolyData boolean(const PolyData& a,const PolyData& b,int op);   // op 0 subtract (a-b), 1 union, 2 intersect; BSP based, result is triangle-fan polygons
   bool save(const std::string& path) const; bool load(const std::string& path);
   std::vector<PolyData> undo_;
  private:

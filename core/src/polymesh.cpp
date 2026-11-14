@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <array>
+#include <memory>
 namespace sk {
 namespace {
 typedef unsigned long long ull;
@@ -116,6 +117,40 @@ void PolyMesh::triangulate(const PolyData& m,std::vector<Vec3>& P,std::vector<Ve
   P=m.V;N.assign(P.size(),Vec3{0,0,0});I.clear();
   for(auto& f:m.F){Vec3 fn=newell(m,f);for(int v:f)N[v]=N[v]+fn;for(size_t i=1;i+1<f.size();i++){I.push_back(f[0]);I.push_back(f[i]);I.push_back(f[i+1]);}}
   for(auto& n:N)n=norm(n);}
+
+// ================= BSP CSG (polygon booleans) =================
+namespace {
+struct CPlane{Vec3 n;float w;};
+struct CPoly{std::vector<Vec3> v;CPlane p;};
+static const float EPS=1e-5f;
+static CPlane planeOf(const std::vector<Vec3>& v){Vec3 n=norm(cross(v[1]-v[0],v[2]-v[0]));return {n,dot(n,v[0])};}
+static void splitPoly(const CPlane& pl,const CPoly& po,std::vector<CPoly>& cf,std::vector<CPoly>& cb,std::vector<CPoly>& f,std::vector<CPoly>& b){
+  int ty=0;std::vector<int> t;for(auto& v:po.v){float d=dot(pl.n,v)-pl.w;int k=d<-EPS?2:d>EPS?1:0;ty|=k;t.push_back(k);}
+  if(ty==0){(dot(pl.n,po.p.n)>0?cf:cb).push_back(po);}
+  else if(ty==1)f.push_back(po);else if(ty==2)b.push_back(po);
+  else{CPoly pf,pb;pf.p=pb.p=po.p;size_t n=po.v.size();for(size_t i=0;i<n;i++){size_t j=(i+1)%n;int ti=t[i],tj=t[j];Vec3 vi=po.v[i],vj=po.v[j];
+      if(ti!=2)pf.v.push_back(vi);if(ti!=1)pb.v.push_back(vi);
+      if((ti|tj)==3){float tt=(pl.w-dot(pl.n,vi))/dot(pl.n,vj-vi);Vec3 vv=vi+(vj-vi)*tt;pf.v.push_back(vv);pb.v.push_back(vv);}}
+    if(pf.v.size()>=3)f.push_back(pf);if(pb.v.size()>=3)b.push_back(pb);}}
+struct Node{bool has=false;CPlane pl;std::vector<CPoly> polys;std::unique_ptr<Node> front,back;
+  void build(const std::vector<CPoly>& ps){if(ps.empty())return;if(!has){pl=ps[0].p;has=true;}std::vector<CPoly> f,b;for(auto& p:ps)splitPoly(pl,p,polys,polys,f,b);
+    if(!f.empty()){if(!front)front.reset(new Node);front->build(f);}if(!b.empty()){if(!back)back.reset(new Node);back->build(b);}}
+  void invert(){for(auto& p:polys){std::reverse(p.v.begin(),p.v.end());p.p.n=p.p.n*-1.f;p.p.w=-p.p.w;}pl.n=pl.n*-1.f;pl.w=-pl.w;if(front)front->invert();if(back)back->invert();std::swap(front,back);}
+  std::vector<CPoly> clip(const std::vector<CPoly>& ps)const{if(!has)return ps;std::vector<CPoly> f,b;for(auto& p:ps)splitPoly(pl,p,f,b,f,b);
+    if(front)f=front->clip(f);if(back)b=back->clip(b);else b.clear();f.insert(f.end(),b.begin(),b.end());return f;}
+  void clipTo(const Node& o){polys=o.clip(polys);if(front)front->clipTo(o);if(back)back->clipTo(o);}
+  void all(std::vector<CPoly>& out)const{out.insert(out.end(),polys.begin(),polys.end());if(front)front->all(out);if(back)back->all(out);}
+};
+static std::vector<CPoly> toPolys(const PolyData& m){std::vector<CPoly> o;for(auto& f:m.F)for(size_t i=1;i+1<f.size();i++){CPoly p;p.v={m.V[f[0]],m.V[f[i]],m.V[f[i+1]]};Vec3 n=cross(p.v[1]-p.v[0],p.v[2]-p.v[0]);if(dot(n,n)<1e-14f)continue;p.p=planeOf(p.v);o.push_back(p);}return o;}
+}
+PolyData PolyMesh::boolean(const PolyData& A,const PolyData& B,int op){
+  Node a,b;a.build(toPolys(A));b.build(toPolys(B));
+  if(op==0){a.invert();a.clipTo(b);b.clipTo(a);b.invert();b.clipTo(a);b.invert();std::vector<CPoly> bp;b.all(bp);a.build(bp);a.invert();}
+  else if(op==1){a.clipTo(b);b.clipTo(a);b.invert();b.clipTo(a);b.invert();std::vector<CPoly> bp;b.all(bp);a.build(bp);}
+  else{a.invert();b.clipTo(a);b.invert();a.clipTo(b);b.clipTo(a);std::vector<CPoly> bp;b.all(bp);a.build(bp);a.invert();}
+  std::vector<CPoly> res;a.all(res);PolyData o;std::map<std::array<long long,3>,int> wm;auto W=[&](Vec3 p){std::array<long long,3> k{(long long)std::llround(p.x*20000),(long long)std::llround(p.y*20000),(long long)std::llround(p.z*20000)};auto it=wm.find(k);if(it!=wm.end())return it->second;int i=(int)o.V.size();o.V.push_back(p);wm[k]=i;return i;};
+  for(auto& p:res){std::vector<int> f;for(auto& v:p.v){int i=W(v);if(f.empty()||f.back()!=i)f.push_back(i);}while(f.size()>1&&f.front()==f.back())f.pop_back();if(f.size()>=3)o.F.push_back(f);}
+  return o;}
 bool PolyMesh::save(const std::string& path) const{FILE* f=fopen(path.c_str(),"wb");if(!f)return false;int n=(int)d.V.size(),nf=(int)d.F.size(),nc=(int)d.crease.size();fwrite("PLY1",1,4,f);fwrite(&n,4,1,f);fwrite(d.V.data(),sizeof(Vec3),n,f);fwrite(&nf,4,1,f);
   for(auto& F:d.F){int k=(int)F.size();fwrite(&k,4,1,f);fwrite(F.data(),4,k,f);}fwrite(&nc,4,1,f);for(auto& kv:d.crease){fwrite(&kv.first,8,1,f);fwrite(&kv.second,4,1,f);}fwrite(&mirrorX,1,1,f);fwrite(&subLevels,4,1,f);fclose(f);return true;}
 bool PolyMesh::load(const std::string& path){FILE* f=fopen(path.c_str(),"rb");if(!f)return false;char h[4];if(fread(h,1,4,f)!=4||std::string(h,4)!="PLY1"){fclose(f);return false;}PolyData t;int n=0;if(fread(&n,4,1,f)!=1||n<0||n>5000000){fclose(f);return false;}

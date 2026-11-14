@@ -68,8 +68,8 @@ private:
   // character creator (creator.cpp)
   bool scEd_=false; Sculpt sc_; int scDrag_=-1,scDragId_=-1,scStroke_=-1,scBase_=0; Entity* scEntity(); void openSculpt(); void closeSculpt(); void scRebuild(); bool scPointer(int type,int id,float px,float py); void scTap(int id); void drawSculpt(float W,float H); void scLive(); void scBuildBase(int b); bool scModel(Model& m);
   // model studio (modelui.cpp)
-  bool pmEd_=false; PolyMesh pm_; int pmTool_=0,pmAxis_=3,pmDrag_=-1,pmDragId_=-1,pmMove_=-1,pmTapId_=-1; float pmAmt_=0.15f,pmProp_=0.f,pmLX_=0,pmLY_=0,pmTX_=0,pmTY_=0; bool pmMulti_=false,pmWire_=true,pmTapMoved_=false;
-  Entity* pmEntity(); void openModel(); void closeModel(); void pmRebuild(); void pmLive(); void pmPrim(int k); bool pmRefModel(const std::string& nm,Model& m); void pmRefToggle(int i); void pmRefClear(); bool pmModel(Model& m); void pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx) const;
+  bool pmEd_=false; PolyMesh pm_,pmOther_; int pmObj_=0; int pmTool_=0,pmAxis_=3,pmDrag_=-1,pmDragId_=-1,pmMove_=-1,pmTapId_=-1; float pmAmt_=0.15f,pmProp_=0.f,pmLX_=0,pmLY_=0,pmTX_=0,pmTY_=0; bool pmMulti_=false,pmWire_=true,pmTapMoved_=false;
+  Entity* pmEntity(); void openModel(); void closeModel(); void pmRebuild(); void pmLive(); void pmPrim(int k); bool pmRefModel(const std::string& nm,Model& m); void pmRefToggle(int i); void pmRefClear(); bool pmModel(Model& m); void pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx,bool cutter) const; bool pmCutModel(Model& m);
   bool pmProj(Vec3 p,float& x,float& y) const; int pmPickVert(float px,float py) const; ull pmPickEdge(float px,float py) const; int pmPickFace(float px,float py) const; bool pmPointer(int type,int id,float px,float py); void pmTap(int id); void drawModelStudio(float W,float H);
   bool crEd_=false,crDirty_=false; CharDef cr_; int crSel_=0,crDrag_=-1,crDragId_=-1,crPage_=0; float crT_=0;
   void openCreator(); void closeCreator(); void crRebuild(); void crSwitch(const std::string& n); void crUpdate(float dt); bool crPointer(int type,int id,float px,float py); void crTap(int id); void drawCreator(float W,float H); Entity* crEntity();

@@ -12,36 +12,42 @@ namespace fs=std::filesystem;
 static std::string pdir(const std::string& proj){return proj+"/pmodels";}
 Entity* App::pmEntity(){for(auto& e:scene_.ents)if(e.prim==P_MODEL&&e.asset.rfind("pmodel:",0)==0)return &e;return nullptr;}
 
-void App::pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx) const{
-  PolyData m=pm_.evaluate(pm_.subLevels);v.clear();idx.clear();
+void App::pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx,bool cutter) const{
+  const PolyMesh& P=(pmObj_==0)!=cutter?pm_:pmOther_;PolyData m=P.evaluate(P.subLevels);v.clear();idx.clear();
   auto push=[&](Vec3 p,Vec3 n){SkinVertex s{};s.p[0]=p.x;s.p[1]=p.y;s.p[2]=p.z;s.n[0]=n.x;s.n[1]=n.y;s.n[2]=n.z;s.uv[0]=p.z*0.5f+p.x*0.3f;s.uv[1]=p.y*0.5f+p.x*0.2f;s.j[0]=0;s.w[0]=1;v.push_back(s);};
-  if(pm_.subLevels==0){for(auto& f:m.F){Vec3 n{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 a=m.V[f[i]],b=m.V[f[(i+1)%f.size()]];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}n=norm(n);
+  if(P.subLevels==0){for(auto& f:m.F){Vec3 n{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 a=m.V[f[i]],b=m.V[f[(i+1)%f.size()]];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}n=norm(n);
       uint32_t b0=(uint32_t)v.size();for(int k:f)push(m.V[k],n);for(size_t i=1;i+1<f.size();i++){idx.push_back(b0);idx.push_back(b0+(uint32_t)i);idx.push_back(b0+(uint32_t)i+1);}}}
   else{std::vector<Vec3> P,N;PolyMesh::triangulate(m,P,N,idx);for(size_t i=0;i<P.size();i++)push(P[i],N[i]);}}
 
 bool App::pmModel(Model& m){
   if(pm_.d.F.empty()){std::string dir=cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir:"";if(dir.empty()||!pm_.load(pdir(dir)+"/M1.ply"))pmPrim(0);}
-  std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx);
+  std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false);
   m=Model();m.name="PolyModel";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
   ModelMat mm;mm.kind=5;mm.col[0]=0.16f;mm.col[1]=0.29f;mm.col[2]=0.55f;mm.col[3]=1;if(r_){unsigned char wh[4]={255,255,255,255};mm.tex=r_->createTexture(wh,1,1);}m.mats.push_back(mm);
   ModelPrim mp;mp.mat=0;mp.cv=v;mp.ci=idx;if(r_&&!idx.empty())mp.mesh=r_->uploadSkin(v,idx);m.prims.push_back(std::move(mp));
   float top=0.5f;for(auto& s:v)top=std::max(top,s.p[1]);m.fit=1;m.foot=0;m.height=top;m.radius=2;m.autoRig=false;return true;}
 
-void App::pmRebuild(){Entity* e=pmEntity();if(!e)return;models_.erase(e->asset);
-  for(auto i2=minst_.begin();i2!=minst_.end();){if(i2->first.first==&scene_&&i2->first.second==e->id)i2=minst_.erase(i2);else ++i2;}modelFor(e->asset);}
-void App::pmLive(){Entity* e=pmEntity();if(!e)return;Model* m=modelFor(e->asset);if(!m||m->prims.empty())return;std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx);
+bool App::pmCutModel(Model& m){std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,true);
+  m=Model();m.name="Cutter";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
+  ModelMat mm;mm.kind=13;mm.col[0]=mm.col[1]=mm.col[2]=mm.col[3]=1;if(r_){unsigned char rd[4]={255,70,70,120};mm.tex=r_->createTexture(rd,1,1);}m.mats.push_back(mm);
+  ModelPrim mp;mp.mat=0;mp.cv=v;mp.ci=idx;if(r_&&!idx.empty())mp.mesh=r_->uploadSkin(v,idx);m.prims.push_back(std::move(mp));m.fit=1;m.foot=0;m.height=1;m.radius=2;m.autoRig=false;return true;}
+void App::pmRebuild(){Entity* e=pmEntity();if(!e)return;models_.erase(e->asset);models_.erase("pmcut:M2");
+  for(auto i2=minst_.begin();i2!=minst_.end();){const Entity* en=scene_.get(i2->first.second);if(i2->first.first==&scene_&&en&&(en->asset==e->asset||en->asset=="pmcut:M2"))i2=minst_.erase(i2);else ++i2;}modelFor(e->asset);}
+void App::pmLive(){Entity* e=pmEntity();if(!e)return;Model* m=modelFor(e->asset);if(!m||m->prims.empty())return;std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false);
   if(v.size()==m->prims[0].cv.size()&&idx.size()==m->prims[0].ci.size()){m->prims[0].cv=v;r_->updateSkin(m->prims[0].mesh,v);}else pmRebuild();}
 
 void App::pmPrim(int k){bool half=pm_.mirrorX;float cx=half?0.6f:0.f;
-  if(k==0)pm_.cube({cx,0.8f,0},{0.6f,0.6f,0.6f});else if(k==1){pm_.cylinder({0,0.8f,0},0.6f,1.2f,12);}else{pm_.grid(8,2.f);for(auto& p:pm_.d.V){p.y+=0.1f;if(half)p.x+=1.f;}
+  if(k==0)pm_.cube({cx,0.8f,0},{0.6f,0.6f,0.6f});else if(k==1){pm_.cylinder({0,0.8f,0},0.6f,1.2f,12);if(pmObj_==1){for(auto& p:pm_.d.V){float yy=p.y-0.8f;p={yy,0.8f+p.x*0+0,p.z};}}}else{pm_.grid(8,2.f);for(auto& p:pm_.d.V){p.y+=0.1f;if(half)p.x+=1.f;}
     if(half){std::vector<std::vector<int>> nf;for(auto& f:pm_.d.F){bool ok=true;for(int v:f)if(pm_.d.V[v].x<-1e-4f)ok=false;if(ok)nf.push_back(f);}pm_.d.F=nf;}}
   pm_.selectNone();pm_.mode=2;}
 
 void App::openModel(){if(cur_<0||cur_>=(int)projects_.size())return;std::string dir=projects_[cur_].dir;std::error_code ec;fs::create_directories(pdir(dir),ec);
   Entity* e=pmEntity();if(!e){Entity& ne=scene_.add(P_MODEL,"PolyModel");ne.asset="pmodel:M1";ne.pos={0,0.08f,0};e=scene_.get(ne.id);rebuildRows();}
-  pm_=PolyMesh();if(!pm_.load(pdir(dir)+"/M1.ply"))pmPrim(0);pm_.subLevels=std::max(pm_.subLevels,0);pmEd_=true;pmDrag_=-1;scEd_=false;animEd_=false;crEd_=false;select(e->id);pmRebuild();
+  pmObj_=0;pm_=PolyMesh();pmOther_=PolyMesh();if(!pm_.load(pdir(dir)+"/M1.ply"))pmPrim(0);
+  if(!pmOther_.load(pdir(dir)+"/M2.ply")){pmOther_.mirrorX=false;pmOther_.cube({0,0.8f,0},{0.35f,0.35f,0.35f});pmOther_.mirrorX=false;}
+  {bool has=false;for(auto& q:scene_.ents)if(q.asset=="pmcut:M2")has=true;if(!has){Entity& ce=scene_.add(P_MODEL,"Cutter");ce.asset="pmcut:M2";ce.pos={0,0.08f,0};}}pm_.subLevels=std::max(pm_.subLevels,0);pmEd_=true;pmDrag_=-1;scEd_=false;animEd_=false;crEd_=false;select(e->id);pmRebuild();
   Vec3 p=scene_.worldPos(e->id);ecTarget_={p.x,p.y+0.9f,p.z};ecDist_=4.2f;ecPitch_=0.35f;ecYaw_=0.7f;}
-void App::closeModel(){if(cur_>=0&&cur_<(int)projects_.size())pm_.save(pdir(projects_[cur_].dir)+"/M1.ply");pmRefClear();pmEd_=false;}
+void App::closeModel(){if(pmObj_==1){std::swap(pm_,pmOther_);pmObj_=0;}if(cur_>=0&&cur_<(int)projects_.size()){pm_.save(pdir(projects_[cur_].dir)+"/M1.ply");pmOther_.save(pdir(projects_[cur_].dir)+"/M2.ply");}pmRefClear();pmEd_=false;}
 
 
 // ---- reference (blueprint) planes: real-scale drawings shown behind/around the model
@@ -64,7 +70,7 @@ bool App::pmRefModel(const std::string& nm,Model& m){
 void App::pmRefToggle(int i){const char* nm[3]={"side","front","top"};std::string as=std::string("pmref:")+nm[i];Entity* ex=nullptr;for(auto& e:scene_.ents)if(e.asset==as)ex=&e;
   if(ex){int id=ex->id;scene_.remove(id);rebuildRows();return;}
   Entity& ne=scene_.add(P_MODEL,std::string("Ref_")+nm[i]);ne.asset=as;ne.pos={0,0.08f,0};}
-void App::pmRefClear(){std::vector<int> ids;for(auto& e:scene_.ents)if(e.asset.rfind("pmref:",0)==0)ids.push_back(e.id);for(int id:ids)scene_.remove(id);}
+void App::pmRefClear(){std::vector<int> ids;for(auto& e:scene_.ents)if(e.asset.rfind("pmref:",0)==0||e.asset=="pmcut:M2")ids.push_back(e.id);for(int id:ids)scene_.remove(id);}
 // ---- picking in screen space (framebuffer pixels)
 bool App::pmProj(Vec3 p,float& x,float& y) const{Entity* e=const_cast<App*>(this)->pmEntity();Vec3 o=e?scene_.worldPos(e->id):Vec3{0,0,0};return r_->project(p+o,x,y);}
 int App::pmPickVert(float px,float py) const{int best=-1;float bd=26*ui.s();bd*=bd;for(size_t i=0;i<pm_.d.V.size();i++){float x,y;if(!pmProj(pm_.d.V[i],x,y))continue;float dd=(x-px)*(x-px)+(y-py)*(y-py);if(dd<bd){bd=dd;best=(int)i;}}return best;}
@@ -121,7 +127,10 @@ void App::pmTap(int id){std::string dir=cur_>=0&&cur_<(int)projects_.size()?proj
   if(id>=961&&id<=964){pmAxis_=id-961;return;}
   if(id==960){if(pm_.undo())pmRebuild();else toast("Nothing to undo");return;}
   if(id==965){Model m;pmModel(m);std::string err,out=data_+"/Models/Exports/PolyModel.glb";if(exportGlb(m,out,err))toast("Exported: Files > SabakEngine > Models > Exports");else toast("Export failed: "+err);return;}
-  if(id==966){if(!dir.empty()){pm_.save(pdir(dir)+"/M1.ply");saveScene(true);toast("Model saved");}return;}
+  if(id==966){if(!dir.empty()){(pmObj_==0?pm_:pmOther_).save(pdir(dir)+"/M1.ply");(pmObj_==0?pmOther_:pm_).save(pdir(dir)+"/M2.ply");saveScene(true);toast("Model saved");}return;}
+  if(id==975){std::swap(pm_,pmOther_);pmObj_^=1;pm_.selectNone();toast(pmObj_?"Editing the CUTTER (red)":"Editing the MODEL");return;}
+  if(id>=976&&id<=978){if(pmObj_==1){std::swap(pm_,pmOther_);pmObj_=0;}pm_.snapshot();PolyData A=pm_.evaluate(pm_.subLevels),B=pmOther_.evaluate(pmOther_.subLevels);PolyData R=PolyMesh::boolean(A,B,id-976);
+    if(R.F.empty()||R.V.empty()){toast("Boolean gave an empty result");return;}pm_.d=R;pm_.mirrorX=false;pm_.subLevels=0;pm_.selectNone();pmRebuild();toast(id==976?"Subtracted":id==977?"Union done":"Intersect done");return;}
   if(id>=972&&id<=974){float yw[3]={1.5708f,0.f,0.f},pt[3]={0.f,0.f,1.5f};ecYaw_=yw[id-972];ecPitch_=pt[id-972];ecDist_=std::max(ecDist_,id==972?6.f:5.f);return;}
   if(id>=969&&id<=971){pmRefToggle(id-969);return;}
   if(id==967){ecDist_=std::max(0.6f,ecDist_*0.8f);return;} if(id==968){ecDist_=std::min(30.f,ecDist_*1.25f);return;}
@@ -129,7 +138,8 @@ void App::pmTap(int id){std::string dir=cur_>=0&&cur_<(int)projects_.size()?proj
 
 void App::drawModelStudio(float W,float H){
   ui.rrect(0,0,W,40,0,BG1.with(0.97f),BG1.with(0.97f));ui.rrect(0,39,W,1,0,LINE,LINE);
-  fbtn(5,10,7,100,26,"",0);ui.text("Done",60,12,12,Col::hex(0xffffff),F_BOLD,1);ui.text("MODEL STUDIO",122,8,12,TXT,F_BOLD);ui.text("Tap to select  |  drag empty space to orbit  |  Move tool drags the selection",122,24,10,TXT3);
+  fbtn(5,10,7,100,26,"",0);ui.text("Done",60,12,12,Col::hex(0xffffff),F_BOLD,1);ui.text("MODEL STUDIO",122,14,12,TXT,F_BOLD);
+  drawToolBtn(975,232,8,92,24,pmObj_?"Obj: Cutter":"Obj: Model",pmObj_==1);drawToolBtn(976,328,8,64,24,"Subtract");drawToolBtn(977,396,8,50,24,"Union");drawToolBtn(978,450,8,64,24,"Intersect");
   drawToolBtn(972,W-322,8,52,24,"Side");drawToolBtn(973,W-266,8,52,24,"Front");drawToolBtn(974,W-210,8,52,24,"Top");
   drawToolBtn(967,W-136,8,56,24,"Zoom +");drawToolBtn(968,W-76,8,66,24,"Zoom -");
   float x=6,y=46,w=200,h=H-46-28;ui.shadow(x,y+2,w,h,5,10,Col::hex(0,0.35f));ui.rrect(x,y,w,h,5,BG1.with(0.96f),BG1.with(0.96f));ui.ring(x,y,w,h,5,1,LINE);ui.rrect(x+1,y+1,w-2,22,4,BG2,BG2);
@@ -148,6 +158,8 @@ void App::drawModelStudio(float W,float H){
   for(int i=0;i<2;i++){float ry=268+i*24;ui.text(nm[i],x+14,ry+1,10,TXT2,F_BOLD);float t=std::max(0.f,std::min(1.f,val[i]));ui.rrect(18,ry+14,176,5,2,BG0,BG0);ui.rrect(18,ry+14,176*t,5,2,ACC,ACC);ui.circle(18+176*t,ry+16.5f,6,Col::hex(0xffffff),Col::hex(0xffffff));}
   {bool hs=false,hf=false,ht=false;for(auto& e:scene_.ents){if(e.asset=="pmref:side")hs=true;if(e.asset=="pmref:front")hf=true;if(e.asset=="pmref:top")ht=true;}drawToolBtn(969,gx,321,60,19,"Ref side",hs);drawToolBtn(970,gx+64,321,60,19,"Ref front",hf);drawToolBtn(971,gx+128,321,60,19,"Ref top",ht);}
   drawToolBtn(965,gx,343,92,19,"Export GLB");drawToolBtn(966,gx+96,343,92,19,"Save");
+  // ---- cutter wire (red) when editing the model
+  if(pmWire_&&pmObj_==0){float S=ui.s();std::set<ull> seen;for(auto& f:pmOther_.d.F)for(size_t i=0;i<f.size();i++){int a=f[i],b=f[(i+1)%f.size()];if(!seen.insert(PolyMesh::key(a,b)).second)continue;float x0,y0,x1,y1;if(!pmProj(pmOther_.d.V[a],x0,y0)||!pmProj(pmOther_.d.V[b],x1,y1))continue;ui.line(x0/S,y0/S,x1/S,y1/S,1.1f,Col::hex(0xff5a5a,0.9f));}}
   // ---- wire / vertex overlay
   if(pmWire_){float S=ui.s();Col wc=Col::hex(0xdfe6ff,0.55f),sc=Col::hex(0xffa23a,0.95f);std::set<ull> seen;
     for(auto& f:pm_.d.F)for(size_t i=0;i<f.size();i++){int a=f[i],b=f[(i+1)%f.size()];ull k=PolyMesh::key(a,b);if(!seen.insert(k).second)continue;float x0,y0,x1,y1;if(!pmProj(pm_.d.V[a],x0,y0)||!pmProj(pm_.d.V[b],x1,y1))continue;
