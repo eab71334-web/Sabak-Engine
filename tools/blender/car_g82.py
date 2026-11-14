@@ -139,7 +139,8 @@ apply_mods(body)
 
 # greenhouse (cabin) lofted separately, tumblehome
 def cab_ring(f):
-    hw = half_w(f); roof = top_h(f)
+    tp = lambda t: max(0.0, min(1.0, t))*max(0.0, min(1.0, t))*(3-2*max(0.0, min(1.0, t)))
+    hw = half_w(f)*(0.45+0.55*tp((f+1.80)/0.8)*tp((1.04-f)/0.55)); roof = top_h(f)
     base = BELT-0.01
     if roof <= base+0.02: roof = base+0.02
     return [(0.0, base), (0.86*hw, base), (0.80*hw, base+0.10*(roof-base)/0.4+0.12), (0.66*hw, roof-0.07), (0.40*hw, roof-0.015), (0.0, roof)]
