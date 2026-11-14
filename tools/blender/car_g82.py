@@ -83,8 +83,8 @@ def ring_pts(f):
     hw = half_w(f); deck = min(top_h(f), BELT)
     # arch lift is done by boolean, not here
     zb = 0.16 + (0.0 if abs(f) < 2.0 else 0.10*(abs(f)-2.0)/0.4)
-    zs = [zb, zb, zb+0.06, 0.40, 0.68, deck-0.12, deck-0.03, deck-0.005, deck]
-    us = [0.0, 0.80, 0.96, 1.0, 1.0, 0.985, 0.93, 0.55, 0.0]
+    zs = [zb, zb, zb+0.06, 0.40, 0.68, deck-0.12, deck-0.03, deck-0.006, deck-0.004, deck]
+    us = [0.0, 0.80, 0.96, 1.0, 1.0, 0.985, 0.92, 0.865 if deck > 0.95 else 0.6, 0.45, 0.0]
     if deck < 0.9:  # low nose / tail: pull shoulder in
         pass
     return [(u*hw, z) for u, z in zip(us, zs)]
@@ -115,7 +115,7 @@ M_BLACK = mat('BlackTrim', rgb(0x0a0a0c), rough=0.45)
 M_GLASS = mat('Glass', rgb(0x0d1418), rough=0.03, alpha=0.35)
 M_CHROME = mat('Chrome', rgb(0xdadde3), metal=1.0, rough=0.12)
 M_TIRE = mat('Rubber', rgb(0x0c0c0d), rough=0.85)
-M_RIM = mat('Rim', rgb(0x23252a), metal=1.0, rough=0.28)
+M_RIM = mat('Rim', rgb(0x5a5f69), metal=1.0, rough=0.25)
 M_RED = mat('Caliper', rgb(0xc4161c), rough=0.4)
 M_DISC = mat('Disc', rgb(0x8a8d93), metal=1.0, rough=0.35)
 M_LEATHER = mat('Leather', rgb(0x3a261c), rough=0.55)
@@ -142,7 +142,7 @@ def cab_ring(f):
     hw = half_w(f); roof = top_h(f)
     base = BELT-0.01
     if roof <= base+0.02: roof = base+0.02
-    return [(0.0, base), (0.82*hw, base), (0.78*hw, base+0.10*(roof-base)/0.4+0.12), (0.66*hw, roof-0.07), (0.40*hw, roof-0.015), (0.0, roof)]
+    return [(0.0, base), (0.86*hw, base), (0.80*hw, base+0.10*(roof-base)/0.4+0.12), (0.66*hw, roof-0.07), (0.40*hw, roof-0.015), (0.0, roof)]
 st_cab = [1.0, .9, .75, .55, .35, .1, -.15, -.4, -.65, -.9, -1.1, -1.3, -1.5, -1.65, -1.78]
 def cab_mat(f, j, n):
     # right side: ring indices 0..5 -> segments j=0 (floor), 1 (lower side), 2 (upper side glass), 3 (roof shoulder), 4 (roof)
@@ -188,12 +188,12 @@ def make_wheel(name, f, side):
     parts = []
     bpy.ops.mesh.primitive_cylinder_add(radius=0.355, depth=0.255, vertices=64, rotation=(0, math.radians(90), 0), location=(x, -f, WHEEL_R)); t = bpy.context.active_object
     modifier(t, 'BEVEL', width=0.05, segments=4); t.data.materials.append(M_TIRE); parts.append(t)
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.24, depth=0.07, vertices=64, rotation=(0, math.radians(90), 0), location=(x+side*0.09, -f, WHEEL_R)); r = bpy.context.active_object
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.24, depth=0.07, vertices=64, rotation=(0, math.radians(90), 0), location=(x+side*0.118, -f, WHEEL_R)); r = bpy.context.active_object
     modifier(r, 'BEVEL', width=0.012, segments=2); r.data.materials.append(M_RIM); parts.append(r)
     for k in range(10):
         a = k*math.tau/10
-        bpy.ops.mesh.primitive_cube_add(size=1, location=(x+side*0.122, -f, WHEEL_R)); s = bpy.context.active_object
-        s.scale = (0.012, 0.035, 0.205); s.rotation_euler = (a, 0, 0); s.data.materials.append(M_RIM); parts.append(s)
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(x+side*0.152, -f, WHEEL_R)); s = bpy.context.active_object
+        s.scale = (0.014, 0.04, 0.215); s.rotation_euler = (a, 0, 0); s.data.materials.append(M_RIM); parts.append(s)
     bpy.ops.mesh.primitive_cylinder_add(radius=0.205, depth=0.03, vertices=48, rotation=(0, math.radians(90), 0), location=(x-side*0.07, -f, WHEEL_R)); dsc = bpy.context.active_object
     dsc.data.materials.append(M_DISC); parts.append(dsc)
     bpy.ops.mesh.primitive_cube_add(size=1, location=(x-side*0.045, -f-0.0, WHEEL_R+0.16)); cal = bpy.context.active_object
@@ -210,15 +210,15 @@ wheels = [make_wheel('wheel.FR', WB_F, 1), make_wheel('wheel.FL', WB_F, -1), mak
 # ---------------- grille, lights, plates, interior ----------------
 dets = []
 for side in (-1, 1):   # twin kidney grille (rounded boxes)
-    g = box('kidney', (side*0.115, -2.385, 0.60), (0.20, 0.03, 0.27), M_BLACK, bevel=0.07); dets.append(g)
-    fr = box('kidney_frame', (side*0.115, -2.395, 0.60), (0.215, 0.012, 0.285), M_CHROME, bevel=0.07); dets.append(fr)
-    hl = box('headlight', (side*0.60, -2.30, 0.76), (0.34, 0.12, 0.085), M_HEAD, bevel=0.03); dets.append(hl)
-    tl = box('taillight', (side*0.68, 2.34, 0.88), (0.42, 0.06, 0.09), M_TAIL, bevel=0.02); dets.append(tl)
+    g = box('kidney', (side*0.115, -2.36, 0.50), (0.19, 0.03, 0.21), M_BLACK, bevel=0.07); dets.append(g)
+    fr = box('kidney_frame', (side*0.115, -2.37, 0.50), (0.205, 0.012, 0.225), M_CHROME, bevel=0.07); dets.append(fr)
+    hl = box('headlight', (side*0.50, -2.22, 0.745), (0.30, 0.10, 0.07), M_HEAD, bevel=0.03); dets.append(hl)
+    tl = box('taillight', (side*0.52, 2.25, 0.90), (0.36, 0.06, 0.08), M_TAIL, bevel=0.02); dets.append(tl)
     for q in range(2):
-        ex = box('exhaust', (side*(0.36+q*0.2), 2.39, 0.34), (0.09, 0.09, 0.09), M_CHROME, bevel=0.04); dets.append(ex)
-dets.append(box('splitter', (0, -2.35, 0.20), (1.50, 0.18, 0.03), M_BLACK, bevel=0.01))
+        ex = box('exhaust', (side*(0.28+q*0.17), 2.33, 0.34), (0.09, 0.09, 0.09), M_CHROME, bevel=0.04); dets.append(ex)
+dets.append(box('splitter', (0, -2.30, 0.19), (1.25, 0.16, 0.025), M_BLACK, bevel=0.01))
 dets.append(box('diffuser', (0, 2.30, 0.25), (1.30, 0.2, 0.08), M_BLACK, bevel=0.01))
-dets.append(box('plate', (0, 2.405, 0.62), (0.52, 0.01, 0.12), M_CHROME))
+dets.append(box('plate', (0, 2.36, 0.60), (0.52, 0.01, 0.12), M_CHROME))
 for side in (-1, 1):
     dets.append(box('mirror', (side*1.0, -0.62, 1.04), (0.16, 0.10, 0.08), M_BLACK, bevel=0.03))
 # seats
