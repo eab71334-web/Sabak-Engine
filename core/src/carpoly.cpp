@@ -87,7 +87,7 @@ static void paintCar(PolyMesh& pm){
   PolyData& d=pm.d;d.M.assign(d.F.size(),0);
   for(size_t i=0;i<d.F.size();i++){auto& f=d.F[i];Vec3 c{0,0,0};for(int v:f)c=c+d.V[v];c=c*(1.f/f.size());Vec3 n=pm.faceNormal((int)i);float ax=std::fabs(c.x);int m=0;
     float dF=std::hypot(c.y-0.35f,c.z-1.48f),dR=std::hypot(c.y-0.35f,c.z+1.377f);
-    if(ax>0.62f&&(dF<0.47f||dR<0.47f)&&c.y<0.85f)m=3;                       // inside of wheel arch
+    if(ax>0.62f&&(dF<0.47f||dR<0.47f)&&c.y<0.85f&&(n.y*(c.y-0.355f)+n.z*(c.z-(dF<dR?1.48f:-1.377f)))<-0.05f)m=3;                       // inside of wheel arch
     else if(c.y<0.27f)m=3;                                                   // under-body / splitter / diffuser
     else if(c.y>0.99f&&c.y<1.40f){
       bool wind=c.z>0.30f&&c.z<1.10f&&n.z>0.35f&&n.y<0.8f;
@@ -199,11 +199,34 @@ static void addExtras(PolyMesh& pm){
   addBox(pm,{-0.38f,0.84f,0.36f},{0.16f,0.16f,0.012f},3);
   for(int s=-1;s<=1;s+=2){addBox(pm,{s*0.38f,0.44f,-0.10f},{0.21f,0.07f,0.24f},7);addBox(pm,{s*0.38f,0.70f,-0.36f},{0.21f,0.27f,0.06f},7);addBox(pm,{s*0.38f,0.99f,-0.38f},{0.12f,0.07f,0.04f},7);}
   addBox(pm,{0,0.44f,-0.88f},{0.62f,0.07f,0.20f},7);addBox(pm,{0,0.68f,-1.06f},{0.62f,0.24f,0.05f},7);}
+
+// ---- sculpt pass: scripted brush strokes (inflate / pinch / carve / smooth) on the dense welded body, like a sculptor refining panels
+static void sculptCar(PolyData& d){
+  size_t n=d.V.size();std::vector<Vec3> N(n,Vec3{0,0,0});std::vector<std::vector<int>> nb(n);
+  for(auto& f:d.F){Vec3 a{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 p=d.V[f[i]],q=d.V[f[(i+1)%f.size()]];a.x+=(p.y-q.y)*(p.z+q.z);a.y+=(p.z-q.z)*(p.x+q.x);a.z+=(p.x-q.x)*(p.y+q.y);}
+    for(size_t i=0;i<f.size();i++){N[f[i]]=N[f[i]]+a;int u=f[i],w=f[(i+1)%f.size()];nb[u].push_back(w);nb[w].push_back(u);}}
+  for(auto& v:N)v=norm(v);
+  auto sm=[](float t){t=std::max(0.f,std::min(1.f,t));return t*t*(3-2*t);};
+  auto ga=[](float t,float s){return std::exp(-(t/s)*(t/s));};
+  std::vector<Vec3> D(n,Vec3{0,0,0});std::vector<char> act(n,0);
+  for(size_t i=0;i<n;i++){Vec3 p=d.V[i],nn=N[i];float ax=std::fabs(p.x),sg=p.x<0?-1.f:1.f;Vec3 dd{0,0,0};
+    if(p.y<0.2f)continue;
+    for(float zf:{1.48f,-1.377f}){float dist=std::hypot(p.y-0.355f,p.z-zf);
+      if(ax>0.62f&&dist<0.85f&&nn.x*sg>0.3f){float w=sm((0.85f-dist)/0.40f);dd.x+=sg*0.024f*w*nn.x*sg;}               // muscular fender flare
+      if(ax>0.62f&&dist>0.40f&&dist<0.56f){float w=ga(dist-0.47f,0.035f);dd=dd+nn*(0.009f*w);}}                          // sharp arch lip
+    if(p.z>1.12f&&p.z<2.18f&&nn.y>0.4f&&p.y>0.7f){float zc=(p.z-1.65f)/0.55f;float wz=sm(1.f-zc*zc);dd.y+=0.030f*ga(p.x,0.26f)*wz-0.012f*ga(ax-0.46f,0.07f)*wz;}  // hood power dome + valleys
+    if(std::fabs(nn.x)>0.35f&&p.z>-1.9f&&p.z<2.0f){dd=dd+nn*(0.016f*ga(p.y-0.86f,0.032f)-0.012f*ga(p.y-0.64f,0.06f));}         // shoulder character line + lower scoop
+    if(p.z<-1.6f&&nn.y>0.4f&&p.y>0.8f)dd.y+=0.022f*sm((-1.6f-p.z)/0.5f)*sm(1.f-ax/0.85f);                                      // duck-tail
+    if(p.z>2.2f&&ax<0.5f&&p.y>0.3f&&p.y<0.75f)dd.z+=0.03f*sm(1.f-ax/0.5f);                                                     // nose bulge
+    if(dot(dd,dd)>0){D[i]=dd;act[i]=1;}}
+  for(size_t i=0;i<n;i++)d.V[i]=d.V[i]+D[i];
+  for(int it=0;it<3;it++){std::vector<Vec3> P=d.V;for(size_t i=0;i<n;i++){if(!act[i]||nb[i].empty())continue;Vec3 s{0,0,0};for(int k:nb[i])s=s+P[k];s=s*(1.f/nb[i].size());d.V[i]=P[i]*0.65f+s*0.35f;}}
+}
 void bakeWheelArches(PolyMesh& pm){
   PolyData A=pm.evaluate(pm.subLevels);PolyMesh cu;cu.mirrorX=false;
   for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){PolyMesh c;c.cylinder({0,0,0},0.43f,0.45f,40);PolyData cd=c.d; // axis Y -> rotate to X
     for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;v={s*0.88f+x,0.35f+y,zf+z};}for(auto& f:cd.F)std::reverse(f.begin(),f.end());A=PolyMesh::boolean(A,cd,0);}
-  pm.d=A;pm.mirrorX=false;pm.subLevels=0;pm.selectNone();paintCar(pm);addWheels(pm);addExtras(pm);addDecals(pm);pm.rig=true;}
+  sculptCar(A);pm.d=A;pm.mirrorX=false;pm.subLevels=0;pm.selectNone();paintCar(pm);addWheels(pm);addExtras(pm);addDecals(pm);pm.rig=true;}
 }
 
 namespace sk{

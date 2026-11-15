@@ -84,7 +84,7 @@ static Vec3 closestOnTri(Vec3 p,Vec3 a,Vec3 b,Vec3 c){Vec3 ab=b-a,ac=c-a,ap=p-a;
   float den=1.f/(va+vb+vc);return a+ab*(vb*den)+ac*(vc*den);}
 bool PolyMesh::shrinkwrap(const PolyData& T,float off){
   std::vector<std::array<Vec3,3>> tri;for(auto& f:T.F)for(size_t i=1;i+1<f.size();i++)tri.push_back({T.V[f[0]],T.V[f[i]],T.V[f[i+1]]});if(tri.empty())return false;
-  snapshot();std::set<int> sv=selV;if(sv.empty())for(size_t i=0;i<d.V.size();i++)sv.insert((int)i);
+  if(selV.empty())return false;snapshot();std::set<int> sv=selV;
   for(int v:sv){Vec3 p=d.V[v],best=p;float bd=1e30f;Vec3 bn{0,1,0};for(auto& t:tri){Vec3 q=closestOnTri(p,t[0],t[1],t[2]);Vec3 e=q-p;float dd=dot(e,e);if(dd<bd){bd=dd;best=q;bn=norm(cross(t[1]-t[0],t[2]-t[0]));}}
     d.V[v]=best+bn*off;}
   return true;}

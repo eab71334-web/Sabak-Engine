@@ -143,7 +143,7 @@ void App::pmTap(int id){std::string dir=cur_>=0&&cur_<(int)projects_.size()?proj
   if(id==954){pm_.mirrorX=!pm_.mirrorX;pmRebuild();return;}
   if(id==955){pm_.subLevels=(pm_.subLevels+1)%4;pmRebuild();return;}
   if(id==956){pmWire_=!pmWire_;return;}
-  if(id==988){PolyData T=pmOther_.evaluate(pmOther_.subLevels);if(pm_.shrinkwrap(T,0.f))pmRebuild();else toast("Shrinkwrap needs a cutter/target mesh");return;}
+  if(id==988){PolyData T=pmOther_.evaluate(pmOther_.subLevels);if(pm_.shrinkwrap(T,0.f))pmRebuild();else toast("Select vertices first (target = the cutter object)");return;}
   if(id==989){if(pm_.snapBlueprint())pmRebuild();else toast("Select vertices near the blueprint outline first");return;}
   if(id>=980&&id<=987){if(pm_.setMat(id-980))pmRebuild();else toast("Select faces first (Face mode)");return;}
   if(id==979){pm_.snapshot();buildCarPoly(pm_);pm_.snapshot();bakeWheelArches(pm_);if(pmOther_.d.V.size()&&pmOther_.d.V[0].y>-20)for(auto& v:pmOther_.d.V)v.y-=60.f;pmRebuild();toast("G82 car built (arches cut)");return;}
