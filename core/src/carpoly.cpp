@@ -78,9 +78,10 @@ static bool carGap(Vec3 c,Vec3 n){const float g=0.0042f;float ax=std::fabs(c.x);
   if(std::fabs(ax-0.70f)<g&&c.z<-1.55f&&c.z>-2.22f&&n.y>0.3f&&c.y>0.8f)return true;         // boot side seam
   if(std::fabs(c.z-2.05f)<g&&ax>0.72f&&std::fabs(n.x)>0.4f&&c.y>0.35f&&c.y<0.9f)return true; // fender / front bumper
   if(std::fabs(c.z+2.00f)<g&&ax>0.72f&&std::fabs(n.x)>0.4f&&c.y>0.35f&&c.y<0.95f)return true;// rear bumper line
+  if(std::fabs(c.y-0.64f)<g&&c.z>2.05f&&n.z>0.25f&&ax<0.9f)return true;   // bumper / nose seam
   return false;}
 static void paintCar(PolyMesh& pm){
-  pm.d.M.resize(pm.d.F.size(),0);splitPlane(pm.d,2,0.70f,0.7f);splitPlane(pm.d,2,-0.75f,0.7f);splitPlane(pm.d,1,0.30f,0.7f);splitPlane(pm.d,1,1.40f,0.7f);splitPlane(pm.d,1,0.99f,0.f);splitPlane(pm.d,2,0.30f,0.f);splitPlane(pm.d,2,1.10f,0.f);splitPlane(pm.d,2,-0.95f,0.f);splitPlane(pm.d,2,-1.55f,0.f);splitPlane(pm.d,2,-0.30f,0.5f);splitPlane(pm.d,2,-0.05f,0.5f);splitPlane(pm.d,2,-1.15f,0.5f);splitPlane(pm.d,2,0.80f,0.5f);
+  pm.d.M.resize(pm.d.F.size(),0);splitPlane(pm.d,2,0.70f,0.7f);splitPlane(pm.d,2,-0.75f,0.7f);splitPlane(pm.d,1,0.30f,0.7f);splitPlane(pm.d,1,1.40f,0.7f);splitPlane(pm.d,1,0.99f,0.f);splitPlane(pm.d,2,0.30f,0.f);splitPlane(pm.d,2,1.10f,0.f);splitPlane(pm.d,2,-0.95f,0.f);splitPlane(pm.d,2,-1.55f,0.f);splitPlane(pm.d,2,-0.30f,0.5f);splitPlane(pm.d,2,-0.05f,0.5f);splitPlane(pm.d,1,0.6365f,0.f);splitPlane(pm.d,1,0.6435f,0.f);splitPlane(pm.d,2,-1.15f,0.5f);splitPlane(pm.d,2,0.80f,0.5f);
   {const float g=0.0035f;auto band=[&](int ax,float v,float mn){splitPlane(pm.d,ax,v-g,mn);splitPlane(pm.d,ax,v+g,mn);};
    band(0,0.70f,0.f);band(0,-0.70f,0.f);band(2,2.20f,0.f);band(2,1.10f,0.f);band(2,-1.55f,0.f);band(2,-2.22f,0.f);band(2,2.05f,0.7f);band(2,-2.00f,0.7f);}
 
@@ -239,7 +240,9 @@ static void sculptCar(PolyData& d){
     if(std::fabs(nn.x)>0.35f&&p.z>-1.9f&&p.z<2.0f){dd=dd+nn*(0.016f*ga(p.y-0.86f,0.032f)-0.012f*ga(p.y-0.64f,0.06f));}         // shoulder character line + lower scoop
     if(p.z<-1.6f&&nn.y>0.4f&&p.y>0.8f)dd.y+=0.022f*sm((-1.6f-p.z)/0.5f)*sm(1.f-ax/0.85f);                                      // duck-tail
     if(p.z>2.2f&&ax<0.5f&&p.y>0.3f&&p.y<0.75f)dd.z+=0.03f*sm(1.f-ax/0.5f);                                                     // nose bulge
-    if(dot(dd,dd)>0){D[i]=dd;act[i]=1;}}
+    if(p.z>2.10f&&p.y>0.26f&&p.y<0.66f&&nn.z>0.2f){float zt=2.36f-0.36f*std::pow(std::min(1.f,ax/0.92f),2.4f);float w=0.85f*sm((p.y-0.26f)/0.08f)*sm((0.66f-p.y)/0.05f);dd.z+=(zt-p.z)*w;}   // bumper: flat vertical face, tight corners
+    bool ridge=false;if(p.z>2.10f&&nn.z>0.15f&&p.y>0.55f&&p.y<0.72f){float w=ga(p.y-0.64f,0.018f);dd=dd+nn*(0.020f*w);ridge=w>0.2f;}   // sharp bumper / hood-nose edge
+    if(dot(dd,dd)>0){D[i]=dd;act[i]=ridge?0:1;}}
   for(size_t i=0;i<n;i++)d.V[i]=d.V[i]+D[i];
   for(int it=0;it<3;it++){std::vector<Vec3> P=d.V;for(size_t i=0;i<n;i++){if(!act[i]||nb[i].empty())continue;Vec3 s{0,0,0};for(int k:nb[i])s=s+P[k];s=s*(1.f/nb[i].size());d.V[i]=P[i]*0.65f+s*0.35f;}}
 }
