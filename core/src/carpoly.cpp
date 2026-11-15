@@ -4,6 +4,8 @@
 #include <functional>
 #include <algorithm>
 namespace sk {
+static const float FZ=1.537f,RZ=-1.320f,FRAD=0.338f,RRAD=0.340f,FWD=0.275f,RWD=0.285f,FXC=0.8085f,RXC=0.8025f;
+static float g_cy=0.338f;
 static const float TOPT[][2]={{2.397f,.713f},{2.305f,.747f},{2.212f,.793f},{2.12f,.828f},{2.027f,.851f},{1.935f,.885f},{1.843f,.908f},{1.75f,.931f},{1.658f,.943f},{1.565f,.955f},{1.473f,.955f},{1.381f,.966f},{1.288f,.978f},{1.196f,.978f},{1.103f,.989f},{1.011f,.989f},{.919f,1.0f},{.826f,1.058f},{.734f,1.104f},{.641f,1.161f},{.549f,1.208f},{.457f,1.242f},{.364f,1.299f},{.272f,1.334f},{.179f,1.369f},{.087f,1.38f},{-.005f,1.403f},{-.098f,1.403f},{-.19f,1.38f},{-.283f,1.38f},{-.375f,1.38f},{-.467f,1.403f},{-.56f,1.403f},{-.652f,1.391f},{-.745f,1.38f},{-.837f,1.369f},{-.929f,1.38f},{-1.022f,1.391f},{-1.114f,1.311f},{-1.207f,1.288f},{-1.299f,1.265f},{-1.391f,1.23f},{-1.484f,1.208f},{-1.576f,1.173f},{-1.669f,1.15f},{-1.761f,1.104f},{-1.853f,1.081f},{-1.946f,1.069f},{-2.038f,1.046f},{-2.131f,1.035f},{-2.223f,1.035f},{-2.315f,1.012f}};
 static const float HWT[][2]={{2.40f,.50f},{2.33f,.66f},{2.26f,.76f},{2.12f,.87f},{1.98f,.925f},{1.84f,.941f},{-1.50f,.941f},{-1.62f,.93f},{-1.76f,.895f},{-1.90f,.86f},{-2.04f,.825f},{-2.18f,.72f},{-2.32f,.53f},{-2.40f,.42f}};
 template<size_t N> static float lerpTab(const float (&t)[N][2],float f){
@@ -86,8 +88,8 @@ static void paintCar(PolyMesh& pm){
 
   PolyData& d=pm.d;d.M.assign(d.F.size(),0);
   for(size_t i=0;i<d.F.size();i++){auto& f=d.F[i];Vec3 c{0,0,0};for(int v:f)c=c+d.V[v];c=c*(1.f/f.size());Vec3 n=pm.faceNormal((int)i);float ax=std::fabs(c.x);int m=0;
-    float dF=std::hypot(c.y-0.35f,c.z-1.48f),dR=std::hypot(c.y-0.35f,c.z+1.377f);
-    if(ax>0.62f&&(dF<0.438f||dR<0.438f)&&c.y<0.85f&&(n.y*(c.y-0.355f)+n.z*(c.z-(dF<dR?1.48f:-1.377f)))<-0.05f)m=3;                       // inside of wheel arch
+    float dF=std::hypot(c.y-FRAD,c.z-FZ),dR=std::hypot(c.y-RRAD,c.z-RZ);
+    if(ax>0.62f&&(dF<0.405f||dR<0.407f)&&c.y<0.85f&&(n.y*(c.y-0.339f)+n.z*(c.z-(dF<dR?FZ:RZ)))<-0.05f)m=3;                       // inside of wheel arch
     else if(c.y<0.27f)m=3;                                                   // under-body / splitter / diffuser
     else if(c.y>0.99f&&c.y<1.40f){
       bool wind=c.z>0.30f&&c.z<1.10f&&n.z>0.35f&&n.y<0.8f;
@@ -98,11 +100,11 @@ static void paintCar(PolyMesh& pm){
     d.M[i]=(unsigned char)m;}}
 static void addPart(PolyMesh& pm,float cx,float cz,float r,float w,int n,int mat){
   PolyMesh c;c.cylinder({0,0,0},r,w,n);PolyData cd=c.d;size_t b=pm.d.V.size();
-  for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;pm.d.V.push_back({cx+x,0.355f+y,cz+z});}
+  for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;pm.d.V.push_back({cx+x,g_cy+y,cz+z});}
   for(auto f:cd.F){std::reverse(f.begin(),f.end());for(int& k:f)k+=(int)b;pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
 static void addLathe(PolyMesh& pm,float cx,float cz,int s,const std::vector<std::pair<float,float>>& prof,int segs,int mat){
   size_t b=pm.d.V.size();size_t np=prof.size();
-  for(int k=0;k<segs;k++){float a=6.2831853f*k/segs;for(auto& p:prof)pm.d.V.push_back({cx+s*p.first,0.355f+p.second*std::cos(a),cz+p.second*std::sin(a)});}
+  for(int k=0;k<segs;k++){float a=6.2831853f*k/segs;for(auto& p:prof)pm.d.V.push_back({cx+s*p.first,g_cy+p.second*std::cos(a),cz+p.second*std::sin(a)});}
   std::vector<std::vector<int>> fs;
   for(int k=0;k<segs;k++){int k2=(k+1)%segs;for(size_t i=0;i<np;i++){size_t j=(i+1)%np;fs.push_back({(int)(b+k*np+i),(int)(b+k*np+j),(int)(b+k2*np+j),(int)(b+k2*np+i)});}}
   double vol=0;for(auto& f:fs){Vec3 p0=pm.d.V[f[0]];for(size_t i=1;i+1<f.size();i++){Vec3 p1=pm.d.V[f[i]],p2=pm.d.V[f[i+1]];vol+=dot(p0,cross(p1,p2));}}
@@ -110,7 +112,7 @@ static void addLathe(PolyMesh& pm,float cx,float cz,int s,const std::vector<std:
   for(auto& f:fs){pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
 static void addSpoke(PolyMesh& pm,float cx,float cz,int s,float ang,float r0,float r1,float hw,float xo,float ht,int mat){
   Vec3 P[8];int q=0;for(int xs=0;xs<2;xs++)for(int ys=0;ys<2;ys++)for(int zs=0;zs<2;zs++){float rr=ys?r1:r0,w=zs?hw:-hw,xx=xo+(xs?ht:-ht);
-    float y=rr*std::cos(ang)-w*std::sin(ang),z=rr*std::sin(ang)+w*std::cos(ang);P[q++]={cx+s*xx,0.355f+y,cz+z};}
+    float y=rr*std::cos(ang)-w*std::sin(ang),z=rr*std::sin(ang)+w*std::cos(ang);P[q++]={cx+s*xx,g_cy+y,cz+z};}
   size_t b=pm.d.V.size();for(auto& p:P)pm.d.V.push_back(p);
   static const int Q[6][4]={{0,2,3,1},{4,5,7,6},{0,1,5,4},{2,6,7,3},{0,4,6,2},{1,3,7,5}};
   std::vector<std::vector<int>> fs;for(auto& qq:Q)fs.push_back({(int)b+qq[0],(int)b+qq[1],(int)b+qq[2],(int)b+qq[3]});
@@ -120,10 +122,12 @@ static void addWheels(PolyMesh& pm){
   const std::vector<std::pair<float,float>> tyre={{-0.11f,0.27f},{-0.125f,0.30f},{-0.12f,0.335f},{-0.09f,0.352f},{-0.04f,0.358f},{0.04f,0.358f},{0.09f,0.352f},{0.12f,0.335f},{0.125f,0.30f},{0.11f,0.27f},{0.09f,0.20f},{-0.09f,0.20f}};
   const std::vector<std::pair<float,float>> rim={{0.112f,0.268f},{0.124f,0.258f},{0.122f,0.235f},{0.108f,0.215f},{0.110f,0.075f},{0.135f,0.062f},{0.135f,0.0f},{-0.10f,0.0f},{-0.10f,0.262f}};
   const std::vector<std::pair<float,float>> dish={{0.100f,0.236f},{0.100f,0.0f},{0.088f,0.0f},{0.088f,0.236f}};
-  for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){float x=s*0.80f;
-    addLathe(pm,x,zf,s,tyre,72,4);addLathe(pm,x,zf,s,dish,48,3);addLathe(pm,x,zf,s,rim,48,2);
-    for(int k=0;k<10;k++)addSpoke(pm,x,zf,s,6.2831853f*k/10.f,0.07f,0.245f,0.017f,0.122f,0.007f,2);
-    for(int k=0;k<5;k++)addSpoke(pm,x,zf,s,6.2831853f*(k+0.5f)/5.f,0.02f,0.07f,0.03f,0.118f,0.005f,3);}}
+  for(int k=0;k<2;k++){float zf=k?RZ:FZ,R=k?RRAD:FRAD,W=k?RWD:FWD,XC=k?RXC:FXC;float kr=R/0.358f,kw=W/0.25f;g_cy=R;
+    auto sc=[&](std::vector<std::pair<float,float>> v){for(auto& p:v){p.first*=kw;p.second*=kr;}return v;};
+    for(int s=-1;s<=1;s+=2){float x=s*XC;
+      addLathe(pm,x,zf,s,sc(tyre),72,4);addLathe(pm,x,zf,s,sc(dish),48,3);addLathe(pm,x,zf,s,sc(rim),48,2);
+      for(int q=0;q<10;q++)addSpoke(pm,x,zf,s,6.2831853f*q/10.f,0.07f*kr,0.245f*kr,0.017f*kr,0.122f*kw,0.007f*kw,2);
+      for(int q=0;q<5;q++)addSpoke(pm,x,zf,s,6.2831853f*(q+0.5f)/5.f,0.02f*kr,0.07f*kr,0.03f*kr,0.118f*kw,0.005f*kw,3);}}}
 
 // ---- decals: grid patches projected (along z) onto the body so lamps / grilles / intakes follow the real surface
 struct Tri{Vec3 a,b,c;};
@@ -172,13 +176,17 @@ static void addDecals(PolyMesh& pm){
 
 // joints: 7 hood, 8 boot lid; 0 body, 1..4 wheels (+x front, -x front, +x rear, -x rear), 5 door +x, 6 door -x
 int carPartAt(Vec3 c,Vec3 n,int mat){
-  float ax=std::fabs(c.x);float zs[2]={1.48f,-1.377f};
-  if(ax>0.62f&&ax<0.99f&&(mat==2||mat==3||mat==4))for(int k=0;k<2;k++)if(std::hypot(c.y-0.355f,c.z-zs[k])<0.372f)return 1+k*2+(c.x<0?1:0);
+  float ax=std::fabs(c.x);float zs[2]={FZ,RZ};float rs[2]={FRAD,RRAD};
+  if(ax>0.62f&&ax<0.99f&&(mat==2||mat==3||mat==4))for(int k=0;k<2;k++)if(std::hypot(c.y-rs[k],c.z-zs[k])<rs[k]+0.017f)return 1+k*2+(c.x<0?1:0);
   if(mat==0&&c.z>1.1042f&&c.z<2.1958f&&ax<0.6958f&&n.y>0.25f&&c.y>0.75f)return 7;   // hood
   if(mat==0&&c.z<-1.5542f&&c.z>-2.2158f&&ax<0.6958f&&n.y>0.25f&&c.y>0.80f)return 8;  // boot lid
   if((mat==0||mat==1)&&ax>0.70f&&std::fabs(n.x)>0.4f&&c.y>0.30f&&c.y<1.40f&&c.z>-0.75f&&c.z<0.70f)return c.x>0?5:6;
   return 0;}
 static void addBox(PolyMesh& pm,Vec3 c,Vec3 h,int mat){PolyMesh b;b.cube(c,h);size_t o=pm.d.V.size();for(auto v:b.d.V)pm.d.V.push_back(v);for(auto f:b.d.F){for(int& k:f)k+=(int)o;pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
+
+static void addZCyl(PolyMesh& pm,float x,float y,float z,float r,float len,int n,int mat){PolyMesh c;c.cylinder({0,0,0},r,len,n);size_t b=pm.d.V.size();for(auto& v:c.d.V)pm.d.V.push_back({x+v.x,y+v.z,z+v.y});
+  for(auto f:c.d.F){std::reverse(f.begin(),f.end());for(int& k:f)k+=(int)b;pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
+static void addExhausts(PolyMesh& pm){for(int s=-1;s<=1;s+=2)for(int k=0;k<2;k++){float x=s*(0.20f+k*0.18f);addZCyl(pm,x,0.30f,-2.40f,0.046f,0.10f,28,2);addZCyl(pm,x,0.30f,-2.402f,0.036f,0.10f,24,3);}}
 static void addExtras(PolyMesh& pm){
   for(int s=-1;s<=1;s+=2){float x=s*0.95f;
     addBox(pm,{x+s*0.07f,1.02f,0.62f},{0.08f,0.045f,0.07f},0);       // mirror housing
@@ -187,6 +195,9 @@ static void addExtras(PolyMesh& pm){
     addBox(pm,{s*0.940f,0.60f,0.70f},{0.004f,0.30f,0.004f},3);       // door gap front
     addBox(pm,{s*0.940f,0.60f,-0.78f},{0.004f,0.30f,0.004f},3);}     // door gap rear
   addBox(pm,{0,0.58f,2.39f},{0.14f,0.006f,0.01f},3);
+  for(int s=-1;s<=1;s+=2)addBox(pm,{s*0.935f,0.30f,0.11f},{0.016f,0.045f,0.99f},3);   // wide black side skirts (25 mm proud)
+  for(int k=-3;k<=3;k++)addBox(pm,{k*0.19f,0.31f,-2.385f},{0.008f,0.095f,0.06f},3);    // diffuser fins (60 mm)
+  addExhausts(pm);
   // interior: floor, dashboard, wheel, front seats, rear bench
   addBox(pm,{0,0.30f,-0.20f},{0.80f,0.02f,1.0f},3);
   addBox(pm,{0,0.80f,0.52f},{0.78f,0.09f,0.13f},3);
@@ -205,14 +216,16 @@ static void sculptCar(PolyData& d){
   std::vector<Vec3> D(n,Vec3{0,0,0});std::vector<char> act(n,0);
   for(size_t i=0;i<n;i++){Vec3 p=d.V[i],nn=N[i];float ax=std::fabs(p.x),sg=p.x<0?-1.f:1.f;Vec3 dd{0,0,0};
     if(p.y<0.2f)continue;
-    for(float zf:{1.48f,-1.377f}){float dist=std::hypot(p.y-0.355f,p.z-zf);
-      if(ax>0.62f&&dist<0.85f&&nn.x*sg>0.3f){float w=sm((0.85f-dist)/0.40f);dd.x+=sg*0.024f*w*nn.x*sg;}               // muscular fender flare
+    for(int wk=0;wk<2;wk++){float zf=wk?RZ:FZ;float dist=std::hypot(p.y-(wk?RRAD:FRAD),p.z-zf);
+      if(ax>0.62f&&dist<0.85f&&nn.x*sg>0.3f){float w=sm((0.85f-dist)/0.40f);dd.x+=sg*0.035f*w*nn.x*sg;}               // muscular fender flare
       if(ax>0.62f&&dist>0.40f&&dist<0.56f){float w=ga(dist-0.47f,0.035f);dd=dd+nn*(0.0f*w);}}                          // sharp arch lip
     if(p.z>1.12f&&p.z<2.18f&&nn.y>0.4f&&p.y>0.7f){float zc=(p.z-1.65f)/0.55f;float wz=sm(1.f-zc*zc);dd.y+=0.030f*ga(p.x,0.26f)*wz-0.012f*ga(ax-0.46f,0.07f)*wz;}  // hood power dome + valleys
     if(std::fabs(nn.x)>0.35f&&p.z>-1.9f&&p.z<2.0f){dd=dd+nn*(0.016f*ga(p.y-0.86f,0.032f)-0.012f*ga(p.y-0.64f,0.06f));}         // shoulder character line + lower scoop
-    if(p.z<-1.6f&&nn.y>0.4f&&p.y>0.8f)dd.y+=0.022f*sm((-1.6f-p.z)/0.5f)*sm(1.f-ax/0.85f);                                      // duck-tail
+    if(p.z<-1.6f&&nn.y>0.4f&&p.y>0.8f)dd.y+=0.040f*sm((-1.6f-p.z)/0.5f)*sm(1.f-ax/0.85f);                                      // duck-tail
     if(p.z>2.2f&&ax<0.5f&&p.y>0.3f&&p.y<0.75f)dd.z+=0.03f*sm(1.f-ax/0.5f);                                                     // nose bulge
     if(p.z>2.10f&&p.y>0.26f&&p.y<0.66f&&nn.z>0.1f){float zt=2.36f-0.36f*std::pow(std::min(1.f,ax/0.92f),2.4f);float w=0.85f*sm((p.y-0.26f)/0.08f)*sm((0.66f-p.y)/0.05f)*sm((nn.z-0.1f)/0.3f);dd.z+=(zt-p.z)*w*0.0f;}   // bumper: flat vertical face, tight corners
+    if(p.z>1.30f&&p.z<2.36f&&nn.y>0.3f&&p.y>0.7f){float xc=0.085f+(2.35f-p.z)*0.12f;dd.y-=0.025f*ga(ax-xc,0.030f)*sm((2.36f-p.z)/0.08f)*sm((p.z-1.3f)/0.2f);}   // double hood indents from the kidneys
+    if(p.z<-0.8f&&p.y>0.7f&&nn.x*sg>0.3f)dd.x+=sg*0.025f*sm((-0.8f-p.z)/0.8f)*nn.x*sg;                                                                    // rear haunches (V shape from above)
     bool ridge=false;   // sharp bumper / hood-nose edge
     if(dot(dd,dd)>0){D[i]=dd;act[i]=ridge?0:1;}}
   for(size_t i=0;i<n;i++)d.V[i]=d.V[i]+D[i];
@@ -273,8 +286,8 @@ static void addTrays(PolyMesh& pm){
 
 void bakeWheelArches(PolyMesh& pm){
   PolyData A=pm.evaluate(pm.subLevels);PolyMesh cu;cu.mirrorX=false;
-  for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){PolyMesh c;c.cylinder({0,0,0},0.43f,0.45f,40);PolyData cd=c.d; // axis Y -> rotate to X
-    for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;v={s*0.88f+x,0.35f+y,zf+z};}for(auto& f:cd.F)std::reverse(f.begin(),f.end());A=PolyMesh::boolean(A,cd,0);}
+  for(int wk=0;wk<2;wk++)for(int s=-1;s<=1;s+=2){float zf=wk?RZ:FZ,rad=wk?RRAD:FRAD;PolyMesh c;c.cylinder({0,0,0},rad+0.075f,0.45f,40);PolyData cd=c.d; // axis Y -> rotate to X
+    for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;v={s*0.88f+x,rad+y,zf+z};}for(auto& f:cd.F)std::reverse(f.begin(),f.end());A=PolyMesh::boolean(A,cd,0);}
   sculptCar(A);carveFront(A);pm.d=A;pm.mirrorX=false;pm.subLevels=0;pm.selectNone();paintCar(pm);addTrays(pm);addWheels(pm);addExtras(pm);addDecals(pm);pm.rig=true;}
 }
 
