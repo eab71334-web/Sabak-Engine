@@ -30,8 +30,8 @@ bool App::pmModel(Model& m){
   if(pm_.rig&&pm_.subLevels==0){const char* jn[6]={"wheel.FL","wheel.FR","wheel.RL","wheel.RR","door.L","door.R"};Vec3 jp[6]={{0.8f,0.355f,1.48f},{-0.8f,0.355f,1.48f},{0.8f,0.355f,-1.377f},{-0.8f,0.355f,-1.377f},{0.93f,0.7f,0.66f},{-0.93f,0.7f,0.66f}};
     for(int i=0;i<6;i++){m.nodeName.push_back(jn[i]);m.parent.push_back(0);TRS t;t.t=jp[i];m.rest.push_back(t);m.joints.push_back(i+1);m.ibm.push_back(Mat4::translate(jp[i]*-1.f));}
     Anim sp;sp.name="wheels";sp.dur=0.6f;for(int i=0;i<4;i++){AnimChannel c;c.node=i+1;c.path=1;float sg=1.f;c.t={0,0.15f,0.3f,0.45f,0.6f};for(int q=0;q<5;q++){float a=sg*6.2831853f*q/4.f;c.v.insert(c.v.end(),{std::sin(a*0.5f),0.f,0.f,std::cos(a*0.5f)});}sp.ch.push_back(c);}m.anims.push_back(sp);
-    Anim dr;dr.name="doors_open";dr.dur=1.f;for(int i=0;i<2;i++){AnimChannel c;c.node=5+i;c.path=1;float sg=i?-1.f:1.f;c.t={0,0.8f};float a=sg*1.0f;c.v={0,0,0,1,0,std::sin(a*0.5f),0,std::cos(a*0.5f)};dr.ch.push_back(c);}m.anims.push_back(dr);
-    Anim dc;dc.name="doors_close";dc.dur=1.f;for(int i=0;i<2;i++){AnimChannel c;c.node=5+i;c.path=1;float sg=i?-1.f:1.f;c.t={0,0.8f};float a=sg*1.0f;c.v={0,std::sin(a*0.5f),0,std::cos(a*0.5f),0,0,0,1};dc.ch.push_back(c);}m.anims.push_back(dc);
+    Anim dr;dr.name="doors_open";dr.dur=1.f;for(int i=0;i<2;i++){AnimChannel c;c.node=5+i;c.path=1;float sg=i?0.9f:-0.9f;c.t={0,0.8f};float a=sg;c.v={0,0,0,1,0,std::sin(a*0.5f),0,std::cos(a*0.5f)};dr.ch.push_back(c);}m.anims.push_back(dr);
+    Anim dc;dc.name="doors_close";dc.dur=1.f;for(int i=0;i<2;i++){AnimChannel c;c.node=5+i;c.path=1;float sg=i?0.9f:-0.9f;c.t={0,0.8f};float a=sg;c.v={0,std::sin(a*0.5f),0,std::cos(a*0.5f),0,0,0,1};dc.ch.push_back(c);}m.anims.push_back(dc);
     m.builtin=(int)m.anims.size();}
   float top=0.5f;
   for(int k=0;k<8;k++){std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false,k);if(idx.empty())continue;

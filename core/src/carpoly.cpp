@@ -92,7 +92,13 @@ static void addExtras(PolyMesh& pm){
     addBox(pm,{s*0.945f,0.86f,-0.28f},{0.012f,0.012f,0.07f},3);      // door handle
     addBox(pm,{s*0.940f,0.60f,0.70f},{0.004f,0.30f,0.004f},3);       // door gap front
     addBox(pm,{s*0.940f,0.60f,-0.78f},{0.004f,0.30f,0.004f},3);}     // door gap rear
-  addBox(pm,{0,0.58f,2.39f},{0.14f,0.006f,0.01f},3);}
+  addBox(pm,{0,0.58f,2.39f},{0.14f,0.006f,0.01f},3);
+  // interior: floor, dashboard, wheel, front seats, rear bench
+  addBox(pm,{0,0.30f,-0.20f},{0.80f,0.02f,1.0f},3);
+  addBox(pm,{0,0.80f,0.52f},{0.78f,0.09f,0.13f},3);
+  addBox(pm,{-0.38f,0.84f,0.36f},{0.16f,0.16f,0.012f},3);
+  for(int s=-1;s<=1;s+=2){addBox(pm,{s*0.38f,0.44f,-0.10f},{0.21f,0.07f,0.24f},7);addBox(pm,{s*0.38f,0.70f,-0.36f},{0.21f,0.27f,0.06f},7);addBox(pm,{s*0.38f,0.99f,-0.38f},{0.12f,0.07f,0.04f},7);}
+  addBox(pm,{0,0.44f,-0.88f},{0.62f,0.07f,0.20f},7);addBox(pm,{0,0.68f,-1.06f},{0.62f,0.24f,0.05f},7);}
 void bakeWheelArches(PolyMesh& pm){
   PolyData A=pm.evaluate(pm.subLevels);PolyMesh cu;cu.mirrorX=false;
   for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){PolyMesh c;c.cylinder({0,0,0},0.43f,0.45f,40);PolyData cd=c.d; // axis Y -> rotate to X
