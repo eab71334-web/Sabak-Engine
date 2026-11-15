@@ -16,8 +16,10 @@ void App::pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx,bool cu
   const PolyMesh& P=(pmObj_==0)!=cutter?pm_:pmOther_;PolyData m=P.evaluate(P.subLevels);v.clear();idx.clear();
   auto matOf=[&](size_t f){return f<m.M.size()?(int)m.M[f]:0;};
   auto push=[&](Vec3 p,Vec3 n){SkinVertex s{};s.p[0]=p.x;s.p[1]=p.y;s.p[2]=p.z;s.n[0]=n.x;s.n[1]=n.y;s.n[2]=n.z;s.uv[0]=p.z*0.5f+p.x*0.3f;s.uv[1]=p.y*0.5f+p.x*0.2f;s.j[0]=0;s.w[0]=1;v.push_back(s);};
+  std::vector<Vec3> fnr;std::vector<std::vector<int>> vfa;bool smooth=P.rig&&!cutter&&P.subLevels==0;
+  if(smooth){fnr.resize(m.F.size());vfa.resize(m.V.size());for(size_t fi=0;fi<m.F.size();fi++){auto& f=m.F[fi];Vec3 n{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 a=m.V[f[i]],b=m.V[f[(i+1)%f.size()]];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}fnr[fi]=n;for(int k:f)vfa[k].push_back((int)fi);}}
   if(P.subLevels==0){for(size_t fi=0;fi<m.F.size();fi++){auto& f=m.F[fi];if(mat>=0&&matOf(fi)!=mat)continue;Vec3 n{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 a=m.V[f[i]],b=m.V[f[(i+1)%f.size()]];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}n=norm(n);
-      uint32_t b0=(uint32_t)v.size();for(int k:f)push(m.V[k],n);if(P.rig&&!cutter){Vec3 cc{0,0,0};for(int k:f)cc=cc+m.V[k];cc=cc*(1.f/f.size());int jt=carPartAt(cc,n,matOf(fi));if(jt)for(size_t q=b0;q<v.size();q++)v[q].j[0]=(uint8_t)jt;}for(size_t i=1;i+1<f.size();i++){idx.push_back(b0);idx.push_back(b0+(uint32_t)i);idx.push_back(b0+(uint32_t)i+1);}}}
+      uint32_t b0=(uint32_t)v.size();for(int k:f){Vec3 nn=n;if(smooth){Vec3 s{0,0,0};for(int g:vfa[k])if(dot(norm(fnr[g]),n)>0.82f)s=s+fnr[g];if(dot(s,s)>1e-12f)nn=norm(s);}push(m.V[k],nn);}if(P.rig&&!cutter){Vec3 cc{0,0,0};for(int k:f)cc=cc+m.V[k];cc=cc*(1.f/f.size());int jt=carPartAt(cc,n,matOf(fi));if(jt)for(size_t q=b0;q<v.size();q++)v[q].j[0]=(uint8_t)jt;}for(size_t i=1;i+1<f.size();i++){idx.push_back(b0);idx.push_back(b0+(uint32_t)i);idx.push_back(b0+(uint32_t)i+1);}}}
   else{std::vector<Vec3> PP,N;std::vector<uint32_t> all;PolyMesh::triangulate(m,PP,N,all);
     if(mat<0){idx=all;}else{size_t t=0;for(size_t fi=0;fi<m.F.size();fi++){size_t nt=m.F[fi].size()-2;if(matOf(fi)==mat)for(size_t k=0;k<nt*3;k++)idx.push_back(all[t+k]);t+=nt*3;}}
     for(size_t i=0;i<PP.size();i++)push(PP[i],N[i]);}}

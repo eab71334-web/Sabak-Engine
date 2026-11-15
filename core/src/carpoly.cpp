@@ -29,7 +29,7 @@ static float wf(float h){const int N=sizeof(WFT)/sizeof(WFT[0]);if(h<=WFT[0][0])
 static std::vector<Vec3> resample(const std::vector<Vec3>& p,int n){std::vector<float> L(1,0.f);for(size_t i=1;i<p.size();i++)L.push_back(L.back()+std::sqrt(dot(p[i]-p[i-1],p[i]-p[i-1]))+1e-7f);std::vector<Vec3> o;float tot=L.back();size_t k=0;
   for(int i=0;i<n;i++){float t=tot*i/(n-1);while(k+2<p.size()&&L[k+1]<t)k++;float u=(t-L[k])/(L[k+1]-L[k]);u=std::max(0.f,std::min(1.f,u));o.push_back(p[k]*(1-u)+p[k+1]*u);}return o;}
 static void buildCarOnce(PolyMesh& pm,const std::vector<float>& corr){
-  pm.clear();pm.mirrorX=true;pm.subLevels=2;
+  pm.clear();pm.mirrorX=true;pm.subLevels=3;
   const float BELT=0.985f;const int N1=10,N2=9;const int NR=N1+N2-1; // lower piece N1 points (last = shoulder), upper piece N2 points (first = shoulder, last = centre)
   std::vector<float> st;for(float f=2.397f;f>-2.39f;f-=0.15f)st.push_back(f);st.push_back(-2.397f);
   auto cf=[&](float f){if(corr.empty())return 1.f;size_t bi=0;float bd=1e9f;for(size_t i=0;i<st.size();i++){float d=std::fabs(st[i]-f);if(d<bd){bd=d;bi=i;}}return corr[bi];};
@@ -82,26 +82,45 @@ static void addPart(PolyMesh& pm,float cx,float cz,float r,float w,int n,int mat
   PolyMesh c;c.cylinder({0,0,0},r,w,n);PolyData cd=c.d;size_t b=pm.d.V.size();
   for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;pm.d.V.push_back({cx+x,0.355f+y,cz+z});}
   for(auto f:cd.F){std::reverse(f.begin(),f.end());for(int& k:f)k+=(int)b;pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
+static void addLathe(PolyMesh& pm,float cx,float cz,int s,const std::vector<std::pair<float,float>>& prof,int segs,int mat){
+  size_t b=pm.d.V.size();size_t np=prof.size();
+  for(int k=0;k<segs;k++){float a=6.2831853f*k/segs;for(auto& p:prof)pm.d.V.push_back({cx+s*p.first,0.355f+p.second*std::cos(a),cz+p.second*std::sin(a)});}
+  std::vector<std::vector<int>> fs;
+  for(int k=0;k<segs;k++){int k2=(k+1)%segs;for(size_t i=0;i<np;i++){size_t j=(i+1)%np;fs.push_back({(int)(b+k*np+i),(int)(b+k*np+j),(int)(b+k2*np+j),(int)(b+k2*np+i)});}}
+  double vol=0;for(auto& f:fs){Vec3 p0=pm.d.V[f[0]];for(size_t i=1;i+1<f.size();i++){Vec3 p1=pm.d.V[f[i]],p2=pm.d.V[f[i+1]];vol+=dot(p0,cross(p1,p2));}}
+  if(vol<0)for(auto& f:fs)std::reverse(f.begin(),f.end());
+  for(auto& f:fs){pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
+static void addSpoke(PolyMesh& pm,float cx,float cz,int s,float ang,float r0,float r1,float hw,float xo,float ht,int mat){
+  Vec3 P[8];int q=0;for(int xs=0;xs<2;xs++)for(int ys=0;ys<2;ys++)for(int zs=0;zs<2;zs++){float rr=ys?r1:r0,w=zs?hw:-hw,xx=xo+(xs?ht:-ht);
+    float y=rr*std::cos(ang)-w*std::sin(ang),z=rr*std::sin(ang)+w*std::cos(ang);P[q++]={cx+s*xx,0.355f+y,cz+z};}
+  size_t b=pm.d.V.size();for(auto& p:P)pm.d.V.push_back(p);
+  static const int Q[6][4]={{0,2,3,1},{4,5,7,6},{0,1,5,4},{2,6,7,3},{0,4,6,2},{1,3,7,5}};
+  std::vector<std::vector<int>> fs;for(auto& qq:Q)fs.push_back({(int)b+qq[0],(int)b+qq[1],(int)b+qq[2],(int)b+qq[3]});
+  double vol=0;for(auto& f:fs){Vec3 p0=pm.d.V[f[0]];for(size_t i=1;i+1<f.size();i++)vol+=dot(p0,cross(pm.d.V[f[i]],pm.d.V[f[i+1]]));}
+  if(vol<0)for(auto& f:fs)std::reverse(f.begin(),f.end());for(auto& f:fs){pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
 static void addWheels(PolyMesh& pm){
+  const std::vector<std::pair<float,float>> tyre={{-0.11f,0.27f},{-0.125f,0.30f},{-0.12f,0.335f},{-0.09f,0.352f},{-0.04f,0.358f},{0.04f,0.358f},{0.09f,0.352f},{0.12f,0.335f},{0.125f,0.30f},{0.11f,0.27f},{0.09f,0.20f},{-0.09f,0.20f}};
+  const std::vector<std::pair<float,float>> rim={{0.112f,0.268f},{0.124f,0.258f},{0.122f,0.235f},{0.108f,0.215f},{0.110f,0.075f},{0.135f,0.062f},{0.135f,0.0f},{-0.10f,0.0f},{-0.10f,0.262f}};
+  const std::vector<std::pair<float,float>> dish={{0.100f,0.236f},{0.100f,0.0f},{0.088f,0.0f},{0.088f,0.236f}};
   for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){float x=s*0.80f;
-    addPart(pm,x,zf,0.355f,0.255f,28,4);                      // tyre
-    addPart(pm,x+s*0.004f,zf,0.262f,0.262f,28,2);             // rim
-    addPart(pm,x+s*0.006f,zf,0.19f,0.262f,20,3);              // dark dish
-    addPart(pm,x+s*0.008f,zf,0.07f,0.262f,12,2);}}            // hub cap
-
+    addLathe(pm,x,zf,s,tyre,72,4);addLathe(pm,x,zf,s,dish,48,3);addLathe(pm,x,zf,s,rim,48,2);
+    for(int k=0;k<10;k++)addSpoke(pm,x,zf,s,6.2831853f*k/10.f,0.07f,0.245f,0.017f,0.122f,0.007f,2);
+    for(int k=0;k<5;k++)addSpoke(pm,x,zf,s,6.2831853f*(k+0.5f)/5.f,0.02f,0.07f,0.03f,0.118f,0.005f,3);}}
 
 // ---- decals: grid patches projected (along z) onto the body so lamps / grilles / intakes follow the real surface
 struct Tri{Vec3 a,b,c;};
-static bool zHit(const std::vector<Tri>& T,float x,float y,int side,float& zo){
-  bool got=false;float best=side>0?-1e9f:1e9f;
-  for(auto& t:T){float mnx=std::min(t.a.x,std::min(t.b.x,t.c.x)),mxx=std::max(t.a.x,std::max(t.b.x,t.c.x));if(x<mnx||x>mxx)continue;
-    float mny=std::min(t.a.y,std::min(t.b.y,t.c.y)),mxy=std::max(t.a.y,std::max(t.b.y,t.c.y));if(y<mny||y>mxy)continue;
+struct TGrid{std::vector<Tri> t;std::vector<std::vector<int>> cell;float x0=-1.2f,y0=0.f,cs=0.04f;int nx=61,ny=40;
+  void build(){cell.assign((size_t)nx*ny,{});for(size_t i=0;i<t.size();i++){auto& a=t[i];float mnx=std::min(a.a.x,std::min(a.b.x,a.c.x)),mxx=std::max(a.a.x,std::max(a.b.x,a.c.x)),mny=std::min(a.a.y,std::min(a.b.y,a.c.y)),mxy=std::max(a.a.y,std::max(a.b.y,a.c.y));
+      int i0=std::max(0,(int)((mnx-x0)/cs)),i1=std::min(nx-1,(int)((mxx-x0)/cs)),j0=std::max(0,(int)((mny-y0)/cs)),j1=std::min(ny-1,(int)((mxy-y0)/cs));for(int j=j0;j<=j1;j++)for(int k=i0;k<=i1;k++)cell[(size_t)j*nx+k].push_back((int)i);}}};
+static bool zHit(const TGrid& G,float x,float y,int side,float& zo){
+  bool got=false;float best=side>0?-1e9f:1e9f;int ci=(int)((x-G.x0)/G.cs),cj=(int)((y-G.y0)/G.cs);if(ci<0||cj<0||ci>=G.nx||cj>=G.ny)return false;
+  for(int id:G.cell[(size_t)cj*G.nx+ci]){auto& t=G.t[id];
     float d=(t.b.y-t.c.y)*(t.a.x-t.c.x)+(t.c.x-t.b.x)*(t.a.y-t.c.y);if(std::fabs(d)<1e-9f)continue;
     float l1=((t.b.y-t.c.y)*(x-t.c.x)+(t.c.x-t.b.x)*(y-t.c.y))/d,l2=((t.c.y-t.a.y)*(x-t.c.x)+(t.a.x-t.c.x)*(y-t.c.y))/d,l3=1-l1-l2;
     if(l1<-1e-4f||l2<-1e-4f||l3<-1e-4f)continue;float z=l1*t.a.z+l2*t.b.z+l3*t.c.z;
     if(side>0?z>best:z<best){best=z;got=true;}}
   zo=best;return got;}
-static void addDecal(PolyMesh& pm,const std::vector<Tri>& T,int side,float x0,float x1,float y0,float y1,float step,float off,int mat,const std::function<bool(float,float)>& in){
+static void addDecal(PolyMesh& pm,const TGrid& T,int side,float x0,float x1,float y0,float y1,float step,float off,int mat,const std::function<bool(float,float)>& in){
   int nx=(int)std::ceil((x1-x0)/step),ny=(int)std::ceil((y1-y0)/step);float sx=(x1-x0)/nx,sy=(y1-y0)/ny;
   std::vector<float> Z((nx+1)*(ny+1));std::vector<char> ok((nx+1)*(ny+1),0);
   for(int j=0;j<=ny;j++)for(int i=0;i<=nx;i++){float z;if(zHit(T,x0+i*sx,y0+j*sy,side,z)){Z[j*(nx+1)+i]=z+side*off;ok[j*(nx+1)+i]=1;}}
@@ -111,9 +130,9 @@ static void addDecal(PolyMesh& pm,const std::vector<Tri>& T,int side,float x0,fl
     int b=(int)pm.d.V.size();std::vector<int> f;for(int k=0;k<4;k++){pm.d.V.push_back({px[k],py[k],Z[id[k]]});f.push_back(b+k);}
     if(side<0)std::reverse(f.begin(),f.end());pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
 static void addDecals(PolyMesh& pm){
-  std::vector<Tri> T;for(size_t i=0;i<pm.d.F.size();i++){unsigned char m=i<pm.d.M.size()?pm.d.M[i]:0;if(m!=0&&m!=1&&m!=3)continue;auto& f=pm.d.F[i];if(f.size()<3)continue;Vec3 n=pm.faceNormal((int)i);if(std::fabs(n.z)<0.15f)continue;
-    for(size_t k=1;k+1<f.size();k++)T.push_back({pm.d.V[f[0]],pm.d.V[f[k]],pm.d.V[f[k+1]]});}
-  const float st=0.018f;
+  TGrid T;for(size_t i=0;i<pm.d.F.size();i++){unsigned char m=i<pm.d.M.size()?pm.d.M[i]:0;if(m!=0&&m!=1&&m!=3)continue;auto& f=pm.d.F[i];if(f.size()<3)continue;Vec3 n=pm.faceNormal((int)i);if(std::fabs(n.z)<0.15f)continue;
+    for(size_t k=1;k+1<f.size();k++)T.t.push_back({pm.d.V[f[0]],pm.d.V[f[k]],pm.d.V[f[k+1]]});}
+  T.build();const float st=0.007f;
   // kidney grilles: chrome frame + black inside, wider at the bottom
   for(int s=-1;s<=1;s+=2){
     auto fr=[s](float x,float y){float ax=std::fabs(x);return ax>0.035f&&ax<0.43f-(y-0.36f)*0.10f&&y>0.36f&&y<0.72f;};
@@ -126,17 +145,17 @@ static void addDecals(PolyMesh& pm){
   // slim angled headlights
   for(int s=-1;s<=1;s+=2){float xa=s>0?0.40f:-0.92f,xb=s>0?0.92f:-0.40f;
     auto in=[](float x,float y){float ax=std::fabs(x);float lo=0.62f+0.30f*(ax-0.46f);return ax>0.46f&&ax<0.88f&&y>lo&&y<lo+0.075f-(ax-0.46f)*0.05f;};
-    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.014f,0.008f,5,in);
+    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.006f,0.008f,5,in);
     auto lo2=[](float x,float y){float ax=std::fabs(x);float lo=0.62f+0.30f*(ax-0.46f);return ax>0.46f&&ax<0.88f&&y>lo-0.012f&&y<lo;};
-    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.014f,0.010f,3,lo2);}
+    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.006f,0.010f,3,lo2);}
   // lower intakes
   for(int s=-1;s<=1;s+=2){float xa=s>0?0.30f:-0.90f,xb=s>0?0.90f:-0.30f;
-    addDecal(pm,T,1,xa,xb,0.20f,0.44f,0.02f,0.008f,3,[](float x,float y){float ax=std::fabs(x);return ax>0.40f&&ax<0.85f&&y>0.24f+0.18f*(ax-0.40f)*0&&y<0.40f-(ax-0.40f)*0.12f;});}
-  addDecal(pm,T,1,-0.42f,0.42f,0.20f,0.36f,0.02f,0.008f,3,[](float x,float y){return std::fabs(x)<0.40f&&y>0.24f&&y<0.33f;});
+    addDecal(pm,T,1,xa,xb,0.20f,0.44f,0.008f,0.008f,3,[](float x,float y){float ax=std::fabs(x);return ax>0.40f&&ax<0.85f&&y>0.24f+0.18f*(ax-0.40f)*0&&y<0.40f-(ax-0.40f)*0.12f;});}
+  addDecal(pm,T,1,-0.42f,0.42f,0.20f,0.36f,0.008f,0.008f,3,[](float x,float y){return std::fabs(x)<0.40f&&y>0.24f&&y<0.33f;});
   // rear: L-shaped tail-lights + diffuser bars
   for(int s=-1;s<=1;s+=2){float xa=s>0?0.35f:-0.92f,xb=s>0?0.92f:-0.35f;
-    addDecal(pm,T,-1,xa,xb,0.66f,1.02f,0.016f,0.008f,6,[](float x,float y){float ax=std::fabs(x);return ax>0.42f&&ax<0.88f&&((y>0.82f&&y<0.90f)||(ax>0.74f&&y>0.72f&&y<0.92f));});}
-  addDecal(pm,T,-1,-0.85f,0.85f,0.22f,0.45f,0.02f,0.008f,3,[](float x,float y){return std::fabs(x)<0.82f&&y>0.26f&&y<0.38f;});
+    addDecal(pm,T,-1,xa,xb,0.66f,1.02f,0.007f,0.008f,6,[](float x,float y){float ax=std::fabs(x);return ax>0.42f&&ax<0.88f&&((y>0.82f&&y<0.90f)||(ax>0.74f&&y>0.72f&&y<0.92f));});}
+  addDecal(pm,T,-1,-0.85f,0.85f,0.22f,0.45f,0.008f,0.008f,3,[](float x,float y){return std::fabs(x)<0.82f&&y>0.26f&&y<0.38f;});
 }
 
 // joints: 0 body, 1..4 wheels (+x front, -x front, +x rear, -x rear), 5 door +x, 6 door -x
