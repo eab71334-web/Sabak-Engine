@@ -29,10 +29,10 @@ static float wf(float h){const int N=sizeof(WFT)/sizeof(WFT[0]);if(h<=WFT[0][0])
 // resample a polyline to n points evenly by arc length (first and last kept)
 static std::vector<Vec3> resample(const std::vector<Vec3>& p,int n){std::vector<float> L(1,0.f);for(size_t i=1;i<p.size();i++)L.push_back(L.back()+std::sqrt(dot(p[i]-p[i-1],p[i]-p[i-1]))+1e-7f);std::vector<Vec3> o;float tot=L.back();size_t k=0;
   for(int i=0;i<n;i++){float t=tot*i/(n-1);while(k+2<p.size()&&L[k+1]<t)k++;float u=(t-L[k])/(L[k+1]-L[k]);u=std::max(0.f,std::min(1.f,u));o.push_back(p[k]*(1-u)+p[k+1]*u);}return o;}
-static std::vector<float> carStations(){std::vector<float> st;for(float f:{2.397f,2.36f,2.31f,2.24f})st.push_back(f);for(float f=2.10f;f>-2.0f;f-=0.18f)st.push_back(f);for(float f:{-2.10f,-2.19f,-2.26f,-2.32f,-2.365f,-2.397f})st.push_back(f);return st;}
+static std::vector<float> carStations(){std::vector<float> st;for(float f:{2.397f,2.36f,2.31f,2.24f})st.push_back(f);for(float f=2.10f;f>-2.0f;f-=0.105f)st.push_back(f);for(float f:{-2.10f,-2.19f,-2.26f,-2.32f,-2.365f,-2.397f})st.push_back(f);return st;}
 static void buildCarOnce(PolyMesh& pm,const std::vector<float>& corr){
   pm.clear();pm.mirrorX=true;pm.subLevels=3;
-  const float BELT=0.985f;const int N1=10,N2=9;const int NR=N1+N2-1; // lower piece N1 points (last = shoulder), upper piece N2 points (first = shoulder, last = centre)
+  const float BELT=0.985f;const int N1=15,N2=12;const int NR=N1+N2-1; // lower piece N1 points (last = shoulder), upper piece N2 points (first = shoulder, last = centre)
   std::vector<float> st=carStations();
   auto cf=[&](float f){if(corr.empty())return 1.f;size_t bi=0;float bd=1e9f;for(size_t i=0;i<st.size();i++){float d=std::fabs(st[i]-f);if(d<bd){bd=d;bi=i;}}return corr[bi];};
   addLoft(pm,st,NR,[&](float f,std::vector<Vec3>& out){
