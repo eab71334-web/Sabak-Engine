@@ -20,7 +20,8 @@ static void addLoft(PolyMesh& pm,const std::vector<float>& st,int nr,const std::
   auto outward=[&](std::vector<int> q,Vec3 away){Vec3 c{0,0,0};for(int v:q)c=c+d.V[v];c=c*(1.f/q.size());Vec3 n=norm(cross(d.V[q[1]]-d.V[q[0]],d.V[q[2]]-d.V[q[0]]));if(dot(n,c-away)<0)std::reverse(q.begin(),q.end());return q;};
   for(int i=0;i+1<S;i++)for(int j=0;j+1<nr;j++){Vec3 zc{0,0.75f,(st[i]+st[i+1])*0.5f*-1.f};zc.z=-zc.z;d.F.push_back(outward({id(i,j),id(i,j+1),id(i+1,j+1),id(i+1,j)},{0,0.7f,(st[i]+st[i+1])*0.5f}));}
   for(int i=0;i+1<S;i++)for(int j:creaseRings)if(j+1<nr){d.crease[PolyMesh::key(id(i,j),id(i+1,j))]=cr;}
-  if(caps){for(int e:{0,S-1}){std::vector<int> q;for(int j=0;j<nr;j++)q.push_back(id(e,j));float zz=st[e];d.F.push_back(outward(q,{0,0.7f,zz>0?zz-1.f:zz+1.f}));}}
+  if(caps){for(int e:{0,S-1})for(int j=0;j+1<nr;j++)d.crease[PolyMesh::key(id(e,j),id(e,j+1))]=2.f;
+    for(int e:{0,S-1}){std::vector<int> q;for(int j=0;j<nr;j++)q.push_back(id(e,j));float zz=st[e];d.F.push_back(outward(q,{0,0.7f,zz>0?zz-1.f:zz+1.f}));}}
 }
 // cross-section half-width vs height, measured from the blueprint FRONT view silhouette (metres)
 static const float WFT[][2]={{0.0f,.91f},{.05f,.93f},{.12f,.937f},{.40f,.937f},{.70f,.937f},{.80f,.93f},{.90f,.895f},{.99f,.87f},{1.06f,.82f},{1.13f,.74f},{1.20f,.68f},{1.27f,.65f},{1.34f,.60f},{1.38f,.54f},{1.403f,.40f}};
@@ -28,10 +29,11 @@ static float wf(float h){const int N=sizeof(WFT)/sizeof(WFT[0]);if(h<=WFT[0][0])
 // resample a polyline to n points evenly by arc length (first and last kept)
 static std::vector<Vec3> resample(const std::vector<Vec3>& p,int n){std::vector<float> L(1,0.f);for(size_t i=1;i<p.size();i++)L.push_back(L.back()+std::sqrt(dot(p[i]-p[i-1],p[i]-p[i-1]))+1e-7f);std::vector<Vec3> o;float tot=L.back();size_t k=0;
   for(int i=0;i<n;i++){float t=tot*i/(n-1);while(k+2<p.size()&&L[k+1]<t)k++;float u=(t-L[k])/(L[k+1]-L[k]);u=std::max(0.f,std::min(1.f,u));o.push_back(p[k]*(1-u)+p[k+1]*u);}return o;}
+static std::vector<float> carStations(){std::vector<float> st;for(float f:{2.397f,2.36f,2.31f,2.24f})st.push_back(f);for(float f=2.10f;f>-2.0f;f-=0.18f)st.push_back(f);for(float f:{-2.10f,-2.19f,-2.26f,-2.32f,-2.365f,-2.397f})st.push_back(f);return st;}
 static void buildCarOnce(PolyMesh& pm,const std::vector<float>& corr){
   pm.clear();pm.mirrorX=true;pm.subLevels=3;
   const float BELT=0.985f;const int N1=10,N2=9;const int NR=N1+N2-1; // lower piece N1 points (last = shoulder), upper piece N2 points (first = shoulder, last = centre)
-  std::vector<float> st;for(float f=2.397f;f>-2.39f;f-=0.15f)st.push_back(f);st.push_back(-2.397f);
+  std::vector<float> st=carStations();
   auto cf=[&](float f){if(corr.empty())return 1.f;size_t bi=0;float bd=1e9f;for(size_t i=0;i<st.size();i++){float d=std::fabs(st[i]-f);if(d<bd){bd=d;bi=i;}}return corr[bi];};
   addLoft(pm,st,NR,[&](float f,std::vector<Vec3>& out){
       float hw=halfW(f),H=topH(f);if(H>BELT+0.03f)H=BELT+(H-BELT)*cf(f);else H*=cf(f);float zb=0.16f+(std::fabs(f)<2.0f?0.f:0.10f*(std::fabs(f)-2.0f)/0.4f);bool green=H>BELT+0.03f;
@@ -42,11 +44,11 @@ static void buildCarOnce(PolyMesh& pm,const std::vector<float>& corr){
       if(green){auto tp=[](float t){t=std::max(0.f,std::min(1.f,t));return t*t*(3-2*t);};float gk=0.55f+0.45f*tp((f+1.8f)/0.7f)*tp((1.15f-f)/0.5f);
         up.push_back(lo.back());for(int k=1;k<=10;k++){float h=hb+(H-hb)*k/10.f;float u=wf(h)/0.937f*hw*(h<hb+0.01f?1.f:gk);if(k==10)u*=0.55f;up.push_back({u,h,f});}up.push_back({0,H,f});}
       else{up.push_back(lo.back());up.push_back({0.975f*hw,H-0.035f,f});up.push_back({0.90f*hw,H-0.008f,f});up.push_back({0.55f*hw,H-0.002f,f});up.push_back({0,H,f});}
-      std::vector<Vec3> a=resample(lo,N1),b=resample(up,N2);for(auto& v:a)out.push_back(v);for(size_t i=1;i<b.size();i++)out.push_back(b[i]);},{2,N1-1},1.f,true);
+      std::vector<Vec3> a=resample(lo,N1),b=resample(up,N2);for(auto& v:a)out.push_back(v);for(size_t i=1;i<b.size();i++)out.push_back(b[i]);},{2,N1-1,N1},1.f,true);
   pm.selectNone();}
 // build, then compare the subdivided top silhouette with the blueprint and re-fit station heights (2 passes)
 void buildCarPoly(PolyMesh& pm){
-  std::vector<float> st;for(float f=2.397f;f>-2.39f;f-=0.15f)st.push_back(f);st.push_back(-2.397f);std::vector<float> corr(st.size(),1.f);
+  std::vector<float> st=carStations();std::vector<float> corr(st.size(),1.f);
   for(int it=0;it<3;it++){buildCarOnce(pm,corr);PolyData e=pm.evaluate(pm.subLevels);
     for(size_t i=0;i<st.size();i++){float best=0;for(auto& v:e.V)if(std::fabs(v.z-st[i])<0.075f&&v.y>best)best=v.y;if(best<0.3f)continue;float want=topH(st[i]);corr[i]=std::max(0.85f,std::min(1.35f,corr[i]*want/best));}}
   buildCarOnce(pm,corr);}
@@ -66,7 +68,7 @@ static void splitPlane(PolyData& d,int axis,float val,float minAx){
     unsigned char mt=i<d.M.size()?d.M[i]:0;
     if(A.size()<3||B.size()<3)continue;d.F[i]=A;d.F.push_back(B);d.M.resize(d.F.size()-1,0);d.M.push_back(mt);}}
 static void paintCar(PolyMesh& pm){
-  pm.d.M.resize(pm.d.F.size(),0);splitPlane(pm.d,2,0.70f,0.7f);splitPlane(pm.d,2,-0.75f,0.7f);splitPlane(pm.d,1,0.30f,0.7f);splitPlane(pm.d,1,1.40f,0.7f);
+  pm.d.M.resize(pm.d.F.size(),0);splitPlane(pm.d,2,0.70f,0.7f);splitPlane(pm.d,2,-0.75f,0.7f);splitPlane(pm.d,1,0.30f,0.7f);splitPlane(pm.d,1,1.40f,0.7f);splitPlane(pm.d,1,0.99f,0.f);splitPlane(pm.d,2,0.30f,0.f);splitPlane(pm.d,2,1.10f,0.f);splitPlane(pm.d,2,-0.95f,0.f);splitPlane(pm.d,2,-1.55f,0.f);splitPlane(pm.d,2,-0.30f,0.5f);splitPlane(pm.d,2,-0.05f,0.5f);splitPlane(pm.d,2,-1.15f,0.5f);splitPlane(pm.d,2,0.80f,0.5f);
   PolyData& d=pm.d;d.M.assign(d.F.size(),0);
   for(size_t i=0;i<d.F.size();i++){auto& f=d.F[i];Vec3 c{0,0,0};for(int v:f)c=c+d.V[v];c=c*(1.f/f.size());Vec3 n=pm.faceNormal((int)i);float ax=std::fabs(c.x);int m=0;
     float dF=std::hypot(c.y-0.35f,c.z-1.48f),dR=std::hypot(c.y-0.35f,c.z+1.377f);
@@ -132,7 +134,7 @@ static void addDecal(PolyMesh& pm,const TGrid& T,int side,float x0,float x1,floa
 static void addDecals(PolyMesh& pm){
   TGrid T;for(size_t i=0;i<pm.d.F.size();i++){unsigned char m=i<pm.d.M.size()?pm.d.M[i]:0;if(m!=0&&m!=1&&m!=3)continue;auto& f=pm.d.F[i];if(f.size()<3)continue;Vec3 n=pm.faceNormal((int)i);if(std::fabs(n.z)<0.15f)continue;
     for(size_t k=1;k+1<f.size();k++)T.t.push_back({pm.d.V[f[0]],pm.d.V[f[k]],pm.d.V[f[k+1]]});}
-  T.build();const float st=0.007f;
+  T.build();const float st=0.010f;
   // kidney grilles: chrome frame + black inside, wider at the bottom
   for(int s=-1;s<=1;s+=2){
     auto fr=[s](float x,float y){float ax=std::fabs(x);return ax>0.035f&&ax<0.43f-(y-0.36f)*0.10f&&y>0.36f&&y<0.72f;};
@@ -145,9 +147,9 @@ static void addDecals(PolyMesh& pm){
   // slim angled headlights
   for(int s=-1;s<=1;s+=2){float xa=s>0?0.40f:-0.92f,xb=s>0?0.92f:-0.40f;
     auto in=[](float x,float y){float ax=std::fabs(x);float lo=0.62f+0.30f*(ax-0.46f);return ax>0.46f&&ax<0.88f&&y>lo&&y<lo+0.075f-(ax-0.46f)*0.05f;};
-    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.006f,0.008f,5,in);
+    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.009f,0.008f,5,in);
     auto lo2=[](float x,float y){float ax=std::fabs(x);float lo=0.62f+0.30f*(ax-0.46f);return ax>0.46f&&ax<0.88f&&y>lo-0.012f&&y<lo;};
-    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.006f,0.010f,3,lo2);}
+    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.009f,0.010f,3,lo2);}
   // lower intakes
   for(int s=-1;s<=1;s+=2){float xa=s>0?0.30f:-0.90f,xb=s>0?0.90f:-0.30f;
     addDecal(pm,T,1,xa,xb,0.20f,0.44f,0.008f,0.008f,3,[](float x,float y){float ax=std::fabs(x);return ax>0.40f&&ax<0.85f&&y>0.24f+0.18f*(ax-0.40f)*0&&y<0.40f-(ax-0.40f)*0.12f;});}
