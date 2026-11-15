@@ -52,7 +52,21 @@ void buildCarPoly(PolyMesh& pm){
   buildCarOnce(pm,corr);}
 
 // ---- materials: 0 paint 1 glass 2 chrome 3 black 4 rubber 5 lamp 6 tail-lamp 7 leather
+
+// split every polygon (on a car side) that crosses the plane axis=val, so door borders become exact edges
+static void splitPlane(PolyData& d,int axis,float val,float minAx){
+  auto g=[&](Vec3 p){return axis==0?p.x:axis==1?p.y:p.z;};
+  size_t nf=d.F.size();
+  for(size_t i=0;i<nf;i++){auto F=d.F[i];Vec3 c{0,0,0};for(int v:F)c=c+d.V[v];c=c*(1.f/F.size());if(std::fabs(c.x)<minAx)continue;
+    bool neg=false,pos=false;for(int v:F){float t=g(d.V[v])-val;if(t<-1e-5f)neg=true;if(t>1e-5f)pos=true;}if(!(neg&&pos))continue;
+    std::vector<int> A,B;size_t n=F.size();
+    for(size_t k=0;k<n;k++){int a=F[k],b=F[(k+1)%n];float ta=g(d.V[a])-val,tb=g(d.V[b])-val;
+      if(ta<=1e-5f)A.push_back(a);if(ta>=-1e-5f)B.push_back(a);
+      if((ta<-1e-5f&&tb>1e-5f)||(ta>1e-5f&&tb<-1e-5f)){float u=ta/(ta-tb);Vec3 p=d.V[a]+(d.V[b]-d.V[a])*u;int id=(int)d.V.size();d.V.push_back(p);A.push_back(id);B.push_back(id);}}
+    unsigned char mt=i<d.M.size()?d.M[i]:0;
+    if(A.size()<3||B.size()<3)continue;d.F[i]=A;d.F.push_back(B);d.M.resize(d.F.size()-1,0);d.M.push_back(mt);}}
 static void paintCar(PolyMesh& pm){
+  pm.d.M.resize(pm.d.F.size(),0);splitPlane(pm.d,2,0.70f,0.7f);splitPlane(pm.d,2,-0.75f,0.7f);splitPlane(pm.d,1,0.30f,0.7f);splitPlane(pm.d,1,1.40f,0.7f);
   PolyData& d=pm.d;d.M.assign(d.F.size(),0);
   for(size_t i=0;i<d.F.size();i++){auto& f=d.F[i];Vec3 c{0,0,0};for(int v:f)c=c+d.V[v];c=c*(1.f/f.size());Vec3 n=pm.faceNormal((int)i);float ax=std::fabs(c.x);int m=0;
     float dF=std::hypot(c.y-0.35f,c.z-1.48f),dR=std::hypot(c.y-0.35f,c.z+1.377f);
