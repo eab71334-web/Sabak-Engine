@@ -23,7 +23,7 @@ struct PolyMesh {
   void selectRingLoop(ull e);                       // select the whole edge loop through an edge (quad strip)
   // edit ops (return false when nothing to do)
   bool extrude(float dist); bool inset(float amount); bool bevel(float crease);
-  bool setMat(int m); void fitM(){d.M.resize(d.F.size(),0);} bool loopCut(ull edge,float t=0.5f); bool deleteFaces(); bool flip(); bool setCrease(float v);
+  bool setMat(int m); bool shrinkwrap(const PolyData& target,float offset=0.f); bool snapBlueprint(); void fitM(){d.M.resize(d.F.size(),0);} bool loopCut(ull edge,float t=0.5f); bool deleteFaces(); bool flip(); bool setCrease(float v);
   void moveSel(Vec3 delta,float radius=0.f); void scaleSel(float f,float radius=0.f);
   Vec3 selCenter() const; Vec3 faceNormal(int f) const; Vec3 faceCenter(int f) const;
   // undo
@@ -37,5 +37,5 @@ struct PolyMesh {
  private:
   void syncFromFaces(); void syncFromVerts();
 };
-int carPartAt(Vec3 c,Vec3 n,int mat); void buildCarPoly(PolyMesh& pm); void bakeWheelArches(PolyMesh& pm);
+float carTopH(float z); float carHalfW(float z); int carPartAt(Vec3 c,Vec3 n,int mat); void buildCarPoly(PolyMesh& pm); void bakeWheelArches(PolyMesh& pm);
 }

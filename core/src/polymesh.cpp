@@ -76,6 +76,18 @@ bool PolyMesh::setCrease(float v){if(selE.empty())return false;snapshot();for(ul
 bool PolyMesh::bevel(float c){return setCrease(c);}   // rounded edge: semi-sharp crease, resolved by subdivision
 bool PolyMesh::deleteFaces(){if(selF.empty())return false;snapshot();fitM();std::vector<std::vector<int>> nf;std::vector<unsigned char> nm;for(size_t f=0;f<d.F.size();f++)if(!selF.count((int)f)){nf.push_back(d.F[f]);nm.push_back(d.M[f]);}d.F=nf;d.M=nm;selectNone();return true;}
 bool PolyMesh::setMat(int m){if(selF.empty())return false;snapshot();fitM();for(int f:selF)d.M[f]=(unsigned char)m;return true;}
+
+// ---- shrinkwrap: project the selected vertices (or all) onto the nearest point of another mesh
+static Vec3 closestOnTri(Vec3 p,Vec3 a,Vec3 b,Vec3 c){Vec3 ab=b-a,ac=c-a,ap=p-a;float d1=dot(ab,ap),d2=dot(ac,ap);if(d1<=0&&d2<=0)return a;Vec3 bp=p-b;float d3=dot(ab,bp),d4=dot(ac,bp);if(d3>=0&&d4<=d3)return b;
+  float vc=d1*d4-d3*d2;if(vc<=0&&d1>=0&&d3<=0)return a+ab*(d1/(d1-d3));Vec3 cp=p-c;float d5=dot(ab,cp),d6=dot(ac,cp);if(d6>=0&&d5<=d6)return c;
+  float vb=d5*d2-d1*d6;if(vb<=0&&d2>=0&&d6<=0)return a+ac*(d2/(d2-d6));float va=d3*d6-d5*d4;if(va<=0&&(d4-d3)>=0&&(d5-d6)>=0){float w=(d4-d3)/((d4-d3)+(d5-d6));return b+(c-b)*w;}
+  float den=1.f/(va+vb+vc);return a+ab*(vb*den)+ac*(vc*den);}
+bool PolyMesh::shrinkwrap(const PolyData& T,float off){
+  std::vector<std::array<Vec3,3>> tri;for(auto& f:T.F)for(size_t i=1;i+1<f.size();i++)tri.push_back({T.V[f[0]],T.V[f[i]],T.V[f[i+1]]});if(tri.empty())return false;
+  snapshot();std::set<int> sv=selV;if(sv.empty())for(size_t i=0;i<d.V.size();i++)sv.insert((int)i);
+  for(int v:sv){Vec3 p=d.V[v],best=p;float bd=1e30f;Vec3 bn{0,1,0};for(auto& t:tri){Vec3 q=closestOnTri(p,t[0],t[1],t[2]);Vec3 e=q-p;float dd=dot(e,e);if(dd<bd){bd=dd;best=q;bn=norm(cross(t[1]-t[0],t[2]-t[0]));}}
+    d.V[v]=best+bn*off;}
+  return true;}
 bool PolyMesh::flip(){if(selF.empty())return false;snapshot();for(int f:selF)std::reverse(d.F[f].begin(),d.F[f].end());return true;}
 // ---- loop cut: walks the quad ring across `edge`, inserts a vertex on every ring edge and splits the quads
 bool PolyMesh::loopCut(ull edge,float t){

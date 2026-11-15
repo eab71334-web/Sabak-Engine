@@ -29,11 +29,13 @@ bool App::pmModel(Model& m){
   if(pm_.d.F.empty()){std::string dir=cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir:"";if(dir.empty()||!pm_.load(pdir(dir)+"/M1.ply"))pmPrim(0);}
   m=Model();m.name="PolyModel";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
   for(int k=0;k<8;k++){ModelMat mm;mm.kind=PMM[k].kind;for(int c=0;c<4;c++)mm.col[c]=PMM[k].c[c];if(r_){unsigned char wh[4]={255,255,255,255};mm.tex=r_->createTexture(wh,1,1);}m.mats.push_back(mm);}
-  if(pm_.rig&&pm_.subLevels==0){const char* jn[6]={"wheel.FL","wheel.FR","wheel.RL","wheel.RR","door.L","door.R"};Vec3 jp[6]={{0.8f,0.355f,1.48f},{-0.8f,0.355f,1.48f},{0.8f,0.355f,-1.377f},{-0.8f,0.355f,-1.377f},{0.93f,0.7f,0.66f},{-0.93f,0.7f,0.66f}};
-    for(int i=0;i<6;i++){m.nodeName.push_back(jn[i]);m.parent.push_back(0);TRS t;t.t=jp[i];m.rest.push_back(t);m.joints.push_back(i+1);m.ibm.push_back(Mat4::translate(jp[i]*-1.f));}
+  if(pm_.rig&&pm_.subLevels==0){const char* jn[8]={"wheel.FL","wheel.FR","wheel.RL","wheel.RR","door.L","door.R","hood","trunk"};Vec3 jp[8]={{0.8f,0.355f,1.48f},{-0.8f,0.355f,1.48f},{0.8f,0.355f,-1.377f},{-0.8f,0.355f,-1.377f},{0.93f,0.7f,0.66f},{-0.93f,0.7f,0.66f},{0.f,1.0f,1.10f},{0.f,1.0f,-1.55f}};
+    for(int i=0;i<8;i++){m.nodeName.push_back(jn[i]);m.parent.push_back(0);TRS t;t.t=jp[i];m.rest.push_back(t);m.joints.push_back(i+1);m.ibm.push_back(Mat4::translate(jp[i]*-1.f));}
     Anim sp;sp.name="wheels";sp.dur=0.6f;for(int i=0;i<4;i++){AnimChannel c;c.node=i+1;c.path=1;float sg=1.f;c.t={0,0.15f,0.3f,0.45f,0.6f};for(int q=0;q<5;q++){float a=sg*6.2831853f*q/4.f;c.v.insert(c.v.end(),{std::sin(a*0.5f),0.f,0.f,std::cos(a*0.5f)});}sp.ch.push_back(c);}m.anims.push_back(sp);
     Anim dr;dr.name="doors_open";dr.dur=1.f;for(int i=0;i<2;i++){AnimChannel c;c.node=5+i;c.path=1;float sg=i?0.9f:-0.9f;c.t={0,0.8f};float a=sg;c.v={0,0,0,1,0,std::sin(a*0.5f),0,std::cos(a*0.5f)};dr.ch.push_back(c);}m.anims.push_back(dr);
     Anim dc;dc.name="doors_close";dc.dur=1.f;for(int i=0;i<2;i++){AnimChannel c;c.node=5+i;c.path=1;float sg=i?0.9f:-0.9f;c.t={0,0.8f};float a=sg;c.v={0,std::sin(a*0.5f),0,std::cos(a*0.5f),0,0,0,1};dc.ch.push_back(c);}m.anims.push_back(dc);
+    {Anim a;a.name="hood_open";a.dur=1.f;AnimChannel c;c.node=7;c.path=1;c.t={0,0.8f};float an=-0.85f;c.v={0,0,0,1,std::sin(an*0.5f),0,0,std::cos(an*0.5f)};a.ch.push_back(c);m.anims.push_back(a);}
+    {Anim a;a.name="trunk_open";a.dur=1.f;AnimChannel c;c.node=8;c.path=1;c.t={0,0.8f};float an=0.75f;c.v={0,0,0,1,std::sin(an*0.5f),0,0,std::cos(an*0.5f)};a.ch.push_back(c);m.anims.push_back(a);}
     m.builtin=(int)m.anims.size();}
   float top=0.5f;
   for(int k=0;k<8;k++){std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false,k);if(idx.empty())continue;
@@ -141,6 +143,8 @@ void App::pmTap(int id){std::string dir=cur_>=0&&cur_<(int)projects_.size()?proj
   if(id==954){pm_.mirrorX=!pm_.mirrorX;pmRebuild();return;}
   if(id==955){pm_.subLevels=(pm_.subLevels+1)%4;pmRebuild();return;}
   if(id==956){pmWire_=!pmWire_;return;}
+  if(id==988){PolyData T=pmOther_.evaluate(pmOther_.subLevels);if(pm_.shrinkwrap(T,0.f))pmRebuild();else toast("Shrinkwrap needs a cutter/target mesh");return;}
+  if(id==989){if(pm_.snapBlueprint())pmRebuild();else toast("Select vertices near the blueprint outline first");return;}
   if(id>=980&&id<=987){if(pm_.setMat(id-980))pmRebuild();else toast("Select faces first (Face mode)");return;}
   if(id==979){pm_.snapshot();buildCarPoly(pm_);pm_.snapshot();bakeWheelArches(pm_);if(pmOther_.d.V.size()&&pmOther_.d.V[0].y>-20)for(auto& v:pmOther_.d.V)v.y-=60.f;pmRebuild();toast("G82 car built (arches cut)");return;}
   if(id==957||id==958||id==959){pm_.snapshot();pmPrim(id-957);pmRebuild();return;}
@@ -178,7 +182,8 @@ void App::drawModelStudio(float W,float H){
   for(int i=0;i<2;i++){float ry=268+i*24;ui.text(nm[i],x+14,ry+1,10,TXT2,F_BOLD);float t=std::max(0.f,std::min(1.f,val[i]));ui.rrect(18,ry+14,176,5,2,BG0,BG0);ui.rrect(18,ry+14,176*t,5,2,ACC,ACC);ui.circle(18+176*t,ry+16.5f,6,Col::hex(0xffffff),Col::hex(0xffffff));}
   {bool hs=false,hf=false,ht=false;for(auto& e:scene_.ents){if(e.asset=="pmref:side")hs=true;if(e.asset=="pmref:front")hf=true;if(e.asset=="pmref:top")ht=true;}drawToolBtn(969,gx,321,60,19,"Ref side",hs);drawToolBtn(970,gx+64,321,60,19,"Ref front",hf);drawToolBtn(971,gx+128,321,60,19,"Ref top",ht);}
   {const char* ml[8]={"Paint","Glass","Chrome","Black","Rubber","Lamp","Tail","Seat"};int cur=-1;for(int f:pm_.selF){int m2=f<(int)pm_.d.M.size()?pm_.d.M[f]:0;if(cur==-1)cur=m2;else if(cur!=m2){cur=-2;break;}}
-    ui.text("MATERIAL",W-52,48,8.5f,TXT3,F_BOLD);for(int i=0;i<8;i++)drawToolBtn(980+i,W-52,60+i*25,48,21,ml[i],cur==i);}
+    ui.text("MATERIAL",W-52,48,8.5f,TXT3,F_BOLD);for(int i=0;i<8;i++)drawToolBtn(980+i,W-52,60+i*25,48,21,ml[i],cur==i);
+    drawToolBtn(988,W-52,266,48,21,"Wrap");drawToolBtn(989,W-52,291,48,21,"Snap BP");}
   drawToolBtn(965,gx,343,92,19,"Export GLB");drawToolBtn(966,gx+96,343,92,19,"Save");
   // ---- cutter wire (red) when editing the model
   if(pmWire_&&pmObj_==0){float S=ui.s();std::set<ull> seen;for(auto& f:pmOther_.d.F)for(size_t i=0;i<f.size();i++){int a=f[i],b=f[(i+1)%f.size()];if(!seen.insert(PolyMesh::key(a,b)).second)continue;float x0,y0,x1,y1;if(!pmProj(pmOther_.d.V[a],x0,y0)||!pmProj(pmOther_.d.V[b],x1,y1))continue;ui.line(x0/S,y0/S,x1/S,y1/S,1.1f,Col::hex(0xff5a5a,0.9f));}}

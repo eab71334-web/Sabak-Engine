@@ -67,8 +67,23 @@ static void splitPlane(PolyData& d,int axis,float val,float minAx){
       if((ta<-1e-5f&&tb>1e-5f)||(ta>1e-5f&&tb<-1e-5f)){float u=ta/(ta-tb);Vec3 p=d.V[a]+(d.V[b]-d.V[a])*u;int id=(int)d.V.size();d.V.push_back(p);A.push_back(id);B.push_back(id);}}
     unsigned char mt=i<d.M.size()?d.M[i]:0;
     if(A.size()<3||B.size()<3)continue;d.F[i]=A;d.F.push_back(B);d.M.resize(d.F.size()-1,0);d.M.push_back(mt);}}
+
+float carTopH(float z){return topH(z);} float carHalfW(float z){return halfW(z);}
+static bool carGap(Vec3 c,Vec3 n){const float g=0.0042f;float ax=std::fabs(c.x);
+  if(std::fabs(ax-0.70f)<g&&c.z>1.10f&&c.z<2.20f&&n.y>0.3f&&c.y>0.7f)return true;           // hood / fender seam
+  if(std::fabs(c.z-2.20f)<g&&ax<0.72f&&n.y>0.2f&&c.y>0.6f)return true;                      // hood front edge
+  if(std::fabs(c.z-1.10f)<g&&ax<0.95f&&c.y>0.9f&&n.y>0.3f)return true;                      // cowl
+  if(std::fabs(c.z+1.55f)<g&&ax<0.80f&&c.y>0.85f&&n.y>0.3f)return true;                     // boot lid front
+  if(std::fabs(c.z+2.22f)<g&&c.y>0.7f&&n.y>0.2f&&ax<0.80f)return true;                      // boot lid rear
+  if(std::fabs(ax-0.70f)<g&&c.z<-1.55f&&c.z>-2.22f&&n.y>0.3f&&c.y>0.8f)return true;         // boot side seam
+  if(std::fabs(c.z-2.05f)<g&&ax>0.72f&&std::fabs(n.x)>0.4f&&c.y>0.35f&&c.y<0.9f)return true; // fender / front bumper
+  if(std::fabs(c.z+2.00f)<g&&ax>0.72f&&std::fabs(n.x)>0.4f&&c.y>0.35f&&c.y<0.95f)return true;// rear bumper line
+  return false;}
 static void paintCar(PolyMesh& pm){
   pm.d.M.resize(pm.d.F.size(),0);splitPlane(pm.d,2,0.70f,0.7f);splitPlane(pm.d,2,-0.75f,0.7f);splitPlane(pm.d,1,0.30f,0.7f);splitPlane(pm.d,1,1.40f,0.7f);splitPlane(pm.d,1,0.99f,0.f);splitPlane(pm.d,2,0.30f,0.f);splitPlane(pm.d,2,1.10f,0.f);splitPlane(pm.d,2,-0.95f,0.f);splitPlane(pm.d,2,-1.55f,0.f);splitPlane(pm.d,2,-0.30f,0.5f);splitPlane(pm.d,2,-0.05f,0.5f);splitPlane(pm.d,2,-1.15f,0.5f);splitPlane(pm.d,2,0.80f,0.5f);
+  {const float g=0.0035f;auto band=[&](int ax,float v,float mn){splitPlane(pm.d,ax,v-g,mn);splitPlane(pm.d,ax,v+g,mn);};
+   band(0,0.70f,0.f);band(0,-0.70f,0.f);band(2,2.20f,0.f);band(2,1.10f,0.f);band(2,-1.55f,0.f);band(2,-2.22f,0.f);band(2,2.05f,0.7f);band(2,-2.00f,0.7f);}
+
   PolyData& d=pm.d;d.M.assign(d.F.size(),0);
   for(size_t i=0;i<d.F.size();i++){auto& f=d.F[i];Vec3 c{0,0,0};for(int v:f)c=c+d.V[v];c=c*(1.f/f.size());Vec3 n=pm.faceNormal((int)i);float ax=std::fabs(c.x);int m=0;
     float dF=std::hypot(c.y-0.35f,c.z-1.48f),dR=std::hypot(c.y-0.35f,c.z+1.377f);
@@ -79,6 +94,7 @@ static void paintCar(PolyMesh& pm){
       bool rear=c.z<-0.95f&&c.z>-1.55f&&n.z<-0.35f&&n.y<0.8f;
       bool side=std::fabs(n.x)>0.45f&&c.z>-1.15f&&c.z<0.80f&&!(c.z>-0.30f&&c.z<-0.05f);
       if(wind||rear||side)m=1;}
+    if(m==0&&carGap(c,n))m=3;
     d.M[i]=(unsigned char)m;}}
 static void addPart(PolyMesh& pm,float cx,float cz,float r,float w,int n,int mat){
   PolyMesh c;c.cylinder({0,0,0},r,w,n);PolyData cd=c.d;size_t b=pm.d.V.size();
@@ -160,10 +176,12 @@ static void addDecals(PolyMesh& pm){
   addDecal(pm,T,-1,-0.85f,0.85f,0.22f,0.45f,0.008f,0.008f,3,[](float x,float y){return std::fabs(x)<0.82f&&y>0.26f&&y<0.38f;});
 }
 
-// joints: 0 body, 1..4 wheels (+x front, -x front, +x rear, -x rear), 5 door +x, 6 door -x
+// joints: 7 hood, 8 boot lid; 0 body, 1..4 wheels (+x front, -x front, +x rear, -x rear), 5 door +x, 6 door -x
 int carPartAt(Vec3 c,Vec3 n,int mat){
   float ax=std::fabs(c.x);float zs[2]={1.48f,-1.377f};
   if(ax>0.62f&&ax<0.99f&&(mat==2||mat==3||mat==4))for(int k=0;k<2;k++)if(std::hypot(c.y-0.355f,c.z-zs[k])<0.372f)return 1+k*2+(c.x<0?1:0);
+  if(mat==0&&c.z>1.1042f&&c.z<2.1958f&&ax<0.6958f&&n.y>0.25f&&c.y>0.75f)return 7;   // hood
+  if(mat==0&&c.z<-1.5542f&&c.z>-2.2158f&&ax<0.6958f&&n.y>0.25f&&c.y>0.80f)return 8;  // boot lid
   if((mat==0||mat==1)&&ax>0.70f&&std::fabs(n.x)>0.4f&&c.y>0.30f&&c.y<1.40f&&c.z>-0.75f&&c.z<0.70f)return c.x>0?5:6;
   return 0;}
 static void addBox(PolyMesh& pm,Vec3 c,Vec3 h,int mat){PolyMesh b;b.cube(c,h);size_t o=pm.d.V.size();for(auto v:b.d.V)pm.d.V.push_back(v);for(auto f:b.d.F){for(int& k:f)k+=(int)o;pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
@@ -186,4 +204,11 @@ void bakeWheelArches(PolyMesh& pm){
   for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){PolyMesh c;c.cylinder({0,0,0},0.43f,0.45f,40);PolyData cd=c.d; // axis Y -> rotate to X
     for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;v={s*0.88f+x,0.35f+y,zf+z};}for(auto& f:cd.F)std::reverse(f.begin(),f.end());A=PolyMesh::boolean(A,cd,0);}
   pm.d=A;pm.mirrorX=false;pm.subLevels=0;pm.selectNone();paintCar(pm);addWheels(pm);addExtras(pm);addDecals(pm);pm.rig=true;}
+}
+
+namespace sk{
+// snap the selected vertices (or all) onto the blueprint: heights near the top silhouette and widths near the plan outline
+bool PolyMesh::snapBlueprint(){if(selV.empty())return false;snapshot();std::set<int> sv=selV;int n=0;
+  for(int v:sv){Vec3& p=d.V[v];float ax=std::fabs(p.x),sg=p.x<0?-1.f:1.f;float t=topH(p.z);if(std::fabs(p.y-t)<0.12f&&ax<0.6f){p.y=t;n++;}float hw=halfW(p.z);if(std::fabs(ax-hw)<0.08f){p.x=sg*hw;n++;}}
+  return n>0;}
 }
