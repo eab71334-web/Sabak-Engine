@@ -178,9 +178,9 @@ static void addDecals(PolyMesh& pm){
     // rows need xl<xr in signed space: for s<0 swap
     auto rowsDecal=[&](float y0,float y1,int ny,std::function<float(float)> a,std::function<float(float)> b,float off,int mat){
       auto xl=[&,s](float y){float u=s*a(y),v=s*b(y);return std::min(u,v);};auto xr=[&,s](float y){float u=s*a(y),v=s*b(y);return std::max(u,v);};addRows(pm,T,1,y0,y1,ny,8,xl,xr,off,mat);};
-    rowsDecal(0.25f,0.70f,24,fl,fr,0.006f,2);
-    rowsDecal(0.27f,0.685f,22,il,ir,0.010f,3);
-    for(int k=0;k<8;k++){float y=0.30f+k*0.048f;rowsDecal(y,y+0.010f,1,il,ir,0.014f,2);}
+    rowsDecal(0.25f,0.625f,22,fl,fr,0.006f,2);
+    rowsDecal(0.27f,0.610f,20,il,ir,0.010f,3);
+    for(int k=0;k<7;k++){float y=0.30f+k*0.046f;rowsDecal(y,y+0.010f,1,il,ir,0.014f,2);}
     (void)fo;(void)io;
     // slim angled headlight with a darker lower rim
     float xa=s>0?0.46f:-0.90f,xb=s>0?0.90f:-0.46f;
