@@ -8,7 +8,7 @@
 #include "vmath.h"
 namespace sk {
 typedef unsigned long long ull;
-struct PolyData { std::vector<Vec3> V; std::vector<std::vector<int>> F; std::map<ull,float> crease; };
+struct PolyData { std::vector<Vec3> V; std::vector<std::vector<int>> F; std::map<ull,float> crease; std::vector<unsigned char> M; };  // M: per-face material id (0..7), may be shorter than F
 struct PolyMesh {
   PolyData d;
   std::set<int> selV, selF; std::set<ull> selE;     // selection (any mode keeps the three sets consistent)
@@ -23,7 +23,7 @@ struct PolyMesh {
   void selectRingLoop(ull e);                       // select the whole edge loop through an edge (quad strip)
   // edit ops (return false when nothing to do)
   bool extrude(float dist); bool inset(float amount); bool bevel(float crease);
-  bool loopCut(ull edge,float t=0.5f); bool deleteFaces(); bool flip(); bool setCrease(float v);
+  bool setMat(int m); void fitM(){d.M.resize(d.F.size(),0);} bool loopCut(ull edge,float t=0.5f); bool deleteFaces(); bool flip(); bool setCrease(float v);
   void moveSel(Vec3 delta,float radius=0.f); void scaleSel(float f,float radius=0.f);
   Vec3 selCenter() const; Vec3 faceNormal(int f) const; Vec3 faceCenter(int f) const;
   // undo

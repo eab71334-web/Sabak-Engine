@@ -12,20 +12,26 @@ namespace fs=std::filesystem;
 static std::string pdir(const std::string& proj){return proj+"/pmodels";}
 Entity* App::pmEntity(){for(auto& e:scene_.ents)if(e.prim==P_MODEL&&e.asset.rfind("pmodel:",0)==0)return &e;return nullptr;}
 
-void App::pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx,bool cutter) const{
+void App::pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx,bool cutter,int mat) const{
   const PolyMesh& P=(pmObj_==0)!=cutter?pm_:pmOther_;PolyData m=P.evaluate(P.subLevels);v.clear();idx.clear();
+  auto matOf=[&](size_t f){return f<m.M.size()?(int)m.M[f]:0;};
   auto push=[&](Vec3 p,Vec3 n){SkinVertex s{};s.p[0]=p.x;s.p[1]=p.y;s.p[2]=p.z;s.n[0]=n.x;s.n[1]=n.y;s.n[2]=n.z;s.uv[0]=p.z*0.5f+p.x*0.3f;s.uv[1]=p.y*0.5f+p.x*0.2f;s.j[0]=0;s.w[0]=1;v.push_back(s);};
-  if(P.subLevels==0){for(auto& f:m.F){Vec3 n{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 a=m.V[f[i]],b=m.V[f[(i+1)%f.size()]];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}n=norm(n);
+  if(P.subLevels==0){for(size_t fi=0;fi<m.F.size();fi++){auto& f=m.F[fi];if(mat>=0&&matOf(fi)!=mat)continue;Vec3 n{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 a=m.V[f[i]],b=m.V[f[(i+1)%f.size()]];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}n=norm(n);
       uint32_t b0=(uint32_t)v.size();for(int k:f)push(m.V[k],n);for(size_t i=1;i+1<f.size();i++){idx.push_back(b0);idx.push_back(b0+(uint32_t)i);idx.push_back(b0+(uint32_t)i+1);}}}
-  else{std::vector<Vec3> P,N;PolyMesh::triangulate(m,P,N,idx);for(size_t i=0;i<P.size();i++)push(P[i],N[i]);}}
+  else{std::vector<Vec3> PP,N;std::vector<uint32_t> all;PolyMesh::triangulate(m,PP,N,all);
+    if(mat<0){idx=all;}else{size_t t=0;for(size_t fi=0;fi<m.F.size();fi++){size_t nt=m.F[fi].size()-2;if(matOf(fi)==mat)for(size_t k=0;k<nt*3;k++)idx.push_back(all[t+k]);t+=nt*3;}}
+    for(size_t i=0;i<PP.size();i++)push(PP[i],N[i]);}}
 
+static const struct{int kind;float c[4];} PMM[8]={{5,{0.16f,0.29f,0.55f,1}},{6,{0.05f,0.07f,0.09f,1}},{7,{0.55f,0.56f,0.6f,1}},{9,{0.04f,0.04f,0.045f,1}},{9,{0.02f,0.02f,0.02f,1}},{12,{1.f,0.97f,0.85f,1}},{12,{1.f,0.08f,0.05f,1}},{11,{0.12f,0.08f,0.06f,1}}};
 bool App::pmModel(Model& m){
   if(pm_.d.F.empty()){std::string dir=cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir:"";if(dir.empty()||!pm_.load(pdir(dir)+"/M1.ply"))pmPrim(0);}
-  std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false);
   m=Model();m.name="PolyModel";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
-  ModelMat mm;mm.kind=5;mm.col[0]=0.16f;mm.col[1]=0.29f;mm.col[2]=0.55f;mm.col[3]=1;if(r_){unsigned char wh[4]={255,255,255,255};mm.tex=r_->createTexture(wh,1,1);}m.mats.push_back(mm);
-  ModelPrim mp;mp.mat=0;mp.cv=v;mp.ci=idx;if(r_&&!idx.empty())mp.mesh=r_->uploadSkin(v,idx);m.prims.push_back(std::move(mp));
-  float top=0.5f;for(auto& s:v)top=std::max(top,s.p[1]);m.fit=1;m.foot=0;m.height=top;m.radius=2;m.autoRig=false;return true;}
+  for(int k=0;k<8;k++){ModelMat mm;mm.kind=PMM[k].kind;for(int c=0;c<4;c++)mm.col[c]=PMM[k].c[c];if(r_){unsigned char wh[4]={255,255,255,255};mm.tex=r_->createTexture(wh,1,1);}m.mats.push_back(mm);}
+  float top=0.5f;
+  for(int k=0;k<8;k++){std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false,k);if(idx.empty())continue;
+    ModelPrim mp;mp.mat=k;mp.cv=v;mp.ci=idx;if(r_)mp.mesh=r_->uploadSkin(v,idx);m.prims.push_back(std::move(mp));for(auto& s:v)top=std::max(top,s.p[1]);}
+  if(m.prims.empty()){ModelPrim mp;mp.mat=0;m.prims.push_back(std::move(mp));}
+  m.fit=1;m.foot=0;m.height=top;m.radius=2;m.autoRig=false;return true;}
 
 bool App::pmCutModel(Model& m){std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,true);
   m=Model();m.name="Cutter";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
@@ -33,8 +39,12 @@ bool App::pmCutModel(Model& m){std::vector<SkinVertex> v;std::vector<uint32_t> i
   ModelPrim mp;mp.mat=0;mp.cv=v;mp.ci=idx;if(r_&&!idx.empty())mp.mesh=r_->uploadSkin(v,idx);m.prims.push_back(std::move(mp));m.fit=1;m.foot=0;m.height=1;m.radius=2;m.autoRig=false;return true;}
 void App::pmRebuild(){Entity* e=pmEntity();if(!e)return;models_.erase(e->asset);models_.erase("pmcut:M2");
   for(auto i2=minst_.begin();i2!=minst_.end();){const Entity* en=scene_.get(i2->first.second);if(i2->first.first==&scene_&&en&&(en->asset==e->asset||en->asset=="pmcut:M2"))i2=minst_.erase(i2);else ++i2;}modelFor(e->asset);}
-void App::pmLive(){Entity* e=pmEntity();if(!e)return;Model* m=modelFor(e->asset);if(!m||m->prims.empty())return;std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false);
-  if(v.size()==m->prims[0].cv.size()&&idx.size()==m->prims[0].ci.size()){m->prims[0].cv=v;r_->updateSkin(m->prims[0].mesh,v);}else pmRebuild();}
+void App::pmLive(){Entity* e=pmEntity();if(!e)return;Model* m=modelFor(e->asset);if(!m||m->prims.empty())return;
+  std::vector<std::vector<SkinVertex>> vs;bool ok=true;int present=0;
+  for(int k=0;k<8;k++){std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false,k);if(idx.empty())continue;present++;bool f=false;
+    for(auto& p:m->prims)if(p.mat==k){f=true;if(v.size()!=p.cv.size()||idx.size()!=p.ci.size())ok=false;}if(!f)ok=false;vs.push_back(v);}
+  if(!ok||present!=(int)m->prims.size()){pmRebuild();return;}
+  size_t i=0;for(int k=0;k<8;k++){for(auto& p:m->prims)if(p.mat==k&&i<vs.size()){p.cv=vs[i];r_->updateSkin(p.mesh,vs[i]);i++;break;}}}
 
 void App::pmPrim(int k){bool half=pm_.mirrorX;float cx=half?0.6f:0.f;
   if(k==0)pm_.cube({cx,0.8f,0},{0.6f,0.6f,0.6f});else if(k==1){pm_.cylinder({0,0.8f,0},0.6f,1.2f,12);if(pmObj_==1){for(auto& p:pm_.d.V){float yy=p.y-0.8f;p={yy,0.8f+p.x*0+0,p.z};}}}else{pm_.grid(8,2.f);for(auto& p:pm_.d.V){p.y+=0.1f;if(half)p.x+=1.f;}
@@ -123,6 +133,7 @@ void App::pmTap(int id){std::string dir=cur_>=0&&cur_<(int)projects_.size()?proj
   if(id==954){pm_.mirrorX=!pm_.mirrorX;pmRebuild();return;}
   if(id==955){pm_.subLevels=(pm_.subLevels+1)%4;pmRebuild();return;}
   if(id==956){pmWire_=!pmWire_;return;}
+  if(id>=980&&id<=987){if(pm_.setMat(id-980))pmRebuild();else toast("Select faces first (Face mode)");return;}
   if(id==979){pm_.snapshot();buildCarPoly(pm_);pm_.snapshot();bakeWheelArches(pm_);pmRebuild();toast("G82 car built (arches cut)");return;}
   if(id==957||id==958||id==959){pm_.snapshot();pmPrim(id-957);pmRebuild();return;}
   if(id>=961&&id<=964){pmAxis_=id-961;return;}
@@ -158,6 +169,8 @@ void App::drawModelStudio(float W,float H){
   const char* nm[2]={"Amount (extrude/inset/crease)","Soft radius (proportional)"};float val[2]={(pmAmt_+0.5f),pmProp_/1.5f};
   for(int i=0;i<2;i++){float ry=268+i*24;ui.text(nm[i],x+14,ry+1,10,TXT2,F_BOLD);float t=std::max(0.f,std::min(1.f,val[i]));ui.rrect(18,ry+14,176,5,2,BG0,BG0);ui.rrect(18,ry+14,176*t,5,2,ACC,ACC);ui.circle(18+176*t,ry+16.5f,6,Col::hex(0xffffff),Col::hex(0xffffff));}
   {bool hs=false,hf=false,ht=false;for(auto& e:scene_.ents){if(e.asset=="pmref:side")hs=true;if(e.asset=="pmref:front")hf=true;if(e.asset=="pmref:top")ht=true;}drawToolBtn(969,gx,321,60,19,"Ref side",hs);drawToolBtn(970,gx+64,321,60,19,"Ref front",hf);drawToolBtn(971,gx+128,321,60,19,"Ref top",ht);}
+  {const char* ml[8]={"Paint","Glass","Chrome","Black","Rubber","Lamp","Tail","Seat"};int cur=-1;for(int f:pm_.selF){int m2=f<(int)pm_.d.M.size()?pm_.d.M[f]:0;if(cur==-1)cur=m2;else if(cur!=m2){cur=-2;break;}}
+    ui.text("MATERIAL",W-52,48,8.5f,TXT3,F_BOLD);for(int i=0;i<8;i++)drawToolBtn(980+i,W-52,60+i*25,48,21,ml[i],cur==i);}
   drawToolBtn(965,gx,343,92,19,"Export GLB");drawToolBtn(966,gx+96,343,92,19,"Save");
   // ---- cutter wire (red) when editing the model
   if(pmWire_&&pmObj_==0){float S=ui.s();std::set<ull> seen;for(auto& f:pmOther_.d.F)for(size_t i=0;i<f.size();i++){int a=f[i],b=f[(i+1)%f.size()];if(!seen.insert(PolyMesh::key(a,b)).second)continue;float x0,y0,x1,y1;if(!pmProj(pmOther_.d.V[a],x0,y0)||!pmProj(pmOther_.d.V[b],x1,y1))continue;ui.line(x0/S,y0/S,x1/S,y1/S,1.1f,Col::hex(0xff5a5a,0.9f));}}

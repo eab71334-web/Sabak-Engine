@@ -8,7 +8,7 @@ namespace sk {
 namespace {
 typedef unsigned long long ull;
 static ull ekey(int a,int b){if(a>b)std::swap(a,b);return ((ull)a<<32)|(unsigned)b;}
-struct SubMesh{std::vector<Vec3> V;std::vector<std::vector<int>> F;std::map<ull,float> crease;};
+struct SubMesh{std::vector<Vec3> V;std::vector<std::vector<int>> F;std::map<ull,float> crease;std::vector<unsigned char> M;};
 static SubMesh ccOnce(const SubMesh& m){
   size_t nv=m.V.size(),nf=m.F.size();SubMesh o;o.V=m.V;
   std::vector<Vec3> fp(nf);for(size_t f=0;f<nf;f++){Vec3 s{0,0,0};for(int v:m.F[f])s=s+m.V[v];fp[f]=s*(1.f/m.F[f].size());}
@@ -28,7 +28,7 @@ static SubMesh ccOnce(const SubMesh& m){
     else if(sharp.size()==2){Vec3 sm=(P*6+m.V[sharp[0]]+m.V[sharp[1]])*(1.f/8);float t=std::min(1.f,shMax);Vec3 F{0,0,0},R{0,0,0};for(int f:vf[v])F=F+fp[f];F=F*(1.f/vf[v].size());for(ull k:inc[v]){E& e=em[k];R=R+(m.V[e.a]+m.V[e.b])*0.5f;}R=R*(1.f/n);Vec3 sm2=(F+R*2+P*(float)(n-3))*(1.f/n);np=sm2*(1-t)+sm*t;}
     else{Vec3 F{0,0,0},R{0,0,0};for(int f:vf[v])F=F+fp[f];F=F*(1.f/vf[v].size());for(ull k:inc[v]){E& e=em[k];R=R+(m.V[e.a]+m.V[e.b])*0.5f;}R=R*(1.f/n);np=(F+R*2+P*(float)(n-3))*(1.f/n);}
     o.V[v]=np;}
-  for(size_t f=0;f<nf;f++){auto& F=m.F[f];size_t n=F.size();for(size_t i=0;i<n;i++){int a=F[i],b=F[(i+1)%n],z=F[(i+n-1)%n];o.F.push_back({a,em[ekey(a,b)].id,(int)(nv+f),em[ekey(z,a)].id});}}
+  for(size_t f=0;f<nf;f++){auto& F=m.F[f];size_t n=F.size();for(size_t i=0;i<n;i++){int a=F[i],b=F[(i+1)%n],z=F[(i+n-1)%n];o.F.push_back({a,em[ekey(a,b)].id,(int)(nv+f),em[ekey(z,a)].id});o.M.push_back(f<m.M.size()?m.M[f]:0);}}
   for(auto& kv:m.crease){if(kv.second<=1.f)continue;E& e=em[kv.first];o.crease[ekey(e.a,e.id)]=kv.second-1;o.crease[ekey(e.b,e.id)]=kv.second-1;}
   return o;}
 static SubMesh ccSub(SubMesh m,int levels){for(int i=0;i<levels;i++)m=ccOnce(m);return m;}
@@ -62,19 +62,20 @@ static std::set<int> opFaces(const PolyMesh& p){return p.selF;}
 bool PolyMesh::extrude(float dist){auto sf=opFaces(*this);if(sf.empty())return false;snapshot();
   std::map<ull,int> cnt;for(int f:sf){auto& F=d.F[f];for(size_t i=0;i<F.size();i++)cnt[key(F[i],F[(i+1)%F.size()])]++;}
   std::map<int,int> dup;std::map<int,Vec3> nsum;for(int f:sf){Vec3 n=faceNormal(f);for(int v:d.F[f]){if(!dup.count(v)){dup[v]=(int)d.V.size();d.V.push_back(d.V[v]);}nsum[v]=nsum[v]+n;}}
-  std::vector<std::vector<int>> side;
-  for(int f:sf){auto F=d.F[f];for(size_t i=0;i<F.size();i++){int a=F[i],b=F[(i+1)%F.size()];if(cnt[key(a,b)]==1)side.push_back({a,b,dup[b],dup[a]});}
+  std::vector<std::vector<int>> side;std::vector<unsigned char> sm;fitM();
+  for(int f:sf){auto F=d.F[f];for(size_t i=0;i<F.size();i++){int a=F[i],b=F[(i+1)%F.size()];if(cnt[key(a,b)]==1){side.push_back({a,b,dup[b],dup[a]});sm.push_back(d.M[f]);}}
     for(auto& v:d.F[f])v=dup[v];}
   for(auto& kv:dup)d.V[kv.second]=d.V[kv.first]+norm(nsum[kv.first])*dist;
-  for(auto& s:side)d.F.push_back(s);
+  for(size_t i=0;i<side.size();i++){d.F.push_back(side[i]);d.M.push_back(sm[i]);}
   selV.clear();for(auto& kv:dup)selV.insert(kv.second);selE.clear();syncFromFaces();return true;}
-bool PolyMesh::inset(float amount){auto sf=opFaces(*this);if(sf.empty())return false;snapshot();std::vector<std::vector<int>> side;std::set<int> keep;
+bool PolyMesh::inset(float amount){auto sf=opFaces(*this);if(sf.empty())return false;snapshot();std::vector<std::vector<int>> side;std::vector<unsigned char> sm;std::set<int> keep;fitM();
   for(int f:sf){auto F=d.F[f];Vec3 c=faceCenter(f);std::vector<int> in;for(int v:F){in.push_back((int)d.V.size());d.V.push_back(d.V[v]*(1-amount)+c*amount);}
-    for(size_t i=0;i<F.size();i++){size_t j=(i+1)%F.size();side.push_back({F[i],F[j],in[j],in[i]});}d.F[f]=in;}
-  for(auto& s:side)d.F.push_back(s);selV.clear();selE.clear();syncFromFaces();return true;}
+    for(size_t i=0;i<F.size();i++){size_t j=(i+1)%F.size();side.push_back({F[i],F[j],in[j],in[i]});sm.push_back(d.M[f]);}d.F[f]=in;}
+  for(size_t i=0;i<side.size();i++){d.F.push_back(side[i]);d.M.push_back(sm[i]);}selV.clear();selE.clear();syncFromFaces();return true;}
 bool PolyMesh::setCrease(float v){if(selE.empty())return false;snapshot();for(ull e:selE){if(v<=0)d.crease.erase(e);else d.crease[e]=v;}return true;}
 bool PolyMesh::bevel(float c){return setCrease(c);}   // rounded edge: semi-sharp crease, resolved by subdivision
-bool PolyMesh::deleteFaces(){if(selF.empty())return false;snapshot();std::vector<std::vector<int>> nf;for(size_t f=0;f<d.F.size();f++)if(!selF.count((int)f))nf.push_back(d.F[f]);d.F=nf;selectNone();return true;}
+bool PolyMesh::deleteFaces(){if(selF.empty())return false;snapshot();fitM();std::vector<std::vector<int>> nf;std::vector<unsigned char> nm;for(size_t f=0;f<d.F.size();f++)if(!selF.count((int)f)){nf.push_back(d.F[f]);nm.push_back(d.M[f]);}d.F=nf;d.M=nm;selectNone();return true;}
+bool PolyMesh::setMat(int m){if(selF.empty())return false;snapshot();fitM();for(int f:selF)d.M[f]=(unsigned char)m;return true;}
 bool PolyMesh::flip(){if(selF.empty())return false;snapshot();for(int f:selF)std::reverse(d.F[f].begin(),d.F[f].end());return true;}
 // ---- loop cut: walks the quad ring across `edge`, inserts a vertex on every ring edge and splits the quads
 bool PolyMesh::loopCut(ull edge,float t){
@@ -90,12 +91,12 @@ bool PolyMesh::loopCut(ull edge,float t){
   if(ring.empty())return false;snapshot();
   std::map<ull,int> mid;for(auto& kv:side0){int a=kv.second;int b=(int)(kv.first>>32)==a?(int)(kv.first&0xffffffff):(int)(kv.first>>32);mid[kv.first]=(int)d.V.size();d.V.push_back(d.V[a]*(1-t)+d.V[b]*t);
     auto c=d.crease.find(kv.first);if(c!=d.crease.end()){d.crease[key(a,mid[kv.first])]=c->second;d.crease[key(b,mid[kv.first])]=c->second;}}
-  std::vector<std::vector<int>> nf;std::set<int> ringF;std::vector<int> ringSel;for(auto& s:ring)ringF.insert(s.f);
+  fitM();std::vector<unsigned char> nm;std::vector<std::vector<int>> nf;std::set<int> ringF;std::vector<int> ringSel;for(auto& s:ring)ringF.insert(s.f);
   for(size_t f=0;f<d.F.size();f++){auto F=d.F[f];if(ringF.count((int)f)){int ix=-1;for(auto& s:ring)if(s.f==(int)f){ix=s.i;break;}
       int v0=F[ix],v1=F[(ix+1)%4],v2=F[(ix+2)%4],v3=F[(ix+3)%4];int m1=mid[key(v0,v1)],m2=mid[key(v2,v3)];
-      nf.push_back({v0,m1,m2,v3});nf.push_back({m1,v1,v2,m2});}
-    else{std::vector<int> g;for(size_t i=0;i<F.size();i++){g.push_back(F[i]);ull k=key(F[i],F[(i+1)%F.size()]);auto m=mid.find(k);if(m!=mid.end())g.push_back(m->second);}nf.push_back(g);}}
-  d.F=nf;selectNone();for(auto& kv:mid){selV.insert(kv.second);}syncFromVerts();return true;}
+      nf.push_back({v0,m1,m2,v3});nf.push_back({m1,v1,v2,m2});nm.push_back(d.M[f]);nm.push_back(d.M[f]);}
+    else{std::vector<int> g;for(size_t i=0;i<F.size();i++){g.push_back(F[i]);ull k=key(F[i],F[(i+1)%F.size()]);auto m=mid.find(k);if(m!=mid.end())g.push_back(m->second);}nf.push_back(g);nm.push_back(d.M[f]);}}
+  d.F=nf;d.M=nm;selectNone();for(auto& kv:mid){selV.insert(kv.second);}syncFromVerts();return true;}
 void PolyMesh::selectRingLoop(ull e){selE.clear();selV.clear();selE.insert(e);selV.insert((int)(e>>32));selV.insert((int)(e&0xffffffff));}
 // ---- proportional move / scale (radius 0 = selection only)
 void PolyMesh::moveSel(Vec3 dl,float radius){if(selV.empty())return;std::vector<Vec3> src;for(int v:selV)src.push_back(d.V[v]);
@@ -106,13 +107,13 @@ void PolyMesh::scaleSel(float f,float radius){if(selV.empty())return;Vec3 c=selC
     if(w>0){Vec3 p=d.V[i]-c;d.V[i]=c+p*(1+(f-1)*w);}}}
 // ---- evaluate: mirror modifier, then Catmull-Clark with creases
 PolyData PolyMesh::evaluate(int levels) const{
-  SubMesh m;m.V=d.V;m.F=d.F;m.crease=d.crease;
+  SubMesh m;m.V=d.V;m.F=d.F;m.crease=d.crease;m.M=d.M;m.M.resize(m.F.size(),0);
   if(mirrorX){std::map<int,int> mv;size_t n=m.V.size();for(size_t i=0;i<n;i++){if(std::fabs(d.V[i].x)<1e-4f)mv[(int)i]=(int)i;else{mv[(int)i]=(int)m.V.size();m.V.push_back({-d.V[i].x,d.V[i].y,d.V[i].z});}}
-    {std::vector<std::vector<int>> keep;for(auto& f:m.F){bool onPlane=true;for(int v:f)if(std::fabs(m.V[v].x)>1e-4f){onPlane=false;break;}if(!onPlane)keep.push_back(f);}m.F=keep;}  // faces on the mirror plane are internal
-    for(auto& f:d.F){bool onPlane=true;for(int v:f)if(std::fabs(d.V[v].x)>1e-4f){onPlane=false;break;}if(onPlane)continue;std::vector<int> g;for(int k=(int)f.size()-1;k>=0;k--)g.push_back(mv[f[k]]);m.F.push_back(g);}
+    {std::vector<std::vector<int>> keep;std::vector<unsigned char> km;for(size_t fi=0;fi<m.F.size();fi++){auto& f=m.F[fi];bool onPlane=true;for(int v:f)if(std::fabs(m.V[v].x)>1e-4f){onPlane=false;break;}if(!onPlane){keep.push_back(f);km.push_back(m.M[fi]);}}m.F=keep;m.M=km;}  // faces on the mirror plane are internal
+    for(size_t fi=0;fi<d.F.size();fi++){auto& f=d.F[fi];bool onPlane=true;for(int v:f)if(std::fabs(d.V[v].x)>1e-4f){onPlane=false;break;}if(onPlane)continue;std::vector<int> g;for(int k=(int)f.size()-1;k>=0;k--)g.push_back(mv[f[k]]);m.F.push_back(g);m.M.push_back(fi<d.M.size()?d.M[fi]:0);}
     for(auto& kv:d.crease)m.crease[ekey(mv[(int)(kv.first>>32)],mv[(int)(kv.first&0xffffffff)])]=kv.second;}
   if(levels>0)m=ccSub(m,levels);
-  PolyData o;o.V=m.V;o.F=m.F;o.crease=m.crease;return o;}
+  PolyData o;o.V=m.V;o.F=m.F;o.crease=m.crease;o.M=m.M;o.M.resize(o.F.size(),0);return o;}
 void PolyMesh::triangulate(const PolyData& m,std::vector<Vec3>& P,std::vector<Vec3>& N,std::vector<uint32_t>& I){
   P=m.V;N.assign(P.size(),Vec3{0,0,0});I.clear();
   for(auto& f:m.F){Vec3 fn=newell(m,f);for(int v:f)N[v]=N[v]+fn;for(size_t i=1;i+1<f.size();i++){I.push_back(f[0]);I.push_back(f[i]);I.push_back(f[i+1]);}}
@@ -145,11 +146,11 @@ static std::vector<CPoly> toPolys(const PolyData& m){std::vector<CPoly> o;for(au
 }
 PolyData PolyMesh::boolean(const PolyData& A0,const PolyData& B,int op){
   // locality: only faces of A that touch B's bounding box go through the BSP (subtract/intersect keep the rest untouched / drop it)
-  PolyData A=A0;std::vector<std::vector<int>> farF;
+  PolyData A=A0;std::vector<std::vector<int>> farF;std::vector<unsigned char> farM;
   if(!B.V.empty()&&op==0){Vec3 lo=B.V[0],hi=B.V[0];for(auto& v:B.V){lo.x=std::min(lo.x,v.x);lo.y=std::min(lo.y,v.y);lo.z=std::min(lo.z,v.z);hi.x=std::max(hi.x,v.x);hi.y=std::max(hi.y,v.y);hi.z=std::max(hi.z,v.z);}
     float m=0.03f;lo=lo-Vec3{m,m,m};hi=hi+Vec3{m,m,m};std::vector<std::vector<int>> nearF;
     for(auto& f:A0.F){Vec3 fl=A0.V[f[0]],fh=fl;for(int k:f){Vec3 v=A0.V[k];fl.x=std::min(fl.x,v.x);fl.y=std::min(fl.y,v.y);fl.z=std::min(fl.z,v.z);fh.x=std::max(fh.x,v.x);fh.y=std::max(fh.y,v.y);fh.z=std::max(fh.z,v.z);}
-      bool hit=!(fh.x<lo.x||fl.x>hi.x||fh.y<lo.y||fl.y>hi.y||fh.z<lo.z||fl.z>hi.z);(hit?nearF:farF).push_back(f);}
+      bool hit=!(fh.x<lo.x||fl.x>hi.x||fh.y<lo.y||fl.y>hi.y||fh.z<lo.z||fl.z>hi.z);(hit?nearF:farF).push_back(f);if(!hit)farM.push_back(&f-&A0.F[0]<(long)A0.M.size()?A0.M[&f-&A0.F[0]]:0);}
     A.F=nearF;}
   Node a,b;a.build(toPolys(A));b.build(toPolys(B));
   if(op==0){a.invert();a.clipTo(b);b.clipTo(a);b.invert();b.clipTo(a);b.invert();std::vector<CPoly> bp;b.all(bp);a.build(bp);a.invert();}
@@ -157,12 +158,12 @@ PolyData PolyMesh::boolean(const PolyData& A0,const PolyData& B,int op){
   else{a.invert();b.clipTo(a);b.invert();a.clipTo(b);b.clipTo(a);std::vector<CPoly> bp;b.all(bp);a.build(bp);a.invert();}
   std::vector<CPoly> res;a.all(res);PolyData o;std::map<std::array<long long,3>,int> wm;auto W=[&](Vec3 p){std::array<long long,3> k{(long long)std::llround(p.x*20000),(long long)std::llround(p.y*20000),(long long)std::llround(p.z*20000)};auto it=wm.find(k);if(it!=wm.end())return it->second;int i=(int)o.V.size();o.V.push_back(p);wm[k]=i;return i;};
   for(auto& p:res){std::vector<int> f;for(auto& v:p.v){int i=W(v);if(f.empty()||f.back()!=i)f.push_back(i);}while(f.size()>1&&f.front()==f.back())f.pop_back();if(f.size()>=3)o.F.push_back(f);}
-  for(auto& f:farF){std::vector<int> g;for(int k:f)g.push_back(W(A0.V[k]));o.F.push_back(g);}
+  o.M.assign(o.F.size(),0);for(size_t fi=0;fi<farF.size();fi++){std::vector<int> g;for(int k:farF[fi])g.push_back(W(A0.V[k]));o.F.push_back(g);o.M.push_back(farM[fi]);}
   return o;}
-bool PolyMesh::save(const std::string& path) const{FILE* f=fopen(path.c_str(),"wb");if(!f)return false;int n=(int)d.V.size(),nf=(int)d.F.size(),nc=(int)d.crease.size();fwrite("PLY1",1,4,f);fwrite(&n,4,1,f);fwrite(d.V.data(),sizeof(Vec3),n,f);fwrite(&nf,4,1,f);
-  for(auto& F:d.F){int k=(int)F.size();fwrite(&k,4,1,f);fwrite(F.data(),4,k,f);}fwrite(&nc,4,1,f);for(auto& kv:d.crease){fwrite(&kv.first,8,1,f);fwrite(&kv.second,4,1,f);}fwrite(&mirrorX,1,1,f);fwrite(&subLevels,4,1,f);fclose(f);return true;}
-bool PolyMesh::load(const std::string& path){FILE* f=fopen(path.c_str(),"rb");if(!f)return false;char h[4];if(fread(h,1,4,f)!=4||std::string(h,4)!="PLY1"){fclose(f);return false;}PolyData t;int n=0;if(fread(&n,4,1,f)!=1||n<0||n>5000000){fclose(f);return false;}
+bool PolyMesh::save(const std::string& path) const{FILE* f=fopen(path.c_str(),"wb");if(!f)return false;int n=(int)d.V.size(),nf=(int)d.F.size(),nc=(int)d.crease.size();fwrite("PLY2",1,4,f);fwrite(&n,4,1,f);fwrite(d.V.data(),sizeof(Vec3),n,f);fwrite(&nf,4,1,f);
+  for(auto& F:d.F){int k=(int)F.size();fwrite(&k,4,1,f);fwrite(F.data(),4,k,f);}fwrite(&nc,4,1,f);for(auto& kv:d.crease){fwrite(&kv.first,8,1,f);fwrite(&kv.second,4,1,f);}fwrite(&mirrorX,1,1,f);fwrite(&subLevels,4,1,f);{std::vector<unsigned char> mm=d.M;mm.resize(d.F.size(),0);fwrite(mm.data(),1,mm.size(),f);}fclose(f);return true;}
+bool PolyMesh::load(const std::string& path){FILE* f=fopen(path.c_str(),"rb");if(!f)return false;char h[4];if(fread(h,1,4,f)!=4||std::string(h,4)!="PLY1"&&std::string(h,4)!="PLY2"){fclose(f);return false;}bool v2=std::string(h,4)=="PLY2";PolyData t;int n=0;if(fread(&n,4,1,f)!=1||n<0||n>5000000){fclose(f);return false;}
   t.V.resize(n);if(fread(t.V.data(),sizeof(Vec3),n,f)!=(size_t)n){fclose(f);return false;}int nf=0;if(fread(&nf,4,1,f)!=1){fclose(f);return false;}
   for(int i=0;i<nf;i++){int k=0;if(fread(&k,4,1,f)!=1||k<3||k>64){fclose(f);return false;}std::vector<int> F(k);if(fread(F.data(),4,k,f)!=(size_t)k){fclose(f);return false;}t.F.push_back(F);}
-  int nc=0;if(fread(&nc,4,1,f)==1)for(int i=0;i<nc;i++){ull kk;float v;if(fread(&kk,8,1,f)!=1||fread(&v,4,1,f)!=1)break;t.crease[kk]=v;}bool mx=true;int sl=0;if(fread(&mx,1,1,f)==1)fread(&sl,4,1,f);fclose(f);d=t;mirrorX=mx;subLevels=sl;selectNone();undo_.clear();return true;}
+  int nc=0;if(fread(&nc,4,1,f)==1)for(int i=0;i<nc;i++){ull kk;float v;if(fread(&kk,8,1,f)!=1||fread(&v,4,1,f)!=1)break;t.crease[kk]=v;}bool mx=true;int sl=0;if(fread(&mx,1,1,f)==1)fread(&sl,4,1,f);t.M.assign(t.F.size(),0);if(v2&&!t.F.empty()){if(fread(t.M.data(),1,t.M.size(),f)!=t.M.size())t.M.assign(t.F.size(),0);}fclose(f);d=t;mirrorX=mx;subLevels=sl;selectNone();undo_.clear();return true;}
 }

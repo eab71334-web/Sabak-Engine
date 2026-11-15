@@ -50,9 +50,36 @@ void buildCarPoly(PolyMesh& pm){
   for(int it=0;it<3;it++){buildCarOnce(pm,corr);PolyData e=pm.evaluate(pm.subLevels);
     for(size_t i=0;i<st.size();i++){float best=0;for(auto& v:e.V)if(std::fabs(v.z-st[i])<0.075f&&v.y>best)best=v.y;if(best<0.3f)continue;float want=topH(st[i]);corr[i]=std::max(0.85f,std::min(1.35f,corr[i]*want/best));}}
   buildCarOnce(pm,corr);}
+
+// ---- materials: 0 paint 1 glass 2 chrome 3 black 4 rubber 5 lamp 6 tail-lamp 7 leather
+static void paintCar(PolyMesh& pm){
+  PolyData& d=pm.d;d.M.assign(d.F.size(),0);
+  for(size_t i=0;i<d.F.size();i++){auto& f=d.F[i];Vec3 c{0,0,0};for(int v:f)c=c+d.V[v];c=c*(1.f/f.size());Vec3 n=pm.faceNormal((int)i);float ax=std::fabs(c.x);int m=0;
+    float dF=std::hypot(c.y-0.35f,c.z-1.48f),dR=std::hypot(c.y-0.35f,c.z+1.377f);
+    if(ax>0.62f&&(dF<0.47f||dR<0.47f)&&c.y<0.85f)m=3;                       // inside of wheel arch
+    else if(c.y<0.27f)m=3;                                                   // under-body / splitter / diffuser
+    else if(c.z>2.25f&&ax<0.40f&&c.y>0.38f&&c.y<0.68f&&n.z>0.3f)m=3;       // kidney grille
+    else if(c.z>2.15f&&ax>0.50f&&ax<0.88f&&c.y>0.55f&&c.y<0.78f&&n.z>0.45f)m=5;   // headlight
+    else if(c.z<-2.15f&&ax>0.40f&&c.y>0.72f&&c.y<0.98f&&n.z<-0.4f)m=6;     // tail-light
+    else if(c.y>0.99f&&c.y<1.40f){
+      bool wind=c.z>0.30f&&c.z<1.10f&&n.z>0.35f&&n.y<0.8f;
+      bool rear=c.z<-0.95f&&c.z>-1.55f&&n.z<-0.35f&&n.y<0.8f;
+      bool side=std::fabs(n.x)>0.45f&&c.z>-1.15f&&c.z<0.80f&&!(c.z>-0.30f&&c.z<-0.05f);
+      if(wind||rear||side)m=1;}
+    d.M[i]=(unsigned char)m;}}
+static void addPart(PolyMesh& pm,float cx,float cz,float r,float w,int n,int mat){
+  PolyMesh c;c.cylinder({0,0,0},r,w,n);PolyData cd=c.d;size_t b=pm.d.V.size();
+  for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;pm.d.V.push_back({cx+x,0.355f+y,cz+z});}
+  for(auto f:cd.F){std::reverse(f.begin(),f.end());for(int& k:f)k+=(int)b;pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
+static void addWheels(PolyMesh& pm){
+  for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){float x=s*0.80f;
+    addPart(pm,x,zf,0.355f,0.255f,28,4);                      // tyre
+    addPart(pm,x+s*0.004f,zf,0.262f,0.262f,28,2);             // rim
+    addPart(pm,x+s*0.006f,zf,0.19f,0.262f,20,3);              // dark dish
+    addPart(pm,x+s*0.008f,zf,0.07f,0.262f,12,2);}}            // hub cap
 void bakeWheelArches(PolyMesh& pm){
   PolyData A=pm.evaluate(pm.subLevels);PolyMesh cu;cu.mirrorX=false;
   for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){PolyMesh c;c.cylinder({0,0,0},0.43f,0.45f,40);PolyData cd=c.d; // axis Y -> rotate to X
     for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;v={s*0.88f+x,0.35f+y,zf+z};}for(auto& f:cd.F)std::reverse(f.begin(),f.end());A=PolyMesh::boolean(A,cd,0);}
-  pm.d=A;pm.mirrorX=false;pm.subLevels=0;pm.selectNone();}
+  pm.d=A;pm.mirrorX=false;pm.subLevels=0;pm.selectNone();paintCar(pm);addWheels(pm);}
 }
