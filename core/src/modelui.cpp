@@ -22,7 +22,7 @@ void App::pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx,bool cu
     if(mat<0){idx=all;}else{size_t t=0;for(size_t fi=0;fi<m.F.size();fi++){size_t nt=m.F[fi].size()-2;if(matOf(fi)==mat)for(size_t k=0;k<nt*3;k++)idx.push_back(all[t+k]);t+=nt*3;}}
     for(size_t i=0;i<PP.size();i++)push(PP[i],N[i]);}}
 
-static const struct{int kind;float c[4];} PMM[8]={{5,{0.16f,0.29f,0.55f,1}},{6,{0.05f,0.07f,0.09f,1}},{7,{0.55f,0.56f,0.6f,1}},{9,{0.04f,0.04f,0.045f,1}},{9,{0.02f,0.02f,0.02f,1}},{12,{1.f,0.97f,0.85f,1}},{12,{1.f,0.08f,0.05f,1}},{11,{0.12f,0.08f,0.06f,1}}};
+static const struct{int kind;float c[4];} PMM[8]={{5,{0.16f,0.29f,0.55f,1}},{6,{0.05f,0.07f,0.09f,1}},{7,{0.55f,0.56f,0.6f,1}},{9,{0.04f,0.04f,0.045f,1}},{9,{0.02f,0.02f,0.02f,1}},{12,{1.f,0.97f,0.85f,1}},{12,{1.f,0.08f,0.05f,1}},{11,{0.30f,0.16f,0.09f,1}}};
 bool App::pmModel(Model& m){
   if(pm_.d.F.empty()){std::string dir=cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir:"";if(dir.empty()||!pm_.load(pdir(dir)+"/M1.ply"))pmPrim(0);}
   m=Model();m.name="PolyModel";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
