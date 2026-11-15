@@ -17,7 +17,7 @@ void App::pmArrays(std::vector<SkinVertex>& v,std::vector<uint32_t>& idx,bool cu
   auto matOf=[&](size_t f){return f<m.M.size()?(int)m.M[f]:0;};
   auto push=[&](Vec3 p,Vec3 n){SkinVertex s{};s.p[0]=p.x;s.p[1]=p.y;s.p[2]=p.z;s.n[0]=n.x;s.n[1]=n.y;s.n[2]=n.z;s.uv[0]=p.z*0.5f+p.x*0.3f;s.uv[1]=p.y*0.5f+p.x*0.2f;s.j[0]=0;s.w[0]=1;v.push_back(s);};
   if(P.subLevels==0){for(size_t fi=0;fi<m.F.size();fi++){auto& f=m.F[fi];if(mat>=0&&matOf(fi)!=mat)continue;Vec3 n{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 a=m.V[f[i]],b=m.V[f[(i+1)%f.size()]];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}n=norm(n);
-      uint32_t b0=(uint32_t)v.size();for(int k:f)push(m.V[k],n);for(size_t i=1;i+1<f.size();i++){idx.push_back(b0);idx.push_back(b0+(uint32_t)i);idx.push_back(b0+(uint32_t)i+1);}}}
+      uint32_t b0=(uint32_t)v.size();for(int k:f)push(m.V[k],n);if(P.rig&&!cutter){Vec3 cc{0,0,0};for(int k:f)cc=cc+m.V[k];cc=cc*(1.f/f.size());int jt=carPartAt(cc,n,matOf(fi));if(jt)for(size_t q=b0;q<v.size();q++)v[q].j[0]=(uint8_t)jt;}for(size_t i=1;i+1<f.size();i++){idx.push_back(b0);idx.push_back(b0+(uint32_t)i);idx.push_back(b0+(uint32_t)i+1);}}}
   else{std::vector<Vec3> PP,N;std::vector<uint32_t> all;PolyMesh::triangulate(m,PP,N,all);
     if(mat<0){idx=all;}else{size_t t=0;for(size_t fi=0;fi<m.F.size();fi++){size_t nt=m.F[fi].size()-2;if(matOf(fi)==mat)for(size_t k=0;k<nt*3;k++)idx.push_back(all[t+k]);t+=nt*3;}}
     for(size_t i=0;i<PP.size();i++)push(PP[i],N[i]);}}
@@ -27,6 +27,12 @@ bool App::pmModel(Model& m){
   if(pm_.d.F.empty()){std::string dir=cur_>=0&&cur_<(int)projects_.size()?projects_[cur_].dir:"";if(dir.empty()||!pm_.load(pdir(dir)+"/M1.ply"))pmPrim(0);}
   m=Model();m.name="PolyModel";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
   for(int k=0;k<8;k++){ModelMat mm;mm.kind=PMM[k].kind;for(int c=0;c<4;c++)mm.col[c]=PMM[k].c[c];if(r_){unsigned char wh[4]={255,255,255,255};mm.tex=r_->createTexture(wh,1,1);}m.mats.push_back(mm);}
+  if(pm_.rig&&pm_.subLevels==0){const char* jn[6]={"wheel.FL","wheel.FR","wheel.RL","wheel.RR","door.L","door.R"};Vec3 jp[6]={{0.8f,0.355f,1.48f},{-0.8f,0.355f,1.48f},{0.8f,0.355f,-1.377f},{-0.8f,0.355f,-1.377f},{0.93f,0.7f,0.66f},{-0.93f,0.7f,0.66f}};
+    for(int i=0;i<6;i++){m.nodeName.push_back(jn[i]);m.parent.push_back(0);TRS t;t.t=jp[i];m.rest.push_back(t);m.joints.push_back(i+1);m.ibm.push_back(Mat4::translate(jp[i]*-1.f));}
+    Anim sp;sp.name="wheels";sp.dur=0.6f;for(int i=0;i<4;i++){AnimChannel c;c.node=i+1;c.path=1;float sg=1.f;c.t={0,0.15f,0.3f,0.45f,0.6f};for(int q=0;q<5;q++){float a=sg*6.2831853f*q/4.f;c.v.insert(c.v.end(),{std::sin(a*0.5f),0.f,0.f,std::cos(a*0.5f)});}sp.ch.push_back(c);}m.anims.push_back(sp);
+    Anim dr;dr.name="doors_open";dr.dur=1.f;for(int i=0;i<2;i++){AnimChannel c;c.node=5+i;c.path=1;float sg=i?-1.f:1.f;c.t={0,0.8f};float a=sg*1.0f;c.v={0,0,0,1,0,std::sin(a*0.5f),0,std::cos(a*0.5f)};dr.ch.push_back(c);}m.anims.push_back(dr);
+    Anim dc;dc.name="doors_close";dc.dur=1.f;for(int i=0;i<2;i++){AnimChannel c;c.node=5+i;c.path=1;float sg=i?-1.f:1.f;c.t={0,0.8f};float a=sg*1.0f;c.v={0,std::sin(a*0.5f),0,std::cos(a*0.5f),0,0,0,1};dc.ch.push_back(c);}m.anims.push_back(dc);
+    m.builtin=(int)m.anims.size();}
   float top=0.5f;
   for(int k=0;k<8;k++){std::vector<SkinVertex> v;std::vector<uint32_t> idx;pmArrays(v,idx,false,k);if(idx.empty())continue;
     ModelPrim mp;mp.mat=k;mp.cv=v;mp.ci=idx;if(r_)mp.mesh=r_->uploadSkin(v,idx);m.prims.push_back(std::move(mp));for(auto& s:v)top=std::max(top,s.p[1]);}
@@ -37,7 +43,7 @@ bool App::pmCutModel(Model& m){std::vector<SkinVertex> v;std::vector<uint32_t> i
   m=Model();m.name="Cutter";m.nodeName={"root"};m.parent={-1};m.rest.assign(1,TRS());m.joints={0};m.ibm={Mat4::identity()};
   ModelMat mm;mm.kind=13;mm.col[0]=mm.col[1]=mm.col[2]=mm.col[3]=1;if(r_){unsigned char rd[4]={255,70,70,120};mm.tex=r_->createTexture(rd,1,1);}m.mats.push_back(mm);
   ModelPrim mp;mp.mat=0;mp.cv=v;mp.ci=idx;if(r_&&!idx.empty())mp.mesh=r_->uploadSkin(v,idx);m.prims.push_back(std::move(mp));m.fit=1;m.foot=0;m.height=1;m.radius=2;m.autoRig=false;return true;}
-void App::pmRebuild(){Entity* e=pmEntity();if(!e)return;models_.erase(e->asset);models_.erase("pmcut:M2");
+void App::pmRebuild(){Entity* e=pmEntity();if(!e)return;models_.erase(e->asset);models_.erase("pmcut:M2");if(const char* an=getenv("SABAK_PMANIM"))e->anim=an;
   for(auto i2=minst_.begin();i2!=minst_.end();){const Entity* en=scene_.get(i2->first.second);if(i2->first.first==&scene_&&en&&(en->asset==e->asset||en->asset=="pmcut:M2"))i2=minst_.erase(i2);else ++i2;}modelFor(e->asset);}
 void App::pmLive(){Entity* e=pmEntity();if(!e)return;Model* m=modelFor(e->asset);if(!m||m->prims.empty())return;
   std::vector<std::vector<SkinVertex>> vs;bool ok=true;int present=0;
@@ -134,7 +140,7 @@ void App::pmTap(int id){std::string dir=cur_>=0&&cur_<(int)projects_.size()?proj
   if(id==955){pm_.subLevels=(pm_.subLevels+1)%4;pmRebuild();return;}
   if(id==956){pmWire_=!pmWire_;return;}
   if(id>=980&&id<=987){if(pm_.setMat(id-980))pmRebuild();else toast("Select faces first (Face mode)");return;}
-  if(id==979){pm_.snapshot();buildCarPoly(pm_);pm_.snapshot();bakeWheelArches(pm_);pmRebuild();toast("G82 car built (arches cut)");return;}
+  if(id==979){pm_.snapshot();buildCarPoly(pm_);pm_.snapshot();bakeWheelArches(pm_);if(pmOther_.d.V.size()&&pmOther_.d.V[0].y>-20)for(auto& v:pmOther_.d.V)v.y-=60.f;pmRebuild();toast("G82 car built (arches cut)");return;}
   if(id==957||id==958||id==959){pm_.snapshot();pmPrim(id-957);pmRebuild();return;}
   if(id>=961&&id<=964){pmAxis_=id-961;return;}
   if(id==960){if(pm_.undo())pmRebuild();else toast("Nothing to undo");return;}

@@ -36,7 +36,7 @@ static SubMesh ccSub(SubMesh m,int levels){for(int i=0;i<levels;i++)m=ccOnce(m);
 static Vec3 newell(const PolyData& m,const std::vector<int>& f){Vec3 n{0,0,0};for(size_t i=0;i<f.size();i++){Vec3 a=m.V[f[i]],b=m.V[f[(i+1)%f.size()]];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}return norm(n);}
 Vec3 PolyMesh::faceNormal(int f) const {return newell(d,d.F[f]);}
 Vec3 PolyMesh::faceCenter(int f) const {Vec3 c{0,0,0};for(int v:d.F[f])c=c+d.V[v];return c*(1.f/d.F[f].size());}
-void PolyMesh::clear(){d=PolyData();selectNone();undo_.clear();}
+void PolyMesh::clear(){rig=false;d=PolyData();selectNone();undo_.clear();}
 void PolyMesh::cube(Vec3 c,Vec3 h){clear();for(int i=0;i<8;i++)d.V.push_back({c.x+(i&1?h.x:-h.x),c.y+(i&2?h.y:-h.y),c.z+(i&4?h.z:-h.z)});
   static const int Q[6][4]={{0,2,3,1},{4,5,7,6},{0,1,5,4},{2,6,7,3},{0,4,6,2},{1,3,7,5}};for(auto& q:Q)d.F.push_back({q[0],q[1],q[2],q[3]});}
 void PolyMesh::cylinder(Vec3 c,float r,float h,int n){clear();for(int k=0;k<2;k++)for(int i=0;i<n;i++){float a=6.2831853f*i/n;d.V.push_back({c.x+r*std::cos(a),c.y+(k?h:-h)*0.5f,c.z+r*std::sin(a)});}
@@ -161,7 +161,7 @@ PolyData PolyMesh::boolean(const PolyData& A0,const PolyData& B,int op){
   o.M.assign(o.F.size(),0);for(size_t fi=0;fi<farF.size();fi++){std::vector<int> g;for(int k:farF[fi])g.push_back(W(A0.V[k]));o.F.push_back(g);o.M.push_back(farM[fi]);}
   return o;}
 bool PolyMesh::save(const std::string& path) const{FILE* f=fopen(path.c_str(),"wb");if(!f)return false;int n=(int)d.V.size(),nf=(int)d.F.size(),nc=(int)d.crease.size();fwrite("PLY2",1,4,f);fwrite(&n,4,1,f);fwrite(d.V.data(),sizeof(Vec3),n,f);fwrite(&nf,4,1,f);
-  for(auto& F:d.F){int k=(int)F.size();fwrite(&k,4,1,f);fwrite(F.data(),4,k,f);}fwrite(&nc,4,1,f);for(auto& kv:d.crease){fwrite(&kv.first,8,1,f);fwrite(&kv.second,4,1,f);}fwrite(&mirrorX,1,1,f);fwrite(&subLevels,4,1,f);{std::vector<unsigned char> mm=d.M;mm.resize(d.F.size(),0);fwrite(mm.data(),1,mm.size(),f);}fclose(f);return true;}
+  for(auto& F:d.F){int k=(int)F.size();fwrite(&k,4,1,f);fwrite(F.data(),4,k,f);}fwrite(&nc,4,1,f);for(auto& kv:d.crease){fwrite(&kv.first,8,1,f);fwrite(&kv.second,4,1,f);}fwrite(&mirrorX,1,1,f);fwrite(&subLevels,4,1,f);{std::vector<unsigned char> mm=d.M;mm.resize(d.F.size(),0);fwrite(mm.data(),1,mm.size(),f);}fwrite(&rig,1,1,f);fclose(f);return true;}
 bool PolyMesh::load(const std::string& path){FILE* f=fopen(path.c_str(),"rb");if(!f)return false;char h[4];if(fread(h,1,4,f)!=4||std::string(h,4)!="PLY1"&&std::string(h,4)!="PLY2"){fclose(f);return false;}bool v2=std::string(h,4)=="PLY2";PolyData t;int n=0;if(fread(&n,4,1,f)!=1||n<0||n>5000000){fclose(f);return false;}
   t.V.resize(n);if(fread(t.V.data(),sizeof(Vec3),n,f)!=(size_t)n){fclose(f);return false;}int nf=0;if(fread(&nf,4,1,f)!=1){fclose(f);return false;}
   for(int i=0;i<nf;i++){int k=0;if(fread(&k,4,1,f)!=1||k<3||k>64){fclose(f);return false;}std::vector<int> F(k);if(fread(F.data(),4,k,f)!=(size_t)k){fclose(f);return false;}t.F.push_back(F);}

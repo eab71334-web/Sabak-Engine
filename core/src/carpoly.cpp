@@ -77,9 +77,25 @@ static void addWheels(PolyMesh& pm){
     addPart(pm,x+s*0.004f,zf,0.262f,0.262f,28,2);             // rim
     addPart(pm,x+s*0.006f,zf,0.19f,0.262f,20,3);              // dark dish
     addPart(pm,x+s*0.008f,zf,0.07f,0.262f,12,2);}}            // hub cap
+
+// joints: 0 body, 1..4 wheels (+x front, -x front, +x rear, -x rear), 5 door +x, 6 door -x
+int carPartAt(Vec3 c,Vec3 n,int mat){
+  float ax=std::fabs(c.x);float zs[2]={1.48f,-1.377f};
+  if(ax>0.62f&&ax<0.99f&&(mat==2||mat==3||mat==4))for(int k=0;k<2;k++)if(std::hypot(c.y-0.355f,c.z-zs[k])<0.372f)return 1+k*2+(c.x<0?1:0);
+  if((mat==0||mat==1)&&ax>0.70f&&std::fabs(n.x)>0.4f&&c.y>0.30f&&c.y<1.40f&&c.z>-0.75f&&c.z<0.70f)return c.x>0?5:6;
+  return 0;}
+static void addBox(PolyMesh& pm,Vec3 c,Vec3 h,int mat){PolyMesh b;b.cube(c,h);size_t o=pm.d.V.size();for(auto v:b.d.V)pm.d.V.push_back(v);for(auto f:b.d.F){for(int& k:f)k+=(int)o;pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
+static void addExtras(PolyMesh& pm){
+  for(int s=-1;s<=1;s+=2){float x=s*0.95f;
+    addBox(pm,{x+s*0.07f,1.02f,0.62f},{0.08f,0.045f,0.07f},0);       // mirror housing
+    addBox(pm,{x+s*0.02f,0.93f,0.62f},{0.015f,0.04f,0.06f},3);       // mirror stalk
+    addBox(pm,{s*0.945f,0.86f,-0.28f},{0.012f,0.012f,0.07f},3);      // door handle
+    addBox(pm,{s*0.940f,0.60f,0.70f},{0.004f,0.30f,0.004f},3);       // door gap front
+    addBox(pm,{s*0.940f,0.60f,-0.78f},{0.004f,0.30f,0.004f},3);}     // door gap rear
+  addBox(pm,{0,0.58f,2.39f},{0.14f,0.006f,0.01f},3);}
 void bakeWheelArches(PolyMesh& pm){
   PolyData A=pm.evaluate(pm.subLevels);PolyMesh cu;cu.mirrorX=false;
   for(float zf:{1.48f,-1.377f})for(int s=-1;s<=1;s+=2){PolyMesh c;c.cylinder({0,0,0},0.43f,0.45f,40);PolyData cd=c.d; // axis Y -> rotate to X
     for(auto& v:cd.V){float x=v.y,y=v.x,z=v.z;v={s*0.88f+x,0.35f+y,zf+z};}for(auto& f:cd.F)std::reverse(f.begin(),f.end());A=PolyMesh::boolean(A,cd,0);}
-  pm.d=A;pm.mirrorX=false;pm.subLevels=0;pm.selectNone();paintCar(pm);addWheels(pm);}
+  pm.d=A;pm.mirrorX=false;pm.subLevels=0;pm.selectNone();paintCar(pm);addWheels(pm);addExtras(pm);pm.rig=true;}
 }

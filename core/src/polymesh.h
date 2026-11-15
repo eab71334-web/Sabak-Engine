@@ -13,7 +13,7 @@ struct PolyMesh {
   PolyData d;
   std::set<int> selV, selF; std::set<ull> selE;     // selection (any mode keeps the three sets consistent)
   int mode=2;                                       // 0 vertex, 1 edge, 2 face
-  bool mirrorX=true; int subLevels=0;               // modifiers: mirror on X, subdivision levels shown/exported
+  bool rig=false; bool mirrorX=true; int subLevels=0;               // modifiers: mirror on X, subdivision levels shown/exported
   static ull key(int a,int b){if(a>b){int t=a;a=b;b=t;}return ((ull)a<<32)|(unsigned)b;}
   // primitives
   void clear(); void cube(Vec3 c,Vec3 h); void cylinder(Vec3 c,float r,float h,int n); void grid(int n,float size);
@@ -37,5 +37,5 @@ struct PolyMesh {
  private:
   void syncFromFaces(); void syncFromVerts();
 };
-void buildCarPoly(PolyMesh& pm); void bakeWheelArches(PolyMesh& pm);
+int carPartAt(Vec3 c,Vec3 n,int mat); void buildCarPoly(PolyMesh& pm); void bakeWheelArches(PolyMesh& pm);
 }
