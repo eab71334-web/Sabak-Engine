@@ -87,7 +87,7 @@ static void paintCar(PolyMesh& pm){
   PolyData& d=pm.d;d.M.assign(d.F.size(),0);
   for(size_t i=0;i<d.F.size();i++){auto& f=d.F[i];Vec3 c{0,0,0};for(int v:f)c=c+d.V[v];c=c*(1.f/f.size());Vec3 n=pm.faceNormal((int)i);float ax=std::fabs(c.x);int m=0;
     float dF=std::hypot(c.y-0.35f,c.z-1.48f),dR=std::hypot(c.y-0.35f,c.z+1.377f);
-    if(ax>0.62f&&(dF<0.47f||dR<0.47f)&&c.y<0.85f&&(n.y*(c.y-0.355f)+n.z*(c.z-(dF<dR?1.48f:-1.377f)))<-0.05f)m=3;                       // inside of wheel arch
+    if(ax>0.62f&&(dF<0.438f||dR<0.438f)&&c.y<0.85f&&(n.y*(c.y-0.355f)+n.z*(c.z-(dF<dR?1.48f:-1.377f)))<-0.05f)m=3;                       // inside of wheel arch
     else if(c.y<0.27f)m=3;                                                   // under-body / splitter / diffuser
     else if(c.y>0.99f&&c.y<1.40f){
       bool wind=c.z>0.30f&&c.z<1.10f&&n.z>0.35f&&n.y<0.8f;
@@ -147,33 +147,54 @@ static void addDecal(PolyMesh& pm,const TGrid& T,int side,float x0,float x1,floa
     float px[4]={x0+i*sx,x0+(i+1)*sx,x0+(i+1)*sx,x0+i*sx},py[4]={y0+j*sy,y0+j*sy,y0+(j+1)*sy,y0+(j+1)*sy};
     int b=(int)pm.d.V.size();std::vector<int> f;for(int k=0;k<4;k++){pm.d.V.push_back({px[k],py[k],Z[id[k]]});f.push_back(b+k);}
     if(side<0)std::reverse(f.begin(),f.end());pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}
+// row-lofted decal: for each y the strip spans x in [xl(y),xr(y)] exactly, so the outline is smooth (no staircase)
+static void addRows(PolyMesh& pm,const TGrid& T,int side,float y0,float y1,int ny,int nx,const std::function<float(float)>& xl,const std::function<float(float)>& xr,float off,int mat){
+  for(int j=0;j<ny;j++){float ya=y0+(y1-y0)*j/ny,yb=y0+(y1-y0)*(j+1)/ny;
+    for(int i=0;i<nx;i++){float u0=(float)i/nx,u1=(float)(i+1)/nx;float px[4]={xl(ya)+(xr(ya)-xl(ya))*u0,xl(ya)+(xr(ya)-xl(ya))*u1,xl(yb)+(xr(yb)-xl(yb))*u1,xl(yb)+(xr(yb)-xl(yb))*u0},py[4]={ya,ya,yb,yb};
+      Vec3 q[4];bool ok=true;for(int k=0;k<4;k++){float z;if(!zHit(T,px[k],py[k],side,z)){ok=false;break;}q[k]={px[k],py[k],z+side*off};}if(!ok)continue;
+      int b=(int)pm.d.V.size();std::vector<int> f;for(int k=0;k<4;k++){pm.d.V.push_back(q[k]);f.push_back(b+k);}if(side<0)std::reverse(f.begin(),f.end());pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}}
+// column-lofted decal: for each x the strip spans y in [yl(x),yh(x)]
+static void addCols(PolyMesh& pm,const TGrid& T,int side,float x0,float x1,int nx,int ny,const std::function<float(float)>& yl,const std::function<float(float)>& yh,float off,int mat){
+  for(int i=0;i<nx;i++){float xa=x0+(x1-x0)*i/nx,xb=x0+(x1-x0)*(i+1)/nx;
+    for(int j=0;j<ny;j++){float v0=(float)j/ny,v1=(float)(j+1)/ny;float px[4]={xa,xb,xb,xa},py[4]={yl(xa)+(yh(xa)-yl(xa))*v0,yl(xb)+(yh(xb)-yl(xb))*v0,yl(xb)+(yh(xb)-yl(xb))*v1,yl(xa)+(yh(xa)-yl(xa))*v1};
+      Vec3 q[4];bool ok=true;for(int k=0;k<4;k++){float z;if(!zHit(T,px[k],py[k],side,z)){ok=false;break;}q[k]={px[k],py[k],z+side*off};}if(!ok)continue;
+      int b=(int)pm.d.V.size();std::vector<int> f;for(int k=0;k<4;k++){pm.d.V.push_back(q[k]);f.push_back(b+k);}if(side<0)std::reverse(f.begin(),f.end());pm.d.F.push_back(f);pm.d.M.push_back((unsigned char)mat);}}}
 static void addDecals(PolyMesh& pm){
   TGrid T;for(size_t i=0;i<pm.d.F.size();i++){unsigned char m=i<pm.d.M.size()?pm.d.M[i]:0;if(m!=0&&m!=1&&m!=3)continue;auto& f=pm.d.F[i];if(f.size()<3)continue;Vec3 n=pm.faceNormal((int)i);if(std::fabs(n.z)<0.15f)continue;
     for(size_t k=1;k+1<f.size();k++)T.t.push_back({pm.d.V[f[0]],pm.d.V[f[k]],pm.d.V[f[k+1]]});}
-  T.build();const float st=0.010f;
-  // kidney grilles: chrome frame + black inside, wider at the bottom
+  T.build();
   for(int s=-1;s<=1;s+=2){
-    auto fr=[s](float x,float y){float ax=std::fabs(x);return ax>0.035f&&ax<0.43f-(y-0.36f)*0.10f&&y>0.36f&&y<0.72f;};
-    auto in=[s](float x,float y){float ax=std::fabs(x);return ax>0.060f&&ax<0.405f-(y-0.36f)*0.10f&&y>0.385f&&y<0.695f;};
-    auto bar=[s](float x,float y){return std::fmod(y*40.f,2.f)<0.55f;};
-    float xa=s>0?0.02f:-0.45f,xb=s>0?0.45f:-0.02f;
-    addDecal(pm,T,1,xa,xb,0.35f,0.73f,st,0.006f,2,fr);
-    addDecal(pm,T,1,xa,xb,0.35f,0.73f,st,0.010f,3,in);
-    addDecal(pm,T,1,xa,xb,0.35f,0.73f,st,0.014f,2,[&](float x,float y){return in(x,y)&&bar(x,y);});}
-  // slim angled headlights
-  for(int s=-1;s<=1;s+=2){float xa=s>0?0.40f:-0.92f,xb=s>0?0.92f:-0.40f;
-    auto in=[](float x,float y){float ax=std::fabs(x);float lo=0.62f+0.30f*(ax-0.46f);return ax>0.46f&&ax<0.88f&&y>lo&&y<lo+0.075f-(ax-0.46f)*0.05f;};
-    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.009f,0.008f,5,in);
-    auto lo2=[](float x,float y){float ax=std::fabs(x);float lo=0.62f+0.30f*(ax-0.46f);return ax>0.46f&&ax<0.88f&&y>lo-0.012f&&y<lo;};
-    addDecal(pm,T,1,xa,xb,0.55f,0.86f,0.009f,0.010f,3,lo2);}
-  // lower intakes
-  for(int s=-1;s<=1;s+=2){float xa=s>0?0.30f:-0.90f,xb=s>0?0.90f:-0.30f;
-    addDecal(pm,T,1,xa,xb,0.20f,0.44f,0.008f,0.008f,3,[](float x,float y){float ax=std::fabs(x);return ax>0.40f&&ax<0.85f&&y>0.24f+0.18f*(ax-0.40f)*0&&y<0.40f-(ax-0.40f)*0.12f;});}
-  addDecal(pm,T,1,-0.42f,0.42f,0.20f,0.36f,0.008f,0.008f,3,[](float x,float y){return std::fabs(x)<0.40f&&y>0.24f&&y<0.33f;});
-  // rear: L-shaped tail-lights + diffuser bars
-  for(int s=-1;s<=1;s+=2){float xa=s>0?0.35f:-0.92f,xb=s>0?0.92f:-0.35f;
-    addDecal(pm,T,-1,xa,xb,0.66f,1.02f,0.007f,0.008f,6,[](float x,float y){float ax=std::fabs(x);return ax>0.42f&&ax<0.88f&&((y>0.82f&&y<0.90f)||(ax>0.74f&&y>0.72f&&y<0.92f));});}
-  addDecal(pm,T,-1,-0.85f,0.85f,0.22f,0.45f,0.008f,0.008f,3,[](float x,float y){return std::fabs(x)<0.82f&&y>0.26f&&y<0.38f;});
+    auto X=[s](float v){return s*v;};   // mirror helper: xl/xr are returned in signed coordinates
+    // twin kidney: chrome frame, black inside, thin chrome bars
+    auto fl=[](float y){return 0.015f;};auto fr=[](float y){return 0.330f-(y-0.27f)*0.09f;};
+    auto il=[](float y){return 0.042f;};auto ir=[](float y){return 0.300f-(y-0.27f)*0.09f;};
+    auto sx=[&](std::function<float(float)> f){return [f,s](float y){return s*f(y);};};
+    auto L=[&](std::function<float(float)> a,std::function<float(float)> b,float& lo,float& hi){(void)a;(void)b;(void)lo;(void)hi;};(void)L;
+    auto A=[&](std::function<float(float)> a,std::function<float(float)> b){return std::make_pair(sx(a),sx(b));};
+    auto fo=A(fl,fr),io=A(il,ir);
+    auto minx=[&](float y,std::pair<std::function<float(float)>,std::function<float(float)>>& p){return std::min(p.first(y),p.second(y));};
+    (void)minx;
+    // rows need xl<xr in signed space: for s<0 swap
+    auto rowsDecal=[&](float y0,float y1,int ny,std::function<float(float)> a,std::function<float(float)> b,float off,int mat){
+      auto xl=[&,s](float y){float u=s*a(y),v=s*b(y);return std::min(u,v);};auto xr=[&,s](float y){float u=s*a(y),v=s*b(y);return std::max(u,v);};addRows(pm,T,1,y0,y1,ny,8,xl,xr,off,mat);};
+    rowsDecal(0.25f,0.70f,24,fl,fr,0.006f,2);
+    rowsDecal(0.27f,0.685f,22,il,ir,0.010f,3);
+    for(int k=0;k<8;k++){float y=0.30f+k*0.048f;rowsDecal(y,y+0.010f,1,il,ir,0.014f,2);}
+    (void)fo;(void)io;
+    // slim angled headlight with a darker lower rim
+    float xa=s>0?0.46f:-0.90f,xb=s>0?0.90f:-0.46f;
+    auto lo=[](float x){float ax=std::fabs(x);return 0.60f+0.30f*(ax-0.46f);};
+    auto hi=[](float x){float ax=std::fabs(x);return 0.60f+0.30f*(ax-0.46f)+0.048f-(ax-0.46f)*0.05f;};
+    addCols(pm,T,1,xa,xb,30,3,lo,hi,0.008f,5);
+    addCols(pm,T,1,xa,xb,30,1,[&](float x){return lo(x)-0.010f;},lo,0.010f,3);
+    // lower corner intakes (tapered) and centre intake
+    addCols(pm,T,1,xa<0?-0.86f:0.44f,xa<0?-0.44f:0.86f,24,4,[](float x){return 0.26f;},[](float x){float ax=std::fabs(x);return 0.40f-(ax-0.44f)*0.22f;},0.008f,3);
+    // tail-light: horizontal band + outer vertical leg
+    float ta=s>0?0.42f:-0.88f,tb=s>0?0.88f:-0.42f;
+    addCols(pm,T,-1,ta,tb,30,2,[](float x){return 0.82f;},[](float x){return 0.91f;},0.008f,6);
+    addCols(pm,T,-1,s>0?0.74f:-0.88f,s>0?0.88f:-0.74f,8,4,[](float x){return 0.71f;},[](float x){return 0.82f;},0.008f,6);}
+  addCols(pm,T,1,-0.42f,0.42f,30,3,[](float x){return 0.24f;},[](float x){return 0.32f;},0.008f,3);
+  addCols(pm,T,-1,-0.84f,0.84f,40,3,[](float x){return 0.26f;},[](float x){return 0.38f;},0.008f,3);
 }
 
 // joints: 7 hood, 8 boot lid; 0 body, 1..4 wheels (+x front, -x front, +x rear, -x rear), 5 door +x, 6 door -x
@@ -213,7 +234,7 @@ static void sculptCar(PolyData& d){
     if(p.y<0.2f)continue;
     for(float zf:{1.48f,-1.377f}){float dist=std::hypot(p.y-0.355f,p.z-zf);
       if(ax>0.62f&&dist<0.85f&&nn.x*sg>0.3f){float w=sm((0.85f-dist)/0.40f);dd.x+=sg*0.024f*w*nn.x*sg;}               // muscular fender flare
-      if(ax>0.62f&&dist>0.40f&&dist<0.56f){float w=ga(dist-0.47f,0.035f);dd=dd+nn*(0.009f*w);}}                          // sharp arch lip
+      if(ax>0.62f&&dist>0.40f&&dist<0.56f){float w=ga(dist-0.47f,0.035f);dd=dd+nn*(0.0f*w);}}                          // sharp arch lip
     if(p.z>1.12f&&p.z<2.18f&&nn.y>0.4f&&p.y>0.7f){float zc=(p.z-1.65f)/0.55f;float wz=sm(1.f-zc*zc);dd.y+=0.030f*ga(p.x,0.26f)*wz-0.012f*ga(ax-0.46f,0.07f)*wz;}  // hood power dome + valleys
     if(std::fabs(nn.x)>0.35f&&p.z>-1.9f&&p.z<2.0f){dd=dd+nn*(0.016f*ga(p.y-0.86f,0.032f)-0.012f*ga(p.y-0.64f,0.06f));}         // shoulder character line + lower scoop
     if(p.z<-1.6f&&nn.y>0.4f&&p.y>0.8f)dd.y+=0.022f*sm((-1.6f-p.z)/0.5f)*sm(1.f-ax/0.85f);                                      // duck-tail
