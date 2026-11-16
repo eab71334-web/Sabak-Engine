@@ -47,14 +47,14 @@ void App::go(Screen s){scr_=s;tr_=0;trT_=0;held_=-1;heldId_=-1;if(s==IMPORT)resc
 void App::onTap(int id){
   if(id==1)go(TEMPLATES);else if(id==2)go(IMPORT);else if(id==3)go(HOME);else if(id==4){rescanImports();toast("Refreshed");}
   else if(id==5){if(crEd_)closeCreator();if(scEd_)closeSculpt();if(pmEd_)closeModel();if(play_)stopPlay();saveScene(true);go(HOME);}
-  else if(id==27)go(VOICE);else if(id>=1000&&id<1024)voiceTap(id);
+  else if(id==27)go(VOICE);else if(id>=1000&&id<1200)voiceTap(id);
   else if(id>=100&&id<990)editorTap(id);
   else if(id>=10&&id<20)openProject(id-10);else if(id>=20&&id<27)createProject(id-20);else if(id>=30&&id<40)importFound(id-30);}
 void App::key(const std::string& k,bool d){int i=k=="W"?0:k=="A"?1:k=="S"?2:3;keyDown_[i]=d;}
 bool App::btn(int id,float x,float y,float w,float h){btns_.push_back({id,x,y+0,w,h});return heldId_==id;}
 
 void App::update(float dt){for(auto& kv:minst_){const Entity* e=nullptr;if(kv.first.first==&scene_)e=scene_.get(kv.first.second);if(e)kv.second.param=e->animParam;if(e&&!(animEd_&&e->id==sel_)){kv.second.lookOn=e->lookOn;kv.second.lookYaw=e->lookYaw;kv.second.lookPitch=e->lookPitch;}if(e&&e->anim=="StateMachine"){Entity* me=scene_.get(kv.first.second);if(me&&!me->trigger.empty()){kv.second.trigger=me->trigger;me->trigger.clear();}kv.second.smTick(e->animParam);}kv.second.update(dt,e?e->animSpeed:1.f);if(!kv.second.fired.empty()){if(e){Entity* me=scene_.get(kv.first.second);if(me)me->event=kv.second.fired.back();}kv.second.fired.clear();}}t_+=dt;trT_+=dt;A_=1;oy_=0;
-  for(int i=0;i<1024;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
+  for(int i=0;i<1200;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
   if(toastT_>0)toastT_-=dt;fpsAcc_+=dt;fpsN_++;if(fpsAcc_>0.5f){fps_=fpsN_/fpsAcc_;fpsAcc_=0;fpsN_=0;}
   if(scr_==EDITOR)editorUpdate(dt);if(scr_==VOICE)voiceUpdate(dt);}
 

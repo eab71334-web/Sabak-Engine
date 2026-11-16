@@ -57,7 +57,7 @@ void main(){ vec3 albedo=vC;
     else if(uKind==11){ float pr=vn(vUV*520.0); albedo*=0.80+0.35*pr; N=normalize(N+(T*(pr-0.5)+B*(vn(vUV*520.0+5.0)-0.5))*0.25*lod); float row=abs(fract(vUV.y*11.0)-0.5); float stl=smoothstep(0.035,0.0,abs(row-0.455))*step(0.5,fract(vUV.x*70.0)); float seam=smoothstep(0.02,0.0,abs(row-0.5)); albedo=mix(albedo,vec3(0.72,0.66,0.55),stl*0.85); albedo*=1.0-0.45*seam; specK=0.38; specP=16.0; sheen=0.5; }
     else if(uKind==10){ specK=0.10; specP=26.0; sssK=0.35; }
     else if(uKind==9){ albedo*=0.7+0.5*vn(vUV*220.0); specK=0.05; specP=10.0; }
-    else if(uKind==16){ vec3 px=dFdx(vW),py=dFdy(vW); vec2 ua=dFdx(vUV),ub=dFdy(vUV); float det=ua.x*ub.y-ua.y*ub.x; vec3 Tt=vec3(0.0,-1.0,0.0); if(abs(det)>1e-12) Tt=normalize((py*ua.x-px*ub.x)/det);
+    else if(uKind==16||uKind==17){ vec3 px=dFdx(vW),py=dFdy(vW); vec2 ua=dFdx(vUV),ub=dFdy(vUV); float det=ua.x*ub.y-ua.y*ub.x; vec3 Tt=vec3(0.0,-1.0,0.0); if(abs(det)>1e-12) Tt=normalize((py*ua.x-px*ub.x)/det);
       vec3 Hh=normalize(normalize(uSun)+normalize(uCam-vW)); vec3 T1=normalize(Tt+N*0.10), T2=normalize(Tt-N*0.18);
       float s1=sqrt(max(1.0-pow(dot(T1,Hh),2.0),0.0)), s2=sqrt(max(1.0-pow(dot(T2,Hh),2.0),0.0));
       float sp=0.55+0.9*vn(vUV*vec2(260.0,22.0)); kk1=pow(s1,110.0)*sp; kk2=pow(s2,38.0)*(0.6+0.8*vn(vUV*vec2(90.0,10.0)));

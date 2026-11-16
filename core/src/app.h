@@ -49,7 +49,7 @@ private:
   void ensureThumbs(); void renderThumb(Target& t,const Scene& sc,Vec3 cam,Vec3 tg,float fov=0.9f); void cbTap(int id); void drawContent(float x0,float x1); void drawSelection(Vec3 cam,Vec3 tg);
   void drawBackground(); void drawHome(); void drawTemplates(); void drawImport(); void drawHud(); void header(const std::string& title,const std::string& sub);
   bool btn(int id,float x,float y,float w,float h);     // registers a hit area (design units); returns true if held
-  float pressOf(int id){return id>=0&&id<1024?press_[id]:0.f;}
+  float pressOf(int id){return id>=0&&id<1200?press_[id]:0.f;}
   void onTap(int id);
   Col C(Col c){c.a*=A_;return c;}
   void R(float x,float y,float w,float h,float r,Col a,Col b){ui.rrect(x,y+oy_,w,h,r,C(a),C(b));}
@@ -60,7 +60,7 @@ private:
   void plusIcon(float cx,float cy,float sz,Col c); void downIcon(float cx,float cy,float sz,Col c); void cubeIcon(float cx,float cy,float sz,float a);
   Renderer* r_=nullptr; UI ui; std::string data_,projDir_,importDir_; int W_=0,H_=0; float trT_=0,t_=0,A_=1,oy_=0,tr_=1,toastT_=0,fps_=60,fpsAcc_=0; int fpsN_=0;
   Screen scr_=HOME; std::string toast_; std::vector<Project> projects_; std::vector<std::string> found_; int cur_=-1;
-  std::vector<Btn> btns_,prevBtns_; float press_[1024]={0}; int held_=-1,heldId_=-1;
+  std::vector<Btn> btns_,prevBtns_; float press_[1200]={0}; int held_=-1,heldId_=-1;
   float stickX_=0,stickY_=0; int stickId_=-1,lookId_=-1; float sx0_=0,sy0_=0,lx_=0,ly_=0;
   std::map<std::string,Target> thumbs_; Target tmplT_[3],banner_; bool tmplOk_[3]={false,false,false},bannerOk_=false,thumbDirty_=false,cbOpen_=false; int cbTab_=0; float cbT_=0;
   Scene scene_,snap_,bg_; int meshIds_[P_COUNT]; std::map<std::string,std::unique_ptr<Model>> models_; std::map<std::pair<const Scene*,int>,ModelInst> minst_; Model* modelFor(const std::string& name); std::vector<std::string> mdlList_; std::map<std::string,Target> mthumbs_; void refreshModels(); void placeModel(const std::string& id);
@@ -77,6 +77,10 @@ private:
   Speech vcSp_; float vcT_=0; std::string vcStatus_="Pick a voice and press Play.";
   std::mutex vcMx_; Speech vcPend_; bool vcPendOk_=false,vcPendSet_=false;
   void drawVoice(); void voiceTap(int id); void voiceUpdate(float dt); void voicePlay(); void drawFace(float cx,float cy,float sc); void voiceRenderFace(); Scene vcScene_; Target vcFace_; bool vcFaceOk_=false; float vcW_[16]={0}; int vcFaceId_=-1;
+  // hair studio state
+  int vcMode_=0; bool vcHairDirty_=false; CharDef vcCd_; bool vcCdInit_=false; int vcHairPreset_=0,vcColor_=2,vcBeard_=0;
+  CharDef& teacherDef();
+  void applyHairPreset(int i); void rebuildTeacher(); void drawHairPanels();
   bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);
   // character creator (creator.cpp)
   bool scEd_=false; Sculpt sc_; int scDrag_=-1,scDragId_=-1,scStroke_=-1,scBase_=0; Entity* scEntity(); void openSculpt(); void closeSculpt(); void scRebuild(); bool scPointer(int type,int id,float px,float py); void scTap(int id); void drawSculpt(float W,float H); void scLive(); void scBuildBase(int b); bool scModel(Model& m);

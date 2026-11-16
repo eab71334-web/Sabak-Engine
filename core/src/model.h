@@ -56,6 +56,7 @@ struct HumanSlider { const char* name; const char* pat; const char* neg; const c
 extern const HumanSlider kHumanSliders[24];
 bool humanAvailable();
 struct CharDef { std::string name="Character"; bool human=true; float ex[6]={0,0,0,0,0,0}; float hv[40]={0.85f,0.12f,0.5f,0.5f,0.5f,0,0,1,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f};   // hv[0..7]=gender,age,muscle,weight,-,african,asian,caucasian; hv[8+k]=detail sliders float ex[6]={0,0,0,0,0,0};   // expression sliders (not saved): smile, mouth, blink, brows up, angry, sad
+  float hairLen=1.f,hairDens=1.f,hairCurl=0.f,hairClump=0.3f,hairFrizz=1.f,browK=1.f; int beard=0;   // Hair Studio (not saved)
   float height=1.8f,build=0.5f,muscle=0.4f,head=0.5f,shoulder=0.5f; int hair=1,outfit=0; unsigned col[5]={0xd9a07a,0x3a2418,0x3b6fb6,0x2d3340,0x1c1c1c};   // colors: skin, hair, shirt, pants, shoes
   bool save(const std::string& path) const; bool load(const std::string& path); };
 bool buildCharacter(Renderer& r,const CharDef& cd,Model& out);

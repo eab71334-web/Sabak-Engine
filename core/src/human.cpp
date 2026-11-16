@@ -149,7 +149,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
     struct Guide{V3 root,Nn;std::vector<V3> path;float len;};std::vector<Guide> guides;
     for(int n=0;n<NG;n++){V3 P,Nn;samp(P,Nn);
       float rel=P.y-eyeY;float top=sstep((rel-0.02f)/0.11f);bool front=P.z>headZ+0.012f;bool backNape=P.z<headZ-0.035f;
-      float len;if(cd.hair==2){len=0.12f+0.14f*(0.35f+0.65f*(backNape?1.f:top))+0.02f*(rnd()-0.5f);}else{len=0.036f+0.036f*top;if(front&&top>0.4f)len*=1.20f;if(backNape&&rel<0.0f)len*=0.8f;len+=0.008f*(rnd()-0.5f);}
+      float len;if(cd.hair==2){len=0.12f+0.14f*(0.35f+0.65f*(backNape?1.f:top))+0.02f*(rnd()-0.5f);}else{len=0.036f+0.036f*top;if(front&&top>0.4f)len*=1.20f;if(backNape&&rel<0.0f)len*=0.8f;len+=0.008f*(rnd()-0.5f);}len*=cd.hairLen;
       V3 fl=vsub(P,crown);fl=vsub(fl,vmul(Nn,vdot(fl,Nn)));fl=vnorm(fl);
       V3 sweep{front?0.85f:0.32f,0.f,0.f};fl=vnorm(vadd(fl,vmul(sweep,top)));
       float g=cd.hair==2?0.85f:(front?0.12f:0.36f);V3 d=vnorm(vadd(vmul(Nn,0.20f),vmul(fl,0.90f)));
@@ -159,7 +159,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
         V3 np=keepOutside(vadd(G.path[i-1],vmul(d,seg)),0.008f);if(np.y<ymin)np.y=ymin+(np.y-ymin)*0.12f;G.path[i]=np;}
       guides.push_back(G);}
     static const float tintMul[3]={0.80f,1.0f,1.38f};
-    int NCH=guides.empty()?0:(cd.hair==2?17000:24000);
+    int NCH=guides.empty()?0:(int)((cd.hair==2?17000:24000)*cd.hairDens);
     for(int n=0;n<NCH;n++){V3 P,Nn;samp(P,Nn);
       float rel=P.y-eyeY;bool front=P.z>headZ+0.012f;if(front&&rel<0.044f&&rnd()<0.80f)continue;
       int gi=0;float bd=1e9f;for(int q=0;q<(int)guides.size();q++){V3 dv=vsub(guides[q].root,P);float dd=vdot(dv,dv)*(0.7f+0.6f*((q*2654435761u>>8&255)/255.f)*0.0f+0.f);if(dd<bd){bd=dd;gi=q;}}
@@ -167,11 +167,11 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
       float rd=rnd();int depth=rd<0.30f?0:(rd<0.65f?1:2);
       float lenS=(depth==0?0.62f:depth==1?0.88f:1.08f)*(0.90f+0.2f*rnd());
       float tr=rnd();int tint=tr<0.30f?0:(tr<0.85f?1:2);int grp=depth*3+tint;
-      V3 off=vsub(P,G.root);float clump=0.20f+0.25f*rnd();
-      std::vector<V3> path(K),on(K);float frz=cd.hair==2?0.0030f:0.0016f;float ph=rnd()*6.28f;float ph2=rnd()*6.28f;float curlA=(rnd()<0.18f)?0.0035f:0.f;
+      V3 off=vsub(P,G.root);float clump=(0.75f+(0.08f-0.75f)*cd.hairClump)*(0.8f+0.4f*rnd());
+      std::vector<V3> path(K),on(K);float frz=(cd.hair==2?0.0030f:0.0016f)*cd.hairFrizz;float ph=rnd()*6.28f;float ph2=rnd()*6.28f;float curlA=(rnd()<0.12f+0.88f*cd.hairCurl)?0.0030f+0.0050f*cd.hairCurl:0.f;float cf=14.f+10.f*cd.hairCurl;
       for(int i=0;i<K;i++){float f=(float)i/(K-1);V3 gp=vadd(G.root,vmul(vsub(G.path[i],G.root),lenS));
         float oFac=1.f-(1.f-clump)*std::pow(f,0.8f);V3 q=vadd(gp,vmul(off,oFac));
-        q=vadd(q,V3{frz*f*std::sin(ph+f*7.f)+curlA*f*std::sin(f*20.f+ph2),frz*f*std::sin(ph2+f*5.f),frz*f*std::cos(ph+f*6.f)+curlA*f*std::cos(f*20.f+ph2)});
+        q=vadd(q,V3{frz*f*std::sin(ph+f*7.f)+curlA*f*std::sin(f*cf+ph2),frz*f*std::sin(ph2+f*5.f),frz*f*std::cos(ph+f*6.f)+curlA*f*std::cos(f*cf+ph2)});
         q=keepOutside(q,0.0045f+0.0032f*depth);path[i]=q;}
       path[0]=vadd(P,vmul(Nn,0.0008f+0.0016f*depth));
       for(int i=0;i<K;i++)on[i]=vnorm(vsub(path[i],hc));
@@ -192,14 +192,14 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
   {std::vector<V3> faceV;for(size_t i=0;i<body.v.size();i++){const SkinVertex& s=body.v[i];if(s.p[2]>headZ-0.01f&&std::fabs(s.p[1]-eyeY)<0.12f&&std::fabs(s.p[0])<0.12f)faceV.push_back(V3{s.p[0],s.p[1],s.p[2]});}
    auto surfZ=[&](float x,float y,float& z){float sw=0,sz=0;for(const V3& q:faceV){float dx=q.x-x,dy=q.y-y;float dd=std::sqrt(dx*dx+dy*dy);if(dd<0.008f){float w=1.f-dd/0.008f;w*=w;sw+=w;sz+=w*q.z;}}if(sw<1e-5f)return false;z=sz/sw;return true;};
    for(int sd=0;sd<2;sd++){Vec3 e=sd?eR:eL;float sgn=sd?-1.f:1.f;
-     for(int n=0;n<260;n++){float t=-0.88f+1.88f*std::pow(rnd(),0.85f);float dx=t*0.029f;
+     for(int n=0;n<(int)(260*cd.browK);n++){float t=-0.88f+1.88f*std::pow(rnd(),0.85f);float dx=t*0.029f;
        float yc=e.y+0.0165f+0.004f*std::max(0.f,1.f-std::fabs(dx+0.002f)/0.026f)+0.003f*std::max(0.f,-dx/0.026f);
        float h=0.0085f*(1.f-std::pow(std::fabs(t),3.f))*(t>0?1.f-0.45f*t:1.f);float y0=yc+(rnd()-0.5f)*h;float x0=e.x+dx*sgn;
        float ang=78.f+(-8.f-78.f)*((t+1.f)*0.5f)+ (rnd()-0.5f)*18.f;float a=ang*3.14159265f/180.f;
        float len=0.011f+0.006f*rnd()+0.002f*(1.f-std::fabs(t));
        std::vector<V3> path(4),on(4);bool ok=true;
        for(int i=0;i<4;i++){float f=(float)i/3.f;float aa=a-0.45f*f*(a>0?1.f:0.f)-0.25f*f;float x=x0+sgn*std::cos(aa)*len*f;float y=y0+std::sin(aa)*len*f;float z;if(!surfZ(x,y,z)){ok=false;break;}path[i]=V3{x,y,z+0.0007f+0.0006f*f};on[i]=V3{0.f,0.f,1.f};}
-       if(!ok)continue;buildCard(cardsB,tipB,path,on,0.0036f,0.f,1.f,0.45f);}}}
+       if(!ok)continue;buildCard(cardsB,tipB,path,on,0.0036f*(0.75f+0.5f*cd.browK),0.f,1.f,0.45f);}}}
   // strand texture: many fine strands per card, root-dark -> lighter tips, strongly varied brightness, tapering to points (alpha-cut)
   unsigned hairTex=0;
   {const int TW=512,TH=1024,S=26;std::vector<unsigned char> img((size_t)TW*TH*4);unsigned sd=99991u;auto rr=[&](){sd=sd*1664525u+1013904223u;return ((sd>>8)&0xffff)/65535.f;};
@@ -246,6 +246,38 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
     // tongue: flat ellipsoid on the lower jaw
     ell(tongue,{lipC.x,lipC.y-0.0095f,zc-0.0150f},{0.0185f,0.0058f,0.0195f});
   }
+  // ---- facial hair (Hair Studio): stubble / short / full beard / moustache, grown from face triangles
+  Mb beardS[2];std::vector<float> tipBd[2];
+  if(haveMouth&&cd.beard>0){
+    auto sm=[&](float a,float b,float x){float t=std::min(1.f,std::max(0.f,(x-a)/(b-a)));return t*t*(3-2*t);};
+    int st=cd.beard;  // 1 stubble 2 short 3 full 4 moustache
+    auto zoneW=[&](float x,float y,float z)->float{float ax=std::fabs(x),dy=y-lipC.y;if(z<lipC.z-0.085f)return 0.f;float w=0.f;
+      float mous=(dy>0.003f&&dy<0.024f&&ax<0.031f)?(1.f-sm(0.018f,0.031f,ax))*sm(0.003f,0.008f,dy)*(1.f-sm(0.018f,0.024f,dy)):0.f;
+      float chin=(dy<-0.010f&&dy>-0.074f&&ax<0.042f)?sm(-0.010f,-0.020f,dy)*(1.f-sm(-0.062f,-0.074f,dy))*(1.f-sm(0.026f,0.042f,ax)):0.f;
+      float cheek=(dy>-0.070f&&dy<0.038f&&ax>0.022f&&ax<0.082f)?sm(0.020f,0.034f,ax)*(1.f-sm(0.060f,0.082f,ax))*(1.f-sm(0.010f,0.038f,dy))*sm(-0.070f,-0.040f,dy):0.f;
+      float lipsClear=(std::fabs(dy)<0.008f&&ax<0.027f)?0.f:1.f;
+      if(st==4)w=mous;else if(st==2)w=std::max(chin,std::max(mous,cheek*0.55f));else w=std::max(chin,std::max(mous,cheek));
+      return w*lipsClear;};
+    std::vector<float> cum;std::vector<int> tris;float tot=0;
+    for(size_t i=0;i+2<body.idx.size();i+=3){const SkinVertex &a=body.v[body.idx[i]],&b=body.v[body.idx[i+1]],&c2=body.v[body.idx[i+2]];
+      float cx=(a.p[0]+b.p[0]+c2.p[0])/3,cy=(a.p[1]+b.p[1]+c2.p[1])/3,cz=(a.p[2]+b.p[2]+c2.p[2])/3;float w=zoneW(cx,cy,cz);if(w<0.04f)continue;
+      V3 e1{b.p[0]-a.p[0],b.p[1]-a.p[1],b.p[2]-a.p[2]},e2{c2.p[0]-a.p[0],c2.p[1]-a.p[1],c2.p[2]-a.p[2]};V3 cr=vcr(e1,e2);tot+=0.5f*std::sqrt(vdot(cr,cr))*w;cum.push_back(tot);tris.push_back((int)i);}
+    int N=cum.empty()?0:(st==1?15000:st==2?12000:st==3?16000:4200);
+    for(int n=0;n<N;n++){float r0=rnd()*tot;size_t lo=0,hi=cum.size()-1;while(lo<hi){size_t mid=(lo+hi)/2;if(cum[mid]<r0)lo=mid+1;else hi=mid;}
+      int ti=tris[lo];const SkinVertex &A=body.v[body.idx[ti]],&B=body.v[body.idx[ti+1]],&Cc=body.v[body.idx[ti+2]];float u=rnd(),v=rnd();if(u+v>1){u=1-u;v=1-v;}float w=1-u-v;
+      V3 P{A.p[0]*w+B.p[0]*u+Cc.p[0]*v,A.p[1]*w+B.p[1]*u+Cc.p[1]*v,A.p[2]*w+B.p[2]*u+Cc.p[2]*v};
+      V3 Nn=vnorm(V3{A.n[0]*w+B.n[0]*u+Cc.n[0]*v,A.n[1]*w+B.n[1]*u+Cc.n[1]*v,A.n[2]*w+B.n[2]*u+Cc.n[2]*v});
+      float zw=zoneW(P.x,P.y,P.z);if(rnd()>zw)continue;
+      float dy=P.y-lipC.y;bool mous=dy>0.0f;
+      float len=st==1?0.0013f+0.0008f*rnd():st==2?(0.009f+0.005f*rnd()):st==3?(mous?0.016f:(dy<-0.030f?0.032f:0.020f))*(0.8f+0.4f*rnd()):(0.011f+0.004f*rnd());
+      V3 down{0.f,-1.f,0.f};V3 dir=vsub(down,vmul(Nn,vdot(down,Nn)));
+      if(mous)dir=vadd(dir,V3{(P.x>0?1.f:-1.f)*0.55f,-0.2f,0.f});else dir=vadd(dir,V3{-P.x*5.f,0.f,0.f});
+      dir=vnorm(vadd(vmul(vnorm(dir),0.8f),vmul(Nn,st==1?0.55f:0.30f)));
+      if(st==3&&dy<-0.030f)dir=vnorm(vadd(dir,V3{0.f,-0.2f,0.25f}));
+      const int KK=4;std::vector<V3> path(KK),on(KK,Nn);path[0]=vadd(P,vmul(Nn,0.0004f));V3 d=dir;float seg=len/(KK-1);
+      for(int i=1;i<KK;i++){float f=(float)i/(KK-1);d=vnorm(vadd(d,V3{0.2f*(rnd()-0.5f),-0.15f*f*(st>=2?1.f:0.2f),0.2f*(rnd()-0.5f)}));path[i]=vadd(path[i-1],vmul(d,seg));}
+      int g=rnd()<0.5f?0:1;buildCard(beardS[g],tipBd[g],path,on,st==1?0.0009f:0.0013f,0.f,1.f,0.6f);}
+  }
   // assemble
   std::vector<unsigned char> white{255,255,255,255};unsigned wt=r.createTexture(white.data(),1,1);
   struct Part{Mb* m;unsigned col;};unsigned skin=cd.col[0];
@@ -276,7 +308,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
     addExtra(teethL,{0.88f,0.85f,0.76f},9,{{6,jawD}});
     addExtra(tongue,{0.62f,0.24f,0.25f},1,{{6,jawD*0.7f},{12,Vec3{0.f,0.0075f,0.006f}}});
   }
-  {auto addCards=[&](Mb& m,std::vector<float>& tip,Vec3 col,float swayK,unsigned tx=0){if(m.idx.empty())return;ModelMat mm;mm.tex=tx?tx:hairTex;mm.kind=16;mm.mask=true;mm.col[0]=std::min(1.f,col.x);mm.col[1]=std::min(1.f,col.y);mm.col[2]=std::min(1.f,col.z);mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
+  {auto addCards=[&](Mb& m,std::vector<float>& tip,Vec3 col,float swayK,unsigned tx=0,int kd=16){if(m.idx.empty())return;ModelMat mm;mm.tex=tx?tx:hairTex;mm.kind=kd;mm.mask=true;mm.col[0]=std::min(1.f,col.x);mm.col[1]=std::min(1.f,col.y);mm.col[2]=std::min(1.f,col.z);mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
       ModelPrim mp;mp.mesh=r.uploadSkin(m.v,m.idx);mp.mat=mi;mp.cv=m.v;mp.ci=m.idx;mp.md.assign(mixes.size(),std::vector<float>());
       if(swayK>0&&false){float sw=(cd.hair==2?0.030f:0.010f)*swayK;std::vector<float>& ax=mp.md[13];std::vector<float>& az=mp.md[14];ax.assign(m.v.size()*3,0.f);az.assign(m.v.size()*3,0.f);
         for(size_t i=0;i<m.v.size();i++){float t=tip[i];ax[i*3]=sw*t;ax[i*3+1]=-sw*0.25f*t;az[i*3+2]=sw*t;az[i*3+1]=-sw*0.15f*t;}}
@@ -284,7 +316,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
    Vec3 hc0{((cd.col[1]>>16)&255)/255.f,((cd.col[1]>>8)&255)/255.f,(cd.col[1]&255)/255.f};
    static const float tm[3]={0.80f,1.0f,1.38f},am[3]={0.55f,0.85f,1.10f};
    for(int g=0;g<9;g++)addCards(strands[g],tipS[g],hc0*(tm[g%3]*am[g/3]),0.f,stripTex);
-   addCards(cardsB,tipB,hc0*1.0f,0.f);}
+   addCards(cardsB,tipB,hc0*1.0f,0.f,0,17);addCards(beardS[0],tipBd[0],hc0*0.75f,0.f,stripTex,17);addCards(beardS[1],tipBd[1],hc0*1.05f,0.f,stripTex,17);}
   out.morphW.assign(mixes.size(),0.f);for(int k=0;k<6;k++)out.morphW[k]=cd.ex[k];out.applyMorphs(r);
   float rad=0.5f;out.fit=cd.height/Hh;out.foot=0;out.height=cd.height;out.radius=std::max(0.5f,rad*out.fit);out.autoRig=true;
   Anim lo;lo.name="Locomotion";lo.dur=1;out.anims.push_back(lo);out.builtin=(int)out.anims.size();return true;}
