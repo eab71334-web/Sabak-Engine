@@ -49,7 +49,7 @@ void App::voiceTap(int id){
   else if(id==1014){vcText_.clear();vcPreset_=-1;vcFocus_=true;}}
 
 void App::voiceRenderFace(){
-  if(!vcFaceOk_){if(vcFace_.fbo==0&&!r_->createTarget(vcFace_,720,640))return;
+  if(!vcFaceOk_){if(vcFace_.fbo==0&&!r_->createTarget(vcFace_,1024,880))return;
     vcScene_=Scene();{auto& f=vcScene_.add(P_PLANE,"StudioFloor");f.pos={0,0,0};f.scale={40,1,40};f.color=Col::hex(0x23272e);}
     auto& en=vcScene_.add(P_MODEL,"Teacher");en.asset="gen:teacher";en.pos={0,0,0};vcFaceId_=en.id;vcFaceOk_=true;}
   Model* m=modelFor("gen:teacher");if(!m)return;
@@ -58,13 +58,13 @@ void App::voiceRenderFace(){
   float tgt[16]={0};float press=k.close;
   tgt[6]=std::min(1.f,k.jaw*1.05f)*(1.f-press);tgt[7]=k.round*(1.f-0.5f*k.wide);tgt[8]=k.wide*(1.f-press);tgt[9]=press;
   tgt[10]=std::min(1.f,k.teeth*0.5f+k.fv*0.6f);tgt[11]=k.fv*0.7f;tgt[12]=k.tongue;
-  float bl=(std::fmod(t_,3.7f)>3.55f)?1.f:0.f;tgt[2]=bl;tgt[3]=0.12f+0.35f*k.energy;
+  float bl=(std::fmod(t_,3.7f)>3.55f)?1.f:0.f;tgt[2]=bl;tgt[3]=0.f;
   static float prevT=0;float dt=std::max(0.001f,std::min(0.05f,t_-prevT));prevT=t_;float a=1.f-std::exp(-dt*28.f);
   for(int i=0;i<13&&i<(int)m->morphNames.size();i++){vcW_[i]+=(tgt[i]-vcW_[i])*(i==2?1.f:a);m->morphW[i]=vcW_[i];}
   {float sx=std::sin(t_*1.3f)*0.5f+std::sin(t_*0.47f)*0.3f,sz=std::sin(t_*0.9f+1.f)*0.4f;sx+=(vcPlaying_?std::sin(t_*7.f)*0.25f*k.energy:0.f);if((int)m->morphNames.size()>14){m->morphW[13]=sx;m->morphW[14]=sz;}}
   m->applyMorphs(*r_);
   Entity* en=vcScene_.get(vcFaceId_);if(en){en->rot={0,std::sin(t_*0.6f)*4.f,0};}
-  renderThumb(vcFace_,vcScene_,Vec3{0.0f,1.655f,0.78f},Vec3{0.0f,1.640f,0.0f},0.62f);
+  renderThumb(vcFace_,vcScene_,Vec3{0.0f,1.672f,0.80f},Vec3{0.0f,1.650f,0.0f},0.50f);
 }
 void App::drawFace(float cx,float cy,float sc){(void)cx;(void)cy;(void)sc;}
 
