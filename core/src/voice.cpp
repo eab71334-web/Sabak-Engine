@@ -509,7 +509,7 @@ bool speak(const std::string& utf8, const VoiceParams& vp, Speech& out) {
         Params clo; clo.v[AV] = p.voiced ? 0.20f : 0.f; setMouthCons(clo, p.mouth); clo.v[NAS] = 0;
         addSeg((p.voiced ? 55.f : 70.f) * dm, clo, clo, 1, 0.012f);
         Params br; br.v[AF] = p.namp; br.v[FF] = p.nf; br.v[FB] = p.nbw; br.v[AV] = p.voiced ? 0.3f : 0.f; setMouthCons(br, p.mouth);
-        addSeg(12.f * dm, br, br, 2, 0.006f);
+        {Params br2=br; br2.v[AF]*=0.25f; addSeg(14.f * dm, br, br2, 2, 0.003f);}
         if (!p.voiced) { Params as; as.v[AH] = 0.55f; as.v[AF] = p.namp * 0.15f; as.v[FF] = p.nf; as.v[FB] = p.nbw; setMouthCons(as, p.mouth); addSeg(36.f * dm, as, as, 2, 0.008f); }
       } else if (p.type == T_F) {
         Params a; a.v[AF] = p.namp; a.v[FF] = p.nf; a.v[FB] = p.nbw; a.v[AV] = p.voiced ? 0.42f : 0.f; setMouthCons(a, p.mouth);
@@ -636,7 +636,7 @@ bool speak(const std::string& utf8, const VoiceParams& vp, Speech& out) {
   Params P;
   float lastF0 = vp.f0;
   float tiltA = 0.12f + 0.75f * (1.f - clampf(vp.tilt, 0.f, 1.f));
-  const int UP = 48;
+  const int UP = 12;
   float envSmooth = 0;
   for (size_t n = 0; n < nS; n++) {
     float tt = n * T;
@@ -673,7 +673,7 @@ bool speak(const std::string& utf8, const VoiceParams& vp, Speech& out) {
     lp += tiltA * (voiced - lp);  // spectral tilt
     float src = lp;
     float nz = rng.noise();
-    float asp = nz * (P.v[AH] * 0.55f + vp.breath * 0.45f * P.v[AV] * (0.25f + g));
+    float asp = nz * (P.v[AH] * 0.45f + vp.breath * 0.30f * P.v[AV] * (0.20f + g));
     float x = src * 5.5f + asp * 1.6f;
     // cascade
     float y = r1.run(x); y = r2.run(y); y = r3.run(y); y = r4.run(y); y = r5.run(y);
@@ -688,16 +688,19 @@ bool speak(const std::string& utf8, const VoiceParams& vp, Speech& out) {
   }
 
   // ---- normalise, soft clip
-  float pk = 1e-6f;
-  for (float v : out.pcm) pk = std::max(pk, std::fabs(v));
-  float gain = 0.80f / pk;
-  for (float& v : out.pcm) { float q = v * gain; out.pcm[&v - &out.pcm[0]] = std::tanh(q * 1.15f) / std::tanh(1.15f); }
+  std::vector<float> ab(out.pcm.size());
+  for (size_t i = 0; i < ab.size(); i++) ab[i] = std::fabs(out.pcm[i]);
+  std::vector<float> sorted = ab; size_t kth = (size_t)(sorted.size() * 0.995);
+  std::nth_element(sorted.begin(), sorted.begin() + kth, sorted.end());
+  float pk = std::max(1e-6f, sorted[kth]);
+  float gain = 0.55f / pk;
+  for (size_t i = 0; i < out.pcm.size(); i++) { float q = out.pcm[i] * gain; out.pcm[i] = std::tanh(q * 1.1f) / std::tanh(1.1f) * 0.9f; }
 
   // ---- classroom reverb (Schroeder)
   if (vp.room > 0.001f) {
     struct Comb { std::vector<float> b; size_t i = 0; float fb; float lpv = 0; };
     const float cd[4] = {0.0297f, 0.0371f, 0.0411f, 0.0437f};
-    Comb cb[4]; for (int k = 0; k < 4; k++) { cb[k].b.assign((size_t)(cd[k] * SR), 0.f); cb[k].fb = 0.74f; }
+    Comb cb[4]; for (int k = 0; k < 4; k++) { cb[k].b.assign((size_t)(cd[k] * SR), 0.f); cb[k].fb = 0.55f; }
     struct AP { std::vector<float> b; size_t i = 0; };
     AP ap[2]; ap[0].b.assign((size_t)(0.005f * SR), 0.f); ap[1].b.assign((size_t)(0.0017f * SR), 0.f);
     std::vector<float> dry = out.pcm;

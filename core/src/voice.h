@@ -17,7 +17,7 @@ struct VoiceParams {
   float range = 1.0f;      // intonation range multiplier
   float tremor = 0.0f;     // old-age tremor 0..1
   float roughness = 0.0f;  // creak/roughness 0..1
-  float room = 0.12f;      // classroom reverb amount 0..1
+  float room = 0.05f;      // classroom reverb amount 0..1
   unsigned seed = 1;
   // presets
   static VoiceParams maleTeacher();
