@@ -20,6 +20,7 @@ struct SMState { std::string name,clip; };
 struct SMTrans { int from=0,to=0,kind=0; float val=1.f; std::string trig; };   // from -1 = any state; kind 0 speed> 1 speed< 2 trigger 3 clip finished
 struct Fx { bool gait=true,breath=true,secondary=true,foot=true; };
 struct Model {
+  float sway[3]={0,0,0};   // hair sway (model space), applied in the vertex shader to kind-16 meshes
   std::string name; std::vector<ModelPrim> prims; std::vector<ModelMat> mats;
   std::vector<int> parent; std::vector<std::string> nodeName; std::vector<TRS> rest; std::vector<int> joints; std::vector<Mat4> ibm; std::vector<Anim> anims;
   std::vector<std::string> morphNames; mutable std::vector<float> morphW; void applyMorphs(Renderer& r) const; int morphIndex(const std::string& n) const;

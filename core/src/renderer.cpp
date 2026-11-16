@@ -15,11 +15,11 @@ layout(location=2) in vec2 aUV; layout(location=3) in uvec4 aJ; layout(location=
 #else
 layout(location=2) in vec3 aCol;
 #endif
-uniform mat4 uModel,uVP,uLightVP; uniform vec3 uTint;
+uniform mat4 uModel,uVP,uLightVP; uniform vec3 uTint; uniform vec4 uSway;
 out vec3 vW; out vec3 vN; out vec3 vC; out vec4 vL; out vec2 vUV; out vec3 vVC;
 void main(){
 #ifdef SKIN
-  mat4 sm=uJ[aJ.x]*aW.x+uJ[aJ.y]*aW.y+uJ[aJ.z]*aW.z+uJ[aJ.w]*aW.w; vec4 lp=sm*vec4(aPos,1.0); vec3 ln=mat3(sm)*aNrm; vC=uTint; vVC=aVC.rgb; vUV=aUV;
+  mat4 sm=uJ[aJ.x]*aW.x+uJ[aJ.y]*aW.y+uJ[aJ.z]*aW.z+uJ[aJ.w]*aW.w; vec4 lp=sm*vec4(aPos,1.0); lp.xyz+=uSway.xyz*uSway.w*pow(aUV.y,1.5); vec3 ln=mat3(sm)*aNrm; vC=uTint; vVC=aVC.rgb; vUV=aUV;
 #else
   vec4 lp=vec4(aPos,1.0); vec3 ln=aNrm; vC=pow(aCol*uTint,vec3(2.2)); vUV=vec2(0.0); vVC=vec3(1.0);
 #endif
@@ -92,10 +92,10 @@ layout(location=0) in vec3 aPos;
 #ifdef SKIN
 layout(location=2) in vec2 aUV; layout(location=3) in uvec4 aJ; layout(location=4) in vec4 aW; uniform mat4 uJ[80]; out vec2 vUV;
 #endif
-uniform mat4 uModel,uLightVP;
+uniform mat4 uModel,uLightVP; uniform vec4 uSway;
 void main(){
 #ifdef SKIN
-  mat4 sm=uJ[aJ.x]*aW.x+uJ[aJ.y]*aW.y+uJ[aJ.z]*aW.z+uJ[aJ.w]*aW.w; vUV=aUV; gl_Position=uLightVP*uModel*(sm*vec4(aPos,1.0));
+  mat4 sm=uJ[aJ.x]*aW.x+uJ[aJ.y]*aW.y+uJ[aJ.z]*aW.z+uJ[aJ.w]*aW.w; vUV=aUV; vec4 sp=sm*vec4(aPos,1.0); sp.xyz+=uSway.xyz*uSway.w*pow(aUV.y,1.5); gl_Position=uLightVP*uModel*sp;
 #else
   gl_Position=uLightVP*uModel*vec4(aPos,1.0);
 #endif
@@ -175,9 +175,9 @@ void Renderer::render(const std::vector<DrawItem>& items,const std::vector<SkinD
   glUniformMatrix4fv(glGetUniformLocation(shProg_,"uLightVP"),1,GL_FALSE,lightVP_.m);
   int uM=glGetUniformLocation(shProg_,"uModel");
   for(auto&it:items){if(!it.castShadow)continue;auto&g=meshes_[it.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(uM,1,GL_FALSE,it.model.m);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
-  if(!skin.empty()){glUseProgram(skinShProg_);glUniformMatrix4fv(glGetUniformLocation(skinShProg_,"uLightVP"),1,GL_FALSE,lightVP_.m);int sM=glGetUniformLocation(skinShProg_,"uModel"),sJ=glGetUniformLocation(skinShProg_,"uJ"),sMk=glGetUniformLocation(skinShProg_,"uMask");
+  if(!skin.empty()){glUseProgram(skinShProg_);glUniformMatrix4fv(glGetUniformLocation(skinShProg_,"uLightVP"),1,GL_FALSE,lightVP_.m);int sM=glGetUniformLocation(skinShProg_,"uModel"),sJ=glGetUniformLocation(skinShProg_,"uJ"),sMk=glGetUniformLocation(skinShProg_,"uMask"),sSw=glGetUniformLocation(skinShProg_,"uSway");
     glActiveTexture(GL_TEXTURE1);glUniform1i(glGetUniformLocation(skinShProg_,"uTex"),1);
-    for(auto&s:skin){if(s.kind==6||s.kind==13)continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(sM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(sJ,s.nj,GL_FALSE,s.joints);glUniform1f(sMk,s.mask?1.f:0.f);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
+    for(auto&s:skin){if(s.kind==6||s.kind==13)continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(sM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(sJ,s.nj,GL_FALSE,s.joints);glUniform1f(sMk,s.mask?1.f:0.f);glUniform4f(sSw,s.sway[0],s.sway[1],s.sway[2],s.kind==16?1.f:0.f);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);}
     glActiveTexture(GL_TEXTURE0);}
   glDisable(GL_POLYGON_OFFSET_FILL);
   // 2) main pass
@@ -195,9 +195,9 @@ void Renderer::render(const std::vector<DrawItem>& items,const std::vector<SkinD
   if(!skin.empty()){glUseProgram(skinProg_);glUniformMatrix4fv(glGetUniformLocation(skinProg_,"uVP"),1,GL_FALSE,vp.m);glUniformMatrix4fv(glGetUniformLocation(skinProg_,"uLightVP"),1,GL_FALSE,lightVP_.m);
     glUniform3f(glGetUniformLocation(skinProg_,"uFog"),studio_?0.035f:0.74f,studio_?0.040f:0.78f,studio_?0.050f:0.84f);glUniform3f(glGetUniformLocation(skinProg_,"uSun"),sunDir_.x,sunDir_.y,sunDir_.z);glUniform3f(glGetUniformLocation(skinProg_,"uCam"),camPos_.x,camPos_.y,camPos_.z);
     glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,shTex_);glUniform1i(glGetUniformLocation(skinProg_,"uShadow"),0);glUniform1i(glGetUniformLocation(skinProg_,"uTex"),1);
-    int kM=glGetUniformLocation(skinProg_,"uModel"),kJ=glGetUniformLocation(skinProg_,"uJ"),kT=glGetUniformLocation(skinProg_,"uTint"),kB=glGetUniformLocation(skinProg_,"uBase"),kMk=glGetUniformLocation(skinProg_,"uMask"),kK=glGetUniformLocation(skinProg_,"uKind");
+    int kM=glGetUniformLocation(skinProg_,"uModel"),kJ=glGetUniformLocation(skinProg_,"uJ"),kT=glGetUniformLocation(skinProg_,"uTint"),kB=glGetUniformLocation(skinProg_,"uBase"),kMk=glGetUniformLocation(skinProg_,"uMask"),kK=glGetUniformLocation(skinProg_,"uKind"),kSw=glGetUniformLocation(skinProg_,"uSway");
     for(int pass=0;pass<2;pass++){if(pass==1){glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);}
-    for(auto&s:skin){if((s.kind==6||s.kind==13)!=(pass==1))continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);glUniform1f(kMk,s.mask?1.f:0.f);glUniform1i(kK,s.kind);
+    for(auto&s:skin){if((s.kind==6||s.kind==13)!=(pass==1))continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);glUniform1f(kMk,s.mask?1.f:0.f);glUniform1i(kK,s.kind);glUniform4f(kSw,s.sway[0],s.sway[1],s.sway[2],s.kind==16?1.f:0.f);
       glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);stats.draws++;stats.tris+=g.count/3;}
     }glDisable(GL_BLEND);glDepthMask(GL_TRUE);
     glActiveTexture(GL_TEXTURE0);}
