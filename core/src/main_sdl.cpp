@@ -6,7 +6,7 @@
 #include "model.h"
 #include "gl.h"
 int main(int, char**){
-  if(!SDL_Init(SDL_INIT_VIDEO)){SDL_Log("SDL_Init failed: %s",SDL_GetError());return 1;}
+  if(!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO)){SDL_Log("SDL_Init failed: %s",SDL_GetError());return 1;}
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,0);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_ES);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);
   SDL_Window* win=SDL_CreateWindow("Sabak Engine",1280,720,SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN|SDL_WINDOW_HIGH_PIXEL_DENSITY);
@@ -34,11 +34,20 @@ int main(int, char**){
   sk::App* app=new sk::App();
   if(!app->init(r,data,W,H)){while(true){SDL_Event e;while(SDL_PollEvent(&e)){if(e.type==SDL_EVENT_QUIT)return 0;}
       glBindFramebuffer(GL_FRAMEBUFFER,winFbo);glClearColor(1,0,1,1);glClear(GL_COLOR_BUFFER_BIT);if(winRb)glBindRenderbuffer(GL_RENDERBUFFER,winRb);SDL_GL_SwapWindow(win);}}   // magenta = UI init failed
+  // audio out for Voice Studio (mono float PCM; format follows each clip)
+  SDL_AudioSpec aspec;aspec.format=SDL_AUDIO_F32;aspec.channels=1;aspec.freq=24000;
+  SDL_AudioStream* astream=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&aspec,nullptr,nullptr);
+  if(astream)SDL_ResumeAudioStreamDevice(astream);
+  app->playAudio=[astream](const float* d,int n,int rate){if(!astream)return;SDL_ClearAudioStream(astream);if(!d||n<=0)return;
+    SDL_AudioSpec src;src.format=SDL_AUDIO_F32;src.channels=1;src.freq=rate;SDL_SetAudioStreamFormat(astream,&src,nullptr);SDL_PutAudioStreamData(astream,d,n*(int)sizeof(float));};
+  bool textOn=false;
   int ww=0,wh=0;SDL_GetWindowSize(win,&ww,&wh);float mx=ww>0?(float)W/ww:1.0f;
   bool run=true;Uint64 last=SDL_GetTicksNS();
   while(run){
     SDL_Event e;while(SDL_PollEvent(&e)){
       if(e.type==SDL_EVENT_QUIT)run=false;
+      else if(e.type==SDL_EVENT_TEXT_INPUT)app->textInput(e.text.text);
+      else if(e.type==SDL_EVENT_KEY_DOWN&&(e.key.key==SDLK_BACKSPACE||e.key.key==SDLK_RETURN))app->keyCode(e.key.key==SDLK_BACKSPACE?1:2);
       else if(e.type==SDL_EVENT_KEY_DOWN||e.type==SDL_EVENT_KEY_UP){bool d=e.type==SDL_EVENT_KEY_DOWN;const char* k=nullptr;
         switch(e.key.key){case SDLK_W:k="W";break;case SDLK_A:k="A";break;case SDLK_S:k="S";break;case SDLK_D:k="D";break;default:break;}
         if(k)app->key(k,d);}
@@ -50,6 +59,7 @@ int main(int, char**){
       else if(e.type==SDL_EVENT_MOUSE_BUTTON_UP&&e.button.which!=SDL_TOUCH_MOUSEID)app->pointer(2,1000,e.button.x*mx,e.button.y*mx);
     }
     Uint64 now=SDL_GetTicksNS();float dt=(float)((now-last)/1e9);last=now;if(dt>0.05f)dt=0.05f;
+    {bool w=app->wantsText();if(w!=textOn){textOn=w;if(w)SDL_StartTextInput(win);else SDL_StopTextInput(win);}}
     app->update(dt);app->render();if(winRb)glBindRenderbuffer(GL_RENDERBUFFER,winRb);SDL_GL_SwapWindow(win);
   }
   SDL_Quit();return 0;}

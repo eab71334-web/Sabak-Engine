@@ -22,7 +22,7 @@ bool App::init(Renderer& r,const std::string& data,int w,int h){registerBuiltinS
   r_=&r;data_=data;projDir_=data+"/SabakProjects";importDir_=data+"/Import";std::error_code ec;fs::create_directories(projDir_,ec);fs::create_directories(importDir_,ec);fs::create_directories(data+"/Models",ec);
   W_=w;H_=h;if(!ui.init(h/393.0f))return false;for(int& m:meshIds_)m=-1;sctx_.scene=&scene_;sctx_.input=&in_;bg_.buildTemplate(1);rescan();rescanImports();return true;}
 void App::resize(int w,int h){W_=w;H_=h;}
-const char* App::screenName() const{return scr_==HOME?"home":scr_==TEMPLATES?"templates":scr_==IMPORT?"import":"editor";}
+const char* App::screenName() const{return scr_==HOME?"home":scr_==TEMPLATES?"templates":scr_==IMPORT?"import":scr_==VOICE?"voice":"editor";}
 static std::string field(const std::string& js,const std::string& key){size_t p=js.find("\""+key+"\"");if(p==std::string::npos)return "";p=js.find(':',p);if(p==std::string::npos)return "";p++;
   while(p<js.size()&&(js[p]==' '||js[p]=='"'))p++;size_t e=p;while(e<js.size()&&js[e]!='"'&&js[e]!=','&&js[e]!='}')e++;return js.substr(p,e-p);}
 void App::rescan(){projects_.clear();std::error_code ec;for(auto& e:fs::directory_iterator(projDir_,ec)){if(!e.is_directory())continue;std::ifstream f(e.path()/"project.json");if(!f)continue;
@@ -47,6 +47,7 @@ void App::go(Screen s){scr_=s;tr_=0;trT_=0;held_=-1;heldId_=-1;if(s==IMPORT)resc
 void App::onTap(int id){
   if(id==1)go(TEMPLATES);else if(id==2)go(IMPORT);else if(id==3)go(HOME);else if(id==4){rescanImports();toast("Refreshed");}
   else if(id==5){if(crEd_)closeCreator();if(scEd_)closeSculpt();if(pmEd_)closeModel();if(play_)stopPlay();saveScene(true);go(HOME);}
+  else if(id==27)go(VOICE);else if(id>=1000&&id<1024)voiceTap(id);
   else if(id>=100&&id<990)editorTap(id);
   else if(id>=10&&id<20)openProject(id-10);else if(id>=20&&id<27)createProject(id-20);else if(id>=30&&id<40)importFound(id-30);}
 void App::key(const std::string& k,bool d){int i=k=="W"?0:k=="A"?1:k=="S"?2:3;keyDown_[i]=d;}
@@ -55,7 +56,7 @@ bool App::btn(int id,float x,float y,float w,float h){btns_.push_back({id,x,y+0,
 void App::update(float dt){for(auto& kv:minst_){const Entity* e=nullptr;if(kv.first.first==&scene_)e=scene_.get(kv.first.second);if(e)kv.second.param=e->animParam;if(e&&!(animEd_&&e->id==sel_)){kv.second.lookOn=e->lookOn;kv.second.lookYaw=e->lookYaw;kv.second.lookPitch=e->lookPitch;}if(e&&e->anim=="StateMachine"){Entity* me=scene_.get(kv.first.second);if(me&&!me->trigger.empty()){kv.second.trigger=me->trigger;me->trigger.clear();}kv.second.smTick(e->animParam);}kv.second.update(dt,e?e->animSpeed:1.f);if(!kv.second.fired.empty()){if(e){Entity* me=scene_.get(kv.first.second);if(me)me->event=kv.second.fired.back();}kv.second.fired.clear();}}t_+=dt;trT_+=dt;A_=1;oy_=0;
   for(int i=0;i<1024;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
   if(toastT_>0)toastT_-=dt;fpsAcc_+=dt;fpsN_++;if(fpsAcc_>0.5f){fps_=fpsN_/fpsAcc_;fpsAcc_=0;fpsN_=0;}
-  if(scr_==EDITOR)editorUpdate(dt);}
+  if(scr_==EDITOR)editorUpdate(dt);if(scr_==VOICE)voiceUpdate(dt);}
 
 void App::pointer(int type,int id,float px,float py){float s=ui.s();float x=px/s,y=py/s;
   if(type==0){
@@ -124,6 +125,7 @@ void App::drawHome(){float W=W_/ui.s();float H=H_/ui.s();
     { float bx=x+24,by=y+h-60,bw=170,bh=40;btn(1,bx,by,bw,bh);float k=pressOf(1);R(bx,by,bw,bh,5,ACC.mul(1+0.12f*k),ACC2.mul(1+0.12f*k));RING(bx,by,bw,bh,5,1,ACC.mul(1.3f));ic::plus(ui,bx+24,by+bh/2+oy_,15,WHITE.with(A_));T("New Project",bx+44,by+11,13.5f,WHITE,F_BOLD);}
     { float bx=x+204,by=y+h-60,bw=156,bh=40;btn(2,bx,by,bw,bh);float k=pressOf(2);R(bx,by,bw,bh,5,BG3.with(0.9f).mul(1+0.25f*k),BG2.with(0.9f).mul(1+0.25f*k));RING(bx,by,bw,bh,5,1,LINE2);ic::download(ui,bx+24,by+bh/2+oy_,15,TXT.with(A_));T("Import",bx+44,by+11,13.5f,TXT,F_BOLD);} }
   { float x=24,y=58,w=500,h=196;{float bx=x+370,by=y+h-108,bw=106,bh=40;btn(24,bx,by,bw,bh);float k=pressOf(24);R(bx,by,bw,bh,5,Col::hex(0x2a3a22).mul(1+0.2f*k),Col::hex(0x1f2b19).mul(1+0.2f*k));RING(bx,by,bw,bh,5,1,Col::hex(0x6fa85a));T("Character",bx+bw/2,by+7,11,Col::hex(0x9bd67f),F_BOLD,1);T("Creator",bx+bw/2,by+22,11,Col::hex(0x9bd67f),F_BOLD,1);}
+  {float bx=x+24,by=y+h-108,bw=106,bh=40;btn(27,bx,by,bw,bh);float k=pressOf(27);R(bx,by,bw,bh,5,Col::hex(0x3d2230).mul(1+0.2f*k),Col::hex(0x2a1721).mul(1+0.2f*k));RING(bx,by,bw,bh,5,1,Col::hex(0xc0607f));T("Voice",bx+bw/2,by+7,11,Col::hex(0xff9fc0),F_BOLD,1);T("speech + lips",bx+bw/2,by+23,8.5f,TXT3,F_REG,1);}
   {float bx=x+142,by=y+h-108,bw=106,bh=40;btn(26,bx,by,bw,bh);float k=pressOf(26);R(bx,by,bw,bh,5,Col::hex(0x2b3a3d).mul(1+0.2f*k),Col::hex(0x1b2a2d).mul(1+0.2f*k));RING(bx,by,bw,bh,5,1,Col::hex(0x5aa8a8));T("Model",bx+bw/2,by+7,11,Col::hex(0x8fe0e0),F_BOLD,1);T("Studio",bx+bw/2,by+22,11,Col::hex(0x8fe0e0),F_BOLD,1);}
   {float bx=x+256,by=y+h-108,bw=106,bh=40;btn(25,bx,by,bw,bh);float k=pressOf(25);R(bx,by,bw,bh,5,Col::hex(0x2a2b3d).mul(1+0.2f*k),Col::hex(0x1c1d2b).mul(1+0.2f*k));RING(bx,by,bw,bh,5,1,Col::hex(0x7a7ee0));T("Sculpt",bx+bw/2,by+7,11,Col::hex(0xa9acff),F_BOLD,1);T("Studio",bx+bw/2,by+22,11,Col::hex(0xa9acff),F_BOLD,1);}
   float bx=x+370,by=y+h-60,bw=106,bh=40;btn(23,bx,by,bw,bh);float k=pressOf(23);R(bx,by,bw,bh,5,Col::hex(0x3d2b1e).mul(1+0.2f*k),Col::hex(0x2a1f18).mul(1+0.2f*k));RING(bx,by,bw,bh,5,1,Col::hex(0xb87a45));T("Animation",bx+bw/2,by+7,11,Col::hex(0xe0aa70),F_BOLD,1);T("Studio",bx+bw/2,by+22,11,Col::hex(0xe0aa70),F_BOLD,1); }
@@ -170,7 +172,7 @@ void App::drawImport(){float W=W_/ui.s();header("Import project","Bring a projec
 void App::render(){
   btns_.clear();if(scr_!=EDITOR||thumbDirty_||(cbOpen_&&cbTab_==1))ensureThumbs();
   if(scr_==EDITOR){drawEditor();}
-  else{drawBackground();if(scr_==HOME)drawHome();else if(scr_==TEMPLATES)drawTemplates();else drawImport();}
+  else{drawBackground();if(scr_==HOME)drawHome();else if(scr_==TEMPLATES)drawTemplates();else if(scr_==VOICE)drawVoice();else drawImport();}
   A_=1;oy_=0;
   if(toastT_>0){float W=W_/ui.s();float a=std::min(1.0f,toastT_*3);float w=ui.measure(toast_,12,F_BOLD)+44;float x=(W-w)/2,y=H_/ui.s()-60;
     ui.shadow(x,y+2,w,32,4,12,Col::hex(0,0.5f*a));ui.rrect(x,y,w,32,4,BG2.with(a),BG2.with(a));ui.ring(x,y,w,32,4,1,LINE2.with(a));ui.rrect(x,y,3,32,0,OK.with(a),OK.with(a));ui.text(toast_,x+w/2+1,y+9,12,TXT.with(a),F_BOLD,1);}

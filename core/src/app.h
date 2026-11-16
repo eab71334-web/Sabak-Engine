@@ -12,6 +12,9 @@
 #include "sculpt.h"
 #include "polymesh.h"
 #include "ui.h"
+#include "voice.h"
+#include <mutex>
+#include <functional>
 namespace sk {
 struct Project { std::string name,dir; int tmpl=1; long created=0; };
 class App {
@@ -23,11 +26,15 @@ public:
   void pointer(int type,int id,float x,float y);   // type 0 down, 1 move, 2 up. x,y in framebuffer pixels
   void key(const std::string& k,bool down);
   const char* screenName() const;
+  // ---- Voice Studio (voiceui.cpp)
+  std::function<void(const float*,int,int)> playAudio;   // set by the platform: play mono float PCM (data,count,rate)
+  void textInput(const std::string& s); void keyCode(int c);   // c: 1 backspace, 2 return
+  bool wantsText() const;
   bool quit=false;
   int entityCount() const {return (int)scene_.ents.size();} int selected() const {return sel_;} bool playing() const {return play_;}
 
 private:
-  enum Screen { HOME,TEMPLATES,IMPORT,EDITOR };
+  enum Screen { HOME,TEMPLATES,IMPORT,EDITOR,VOICE };
   struct Btn { int id; float x,y,w,h; };
   void go(Screen s); void createProject(int tmpl); void openProject(int i); void rescan(); void rescanImports(); void importFound(int i);
   void toast(const std::string& m){toast_=m;toastT_=2.4f;}
@@ -64,6 +71,12 @@ private:
   int aeTab_=0,aeKeySel_=-1,aeChan_=0,aeGMode_=0,aeGId_=-1,aeSmSel_=0,aeTrSel_=0,aePoseSel_=0,aePoseOff_=0; bool aeOnion_=false,aeCam_=false,aeLook_=false,aeFxPrev_=false,aeLookDrag_=false; float aeGVmax_=15;
   void aeStudioDraw(float W,float H); bool aeStudioPointer(int type,int id,float x,float y); void aeStudioTap(int id); void aeOnionDraw(); void aeCamDraw(float W,float H); void aeLoadPoses();
   // behavior blocks editor (behaviorui.cpp)
+  // voice studio state
+  struct VcPreset { const char* label; const char* text; bool ar; };
+  std::string vcText_="Good morning students. Today we will learn about science."; int vcVoice_=0,vcPreset_=-1; bool vcFocus_=false,vcPlaying_=false,vcHas_=false,vcBusy_=false;
+  Speech vcSp_; float vcT_=0; std::string vcStatus_="Pick a voice and press Play.";
+  std::mutex vcMx_; Speech vcPend_; bool vcPendOk_=false,vcPendSet_=false;
+  void drawVoice(); void voiceTap(int id); void voiceUpdate(float dt); void voicePlay(); void drawFace(float cx,float cy,float sc);
   bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);
   // character creator (creator.cpp)
   bool scEd_=false; Sculpt sc_; int scDrag_=-1,scDragId_=-1,scStroke_=-1,scBase_=0; Entity* scEntity(); void openSculpt(); void closeSculpt(); void scRebuild(); bool scPointer(int type,int id,float px,float py); void scTap(int id); void drawSculpt(float W,float H); void scLive(); void scBuildBase(int b); bool scModel(Model& m);
