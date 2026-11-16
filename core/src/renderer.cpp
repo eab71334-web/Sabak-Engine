@@ -57,6 +57,8 @@ void main(){ vec3 albedo=vC;
     else if(uKind==11){ float pr=vn(vUV*520.0); albedo*=0.80+0.35*pr; N=normalize(N+(T*(pr-0.5)+B*(vn(vUV*520.0+5.0)-0.5))*0.25*lod); float row=abs(fract(vUV.y*11.0)-0.5); float stl=smoothstep(0.035,0.0,abs(row-0.455))*step(0.5,fract(vUV.x*70.0)); float seam=smoothstep(0.02,0.0,abs(row-0.5)); albedo=mix(albedo,vec3(0.72,0.66,0.55),stl*0.85); albedo*=1.0-0.45*seam; specK=0.38; specP=16.0; sheen=0.5; }
     else if(uKind==10){ specK=0.10; specP=26.0; sssK=0.35; }
     else if(uKind==9){ albedo*=0.7+0.5*vn(vUV*220.0); specK=0.05; specP=10.0; }
+    else if(uKind==14||uKind==15){ float hgt=dot(tc.rgb,vec3(0.30,0.59,0.11)); vec3 dpx=dFdx(vW),dpy=dFdy(vW); vec2 dh=vec2(dFdx(hgt),dFdy(hgt))*(uKind==15?1.2:0.7); vec3 R1=cross(dpy,N),R2=cross(N,dpx); float det=dot(dpx,R1); if(abs(det)>1e-12){ vec3 gr=sign(det)*(dh.x*R1+dh.y*R2); N=normalize(abs(det)*N-gr); }
+      if(uKind==14){ specK=0.42; specP=64.0; sheen=0.08; } else { specK=0.05; specP=10.0; sheen=0.65; albedo*=0.92+0.16*vn(vUV*60.0); } }
   }
 #endif
   float ndl=max(dot(N,L),0.0); float sh=shadow();

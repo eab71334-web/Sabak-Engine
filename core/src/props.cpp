@@ -17,23 +17,35 @@ float vnoise(float x,float y,int s){int xi=(int)std::floor(x),yi=(int)std::floor
 float fbm(float x,float y,int s){float v=0,a=0.5f;for(int o=0;o<5;o++){v+=a*vnoise(x,y,s+o);x*=2;y*=2;a*=0.5f;}return v;}
 typedef std::vector<unsigned char> Img;
 const int TN=512;
-Img mkTex(const std::function<void(float,float,float*)>& f){Img im((size_t)TN*TN*4);for(int y=0;y<TN;y++)for(int x=0;x<TN;x++){float c[4]={1,1,1,1};f((x+0.5f)/TN,(y+0.5f)/TN,c);for(int k=0;k<4;k++)im[((size_t)y*TN+x)*4+k]=(unsigned char)std::max(0.f,std::min(255.f,c[k]*255.f));}return im;}
-// wood: long grain with growth rings, pores and a darker figure
-Img woodTex(float r,float g,float b,int seed){return mkTex([=](float u,float v,float* c){float w=fbm(u*2.f,v*5.f,seed)*2.2f;float ring=std::sin((v*34.f+w)*PI)*0.5f+0.5f;ring=std::pow(ring,1.6f);float pore=vnoise(u*260.f,v*14.f,seed+9);float fig=fbm(u*1.5f,v*1.2f,seed+4);
-  float t=0.86f+0.14f*ring+0.07f*(pore-0.5f)+0.10f*(fig-0.5f);c[0]=r*t;c[1]=g*t;c[2]=b*t;});}
-Img paperTex(){return mkTex([](float u,float v,float* c){float n=vnoise(u*400.f,v*400.f,3)*0.04f;float line=(std::fmod(v*TN,5.f)<1.f)?0.10f:0.f;float t=0.93f-n-line;c[0]=t;c[1]=t*0.985f;c[2]=t*0.94f;});}
-Img coverTex(float r,float g,float b,float ar,float ag,float ab,int seed){return mkTex([=](float u,float v,float* c){float n=vnoise(u*300.f,v*300.f,seed)*0.10f;float t=0.88f+n;c[0]=r*t;c[1]=g*t;c[2]=b*t;
-  bool frame=(std::fabs(u-0.5f)<0.40f&&std::fabs(v-0.5f)<0.42f)&&!(std::fabs(u-0.5f)<0.385f&&std::fabs(v-0.5f)<0.405f);bool bar=std::fabs(u-0.5f)<0.28f&&((std::fabs(v-0.34f)<0.030f)||(std::fabs(v-0.44f)<0.012f)||(std::fabs(v-0.62f)<0.008f));
-  if(frame||bar){c[0]=ar;c[1]=ag;c[2]=ab;}});}
-Img denimTex(){return mkTex([](float u,float v,float* c){float tw=std::fmod((u+v)*TN*0.5f,3.f)<1.5f?1.f:0.82f;float slub=vnoise(u*60.f,v*500.f,2)*0.35f;float fade=fbm(u*4.f,v*4.f,7);float t=(0.62f+0.30f*tw*0.5f+slub*0.25f)*(0.75f+0.45f*fade);c[0]=0.16f*t*1.5f;c[1]=0.26f*t*1.5f;c[2]=0.45f*t*1.5f;});}
-Img knitTex(float r,float g,float b){return mkTex([=](float u,float v,float* c){float rib=std::sin(u*TN*0.5f*PI/2.f)*0.5f+0.5f;float n=vnoise(u*200.f,v*200.f,5)*0.1f;float t=0.70f+0.30f*rib*std::fabs(std::sin(v*TN*0.25f*PI))*0.9f+n;c[0]=r*t;c[1]=g*t;c[2]=b*t;});}
-
+int g_tw=512,g_th=512;
+Img mkTex(int W,int H,const std::function<void(float,float,float*)>& f){g_tw=W;g_th=H;Img im((size_t)W*H*4);for(int y=0;y<H;y++)for(int x=0;x<W;x++){float c[4]={1,1,1,1};f((x+0.5f)/W,(y+0.5f)/H,c);for(int k=0;k<4;k++)im[((size_t)y*W+x)*4+k]=(unsigned char)std::max(0.f,std::min(255.f,c[k]*255.f));}return im;}
+// ---- procedural textures (greyscale/tintable where possible; material colour multiplies them) ----
+// wood: long grain along v, growth rings, pores, knots-like figure
+Img woodTex(int seed){return mkTex(2048,2048,[=](float u,float v,float* c){float warp=fbm(u*2.f,v*3.f,seed)*2.4f+fbm(u*5.f,v*8.f,seed+3)*0.35f;float ring=std::sin((v*10.f+warp)*PI)*0.5f+0.5f;ring=std::pow(ring,1.5f);
+  float pore=vnoise(u*60.f,v*300.f,seed+9);pore=pore>0.72f?(pore-0.72f)*2.8f:0.f;float fig=fbm(u*1.5f,v*2.f,seed+4);float fiber=vnoise(u*30.f,v*500.f,seed+12);
+  float t=0.86f+0.07f*ring-0.10f*pore+0.05f*(fiber-0.5f)+0.08f*(fig-0.5f);c[0]=0.84f*t;c[1]=0.70f*t;c[2]=0.54f*t;});}
+// paper page edge: fine horizontal sheet lines;  paper top: ruled lines + noise
+Img paperEdgeTex(){return mkTex(1024,1024,[](float u,float v,float* c){float sheet=std::sin(v*1024.f*PI/1.5f)*0.5f+0.5f;float n=vnoise(u*200.f,v*400.f,3);float t=0.90f-0.07f*sheet-0.04f*n;c[0]=t;c[1]=t*0.97f;c[2]=t*0.90f;});}
+// hard-cover cloth (linen): crossing fibres + mottling; tinted by material colour
+Img clothCoverTex(int seed){return mkTex(1024,1024,[=](float u,float v,float* c){float a=std::sin(u*1024.f*PI/2.f+vnoise(u*30.f,v*30.f,seed)*2.f)*0.5f+0.5f,b2=std::sin(v*1024.f*PI/2.f+vnoise(u*30.f+9.f,v*30.f,seed)*2.f)*0.5f+0.5f;float mott=fbm(u*6.f,v*6.f,seed);float t=0.78f+0.12f*(a*b2)+0.14f*mott+0.05f*vnoise(u*500.f,v*500.f,seed+1);c[0]=c[1]=c[2]=t;});}
+// plain weave / ripstop (grey, tintable). th = threads per texture tile
+Img weaveTex(int th,int rip,int seed){return mkTex(2048,2048,[=](float u,float v,float* c){float fu=u*th,fv=v*th;int iu=(int)std::floor(fu),iv=(int)std::floor(fv);float su=fu-iu,sv=fv-iv;bool warp=((iu+iv)&1)==0;
+  float tu=std::sin(su*PI),tv=std::sin(sv*PI);float h=warp?(0.55f+0.45f*tu):(0.55f+0.45f*tv);if(warp)h*=0.82f+0.18f*(1.f-tv*0.6f);else h*=0.82f+0.18f*(1.f-tu*0.6f);
+  float var=0.90f+0.14f*hsh(warp?iu:iv,warp?0:1,seed);float fuzz=vnoise(u*700.f,v*700.f,seed)*0.10f;bool r=rip>0&&((iu%rip)==0||(iv%rip)==0);float t=(h*var+fuzz)*(r?1.12f:1.f);c[0]=c[1]=c[2]=t*0.95f;});}
+// denim twill + fade; colour baked (indigo)
+Img denimTex(){return mkTex(2048,2048,[](float u,float v,float* c){float d=(u+v)*128.f;float tw=std::fmod(d,1.f);float ridge=std::sin(tw*2*PI)*0.5f+0.5f;float weft=std::sin(v*128.f*PI)*0.5f+0.5f;float slub=vnoise(u*30.f,v*700.f,2);float fade=fbm(u*5.f,v*5.f,7);float seam=0.f;
+  float t=(0.50f+0.28f*ridge+0.10f*weft*0.5f+0.18f*(slub-0.5f))*(0.70f+0.55f*fade);c[0]=0.17f*t*1.7f;c[1]=0.27f*t*1.7f;c[2]=0.47f*t*1.7f;(void)seam;});}
+// jersey / stockinette knit: V stitches in columns, grey (tintable)
+Img jerseyTex(int cols){return mkTex(2048,2048,[=](float u,float v,float* c){float fu=u*cols,fv=v*cols*1.35f;int iu=(int)std::floor(fu);float su=fu-iu,sv=fv-std::floor(fv);float vside=su<0.5f?su:1.f-su;float vv=sv;float leg=std::fabs(vv-(0.2f+vside*1.5f));float h=std::exp(-leg*leg*60.f)+0.7f*std::exp(-(vv-0.2f-vside*1.5f+0.9f)*(vv-0.2f-vside*1.5f+0.9f)*60.f);float t=0.55f+0.45f*std::min(1.f,h)+0.06f*(vnoise(u*600.f,v*600.f,4)-0.5f);c[0]=c[1]=c[2]=t;});}
+// chunky rib knit for sweaters: vertical ribs + purl bumps
+Img ribTex(int cols){return mkTex(1024,1024,[=](float u,float v,float* c){float r=std::sin(u*cols*2*PI)*0.5f+0.5f;float cable=0.5f+0.5f*std::sin(v*cols*1.2f*PI+std::sin(u*cols*PI)*1.5f);float t=0.62f+0.28f*r*(0.6f+0.4f*cable)+0.06f*(vnoise(u*300.f,v*300.f,6)-0.5f);c[0]=c[1]=c[2]=t;});}
 struct MB{std::vector<SkinVertex> v;std::vector<uint32_t> i;};
 struct MatKey{int kind;float c[4];unsigned tex;bool operator<(const MatKey& o)const{if(kind!=o.kind)return kind<o.kind;if(tex!=o.tex)return tex<o.tex;for(int k=0;k<4;k++)if(c[k]!=o.c[k])return c[k]<o.c[k];return false;}};
 struct PB{
   Renderer* R; std::vector<MB> mb; std::vector<ModelMat> mats; std::map<MatKey,int> idx; Mat4 X=Mat4::identity(); std::vector<Mat4> stk; unsigned white=0;
   explicit PB(Renderer* r):R(r){unsigned char w[4]={255,255,255,255};white=r?r->createTexture(w,1,1):0;}
-  unsigned tex(const Img& im){return R?R->createTexture(im.data(),TN,TN):0;}
+  std::map<std::string,unsigned> tc;
+  unsigned T(const std::string& key,const std::function<Img()>& f){auto it=tc.find(key);if(it!=tc.end())return it->second;Img im=f();unsigned t=R?R->createTexture(im.data(),g_tw,g_th):0;tc[key]=t;return t;}
   int mat(int kind,float r,float g,float b,unsigned t=0){MatKey k{kind,{r,g,b,1},t?t:white};auto it=idx.find(k);if(it!=idx.end())return it->second;ModelMat m;m.kind=kind;m.col[0]=r;m.col[1]=g;m.col[2]=b;m.col[3]=1;m.tex=k.tex;mats.push_back(m);mb.emplace_back();idx[k]=(int)mats.size()-1;return (int)mats.size()-1;}
   void push(const Mat4& m){stk.push_back(X);X=X*m;} void pop(){X=stk.back();stk.pop_back();}
   Vec3 tp(Vec3 p)const{return {X.m[0]*p.x+X.m[4]*p.y+X.m[8]*p.z+X.m[12],X.m[1]*p.x+X.m[5]*p.y+X.m[9]*p.z+X.m[13],X.m[2]*p.x+X.m[6]*p.y+X.m[10]*p.z+X.m[14]};}
@@ -73,8 +85,8 @@ struct PB{
 Mat4 T(float x,float y,float z){return Mat4::translate({x,y,z});}
 
 // ------------------------------------------------------------------ desk
-void desk(PB& P){unsigned oak=P.tex(woodTex(0.78f,0.58f,0.36f,11)),wal=P.tex(woodTex(0.46f,0.30f,0.19f,23));
-  int top=P.mat(0,1,1,1,oak),leg=P.mat(0,1,1,1,wal),chrome=P.mat(7,0.8f,0.8f,0.82f),dark=P.mat(9,0.05f,0.05f,0.05f);
+void desk(PB& P){unsigned oak=P.T("wood11",[]{return woodTex(11);}),wal=P.T("wood23",[]{return woodTex(23);});
+  int top=P.mat(14,1.0f,0.88f,0.72f,oak),leg=P.mat(14,0.66f,0.50f,0.38f,wal),chrome=P.mat(7,0.8f,0.8f,0.82f),dark=P.mat(9,0.05f,0.05f,0.05f);
   P.rbox(top,{0,0.735f,0},{0.70f,0.0225f,0.35f},0.010f,3,1.1f);
   for(int sx=-1;sx<=1;sx+=2)for(int sz=-1;sz<=1;sz+=2){P.rbox(leg,{sx*0.640f,0.355f,sz*0.295f},{0.028f,0.355f,0.028f},0.008f,2,3.f);P.rbox(leg,{sx*0.640f,0.040f,sz*0.295f},{0.031f,0.040f,0.031f},0.008f,2,3.f);}
   P.rbox(leg,{0,0.672f,-0.300f},{0.60f,0.040f,0.011f},0.004f,2,2.f);P.rbox(leg,{0,0.672f,0.300f},{0.60f,0.040f,0.011f},0.004f,2,2.f);
@@ -90,7 +102,7 @@ void desk(PB& P){unsigned oak=P.tex(woodTex(0.78f,0.58f,0.36f,11)),wal=P.tex(woo
 }
 // ------------------------------------------------------------------ book (lying, spine on -x)
 void book(PB& P,float w,float t,float d,float cr,float cg,float cb,float ar,float ag,float ab,int seed){
-  static unsigned paper=0;(void)paper;int pg=P.mat(0,1,1,1,P.tex(paperTex()));int cv=P.mat(0,1,1,1,P.tex(coverTex(cr,cg,cb,ar,ag,ab,seed))),sp=P.mat(11,cr*0.9f,cg*0.9f,cb*0.9f),gold=P.mat(7,0.9f,0.72f,0.25f);
+  static unsigned paper=0;(void)paper;int pg=P.mat(14,1,1,1,P.T("pedge",[]{return paperEdgeTex();}));int cv=P.mat(15,cr,cg,cb,P.T("cover",[]{return clothCoverTex(5);})),sp=P.mat(11,cr*0.9f,cg*0.9f,cb*0.9f),gold=P.mat(7,0.9f,0.72f,0.25f);
   P.rbox(pg,{0.003f,0,0},{w*0.5f-0.004f,t*0.5f-0.003f,d*0.5f-0.005f},0.0012f,2,3.f);
   P.rbox(cv,{0,t*0.5f-0.0017f,0},{w*0.5f,0.0017f,d*0.5f},0.0012f,2,1.f);P.rbox(cv,{0,-t*0.5f+0.0017f,0},{w*0.5f,0.0017f,d*0.5f},0.0012f,2,1.f);
   P.rbox(sp,{-w*0.5f+0.0012f,0,0},{0.0035f,t*0.5f,d*0.5f},0.0030f,3,1.f);
@@ -99,7 +111,7 @@ void book(PB& P,float w,float t,float d,float cr,float cg,float cb,float ar,floa
 void books(PB& P){struct B{float w,t,d,r,g,b,ar,ag,ab;float yaw,dx;};B bs[]={{0.215f,0.045f,0.285f,0.45f,0.08f,0.10f,0.88f,0.72f,0.32f,0.0f,0.0f},{0.19f,0.032f,0.262f,0.10f,0.22f,0.38f,0.85f,0.85f,0.80f,0.07f,0.012f},{0.205f,0.038f,0.275f,0.14f,0.32f,0.20f,0.90f,0.78f,0.35f,-0.05f,-0.010f},{0.175f,0.026f,0.245f,0.62f,0.50f,0.22f,0.25f,0.18f,0.12f,0.09f,0.015f},{0.20f,0.034f,0.27f,0.22f,0.12f,0.30f,0.85f,0.80f,0.55f,-0.03f,-0.006f},{0.185f,0.022f,0.25f,0.55f,0.55f,0.52f,0.20f,0.20f,0.20f,0.06f,0.010f}};
   float y=0;int s=3;for(auto& b:bs){P.push(T(b.dx,y+b.t*0.5f,0)*Mat4::rotY(b.yaw));book(P,b.w,b.t,b.d,b.r,b.g,b.b,b.ar,b.ag,b.ab,s++);P.pop();y+=b.t;}}
 // ------------------------------------------------------------------ backpack
-void bag(PB& P){int fab=P.mat(2,0.10f,0.27f,0.33f),fab2=P.mat(2,0.08f,0.21f,0.27f),strap=P.mat(9,0.05f,0.06f,0.07f),chrome=P.mat(7,0.78f,0.78f,0.80f),lea=P.mat(11,0.42f,0.26f,0.14f),blk=P.mat(9,0.03f,0.03f,0.035f);
+void bag(PB& P){unsigned wv=P.T("weave",[]{return weaveTex(256,8,3);});int fab=P.mat(15,0.16f,0.42f,0.52f,wv),fab2=P.mat(15,0.12f,0.33f,0.42f,wv),strap=P.mat(9,0.05f,0.06f,0.07f),chrome=P.mat(7,0.78f,0.78f,0.80f),lea=P.mat(11,0.42f,0.26f,0.14f),blk=P.mat(9,0.03f,0.03f,0.035f);
   P.rbox(fab,{0,0.26f,0},{0.150f,0.230f,0.082f},0.060f,5,5.f);                       // main body
   P.rbox(fab2,{0,0.40f,0.040f},{0.145f,0.085f,0.058f},0.045f,4,5.f);                  // top flap
   P.rbox(fab,{0,0.17f,0.102f},{0.122f,0.115f,0.030f},0.026f,4,5.f);                   // front pocket
@@ -127,7 +139,7 @@ void cup(PB& P,bool withItems){int met=P.mat(5,0.05f,0.05f,0.06f);P.lathe(met,{{
   for(auto& p:it){P.push(T(p.x,0.012f,p.z)*Mat4::rotZ(p.ax)*Mat4::rotX(p.az));pencil(P,p.h,0.0037f,p.t);P.pop();}
   P.push(T(-0.022f,0.012f,-0.006f)*Mat4::rotZ(0.20f)*Mat4::rotX(0.08f));pen(P,0.08f,0.12f,0.45f);P.pop();P.push(T(0.025f,0.012f,0.008f)*Mat4::rotZ(-0.18f)*Mat4::rotX(-0.10f));pen(P,0.55f,0.08f,0.10f);P.pop();}
 // ------------------------------------------------------------------ clothes
-void tshirt(PB& P){int fab=P.mat(2,0.42f,0.09f,0.11f),rib=P.mat(2,0.33f,0.07f,0.09f);
+void tshirt(PB& P){unsigned jt=P.T("jersey",[]{return jerseyTex(90);});int fab=P.mat(15,0.50f,0.11f,0.14f,jt),rib=P.mat(15,0.40f,0.09f,0.11f,jt);
   auto fold=[](float x,float y,float s){return 0.010f*std::sin(x*26.f+y*8.f+s)*std::exp(-y*2.f)+0.014f*(fbm(x*5.f+s,y*5.f,s>1?4:9)-0.5f)+0.006f*std::sin(y*34.f+x*3.f);};
   auto panel=[&](float sgn){return [=](float u,float v)->Vec3{float x=(u*2-1);float y=v*0.66f;float w=0.245f+0.012f*std::sin(PI*std::min(1.f,v*1.3f));float sh=std::max(0.f,(v-0.80f)/0.20f);w*=1.f-0.50f*sh*sh;float xx=x*w;float yy=y-0.045f*sh*sh*std::fabs(x)*std::fabs(x)*0;
       float neck=std::fabs(xx)<0.105f&&v>0.9f?(0.105f-std::fabs(xx))/0.105f:0.f;float dip=neck*(sgn>0?0.085f:0.03f)*std::pow(std::min(1.f,(v-0.9f)/0.1f),1.f);yy-=dip*(1.f-(xx/0.105f)*(xx/0.105f))*0.0f+dip*0.55f;
@@ -139,7 +151,7 @@ void tshirt(PB& P){int fab=P.mat(2,0.42f,0.09f,0.11f),rib=P.mat(2,0.33f,0.07f,0.
   auto collar=[](float u,float v)->Vec3{float a=2*PI*u;float rx=0.105f+0.004f*v,rz=0.060f;float y=0.655f-0.0f*v;return Vec3{std::cos(a)*rx,y+0.02f*(std::sin(a)<0?-0.9f*std::fabs(std::sin(a)):0.f)*0+((std::sin(a)>0)?-0.07f*std::sin(a)*std::sin(a)*0.f:0.f),std::sin(a)*rz*(std::sin(a)>0?1.f:0.6f)+0.0f};};
   P.surf(rib,36,3,true,[&](float u,float v){Vec3 p=collar(u,v);p.y+=0.012f*v;p.y-=(std::sin(2*PI*u)>0?0.065f*std::pow(std::sin(2*PI*u),2.f):0.f);return p;},1.f);
 }
-void folded(PB& P){int den=P.mat(9,1,1,1,P.tex(denimTex())),chrome=P.mat(7,0.78f,0.62f,0.40f),lea=P.mat(11,0.40f,0.25f,0.14f),thread=P.mat(9,0.80f,0.62f,0.20f),wh=P.mat(2,0.88f,0.86f,0.80f),kn=P.mat(0,1,1,1,P.tex(knitTex(0.62f,0.50f,0.40f))),tee=P.mat(2,0.18f,0.38f,0.55f);
+void folded(PB& P){int den=P.mat(15,1,1,1,P.T("denim",[]{return denimTex();})),chrome=P.mat(7,0.78f,0.62f,0.40f),lea=P.mat(11,0.40f,0.25f,0.14f),thread=P.mat(9,0.80f,0.62f,0.20f),wh=P.mat(2,0.88f,0.86f,0.80f),kn=P.mat(15,0.78f,0.66f,0.52f,P.T("rib",[]{return ribTex(24);})),tee=P.mat(15,0.22f,0.45f,0.65f,P.T("jersey",[]{return jerseyTex(90);}));
   P.rbox(den,{0,0.030f,0},{0.190f,0.030f,0.150f},0.026f,5,1.2f);                                    // jeans
   P.rbox(den,{0,0.062f,-0.120f},{0.186f,0.012f,0.020f},0.006f,2,1.f);                              // waistband
   for(int s=-1;s<=1;s+=2){P.cyl(chrome,0.0045f,0.004f,12);P.push(T(s*0.07f,0.0595f,0.115f));P.cyl(chrome,0.0045f,0.004f,12);P.pop();P.rbox(thread,{s*0.085f,0.0612f,0.015f},{0.0012f,0.0006f,0.060f},0.0004f,1);}
