@@ -421,6 +421,7 @@ void setMouthCons(Params& p, char m) {
 
 }  // namespace
 
+void fitMouthToAudio(const std::string& utf8, Speech& real);
 bool speak(const std::string& utf8, const VoiceParams& vp, Speech& out) {
   initTable();
   const int SR = 24000;
@@ -730,6 +731,38 @@ bool speak(const std::string& utf8, const VoiceParams& vp, Speech& out) {
   (void)prevJaw;
   return true;
 }
+
+// Re-time our phoneme mouth track onto real audio (used by speakSystem) and drive energy from the audio itself.
+void fitMouthToAudio(const std::string& utf8, Speech& real) {
+  Speech mine; VoiceParams vp; vp.room = 0;
+  if (!speak(utf8, vp, mine) || mine.mouth.empty() || real.pcm.empty()) return;
+  // trim leading/trailing silence of the real audio
+  size_t a = 0, b = real.pcm.size();
+  while (a < b && std::fabs(real.pcm[a]) < 0.01f) a++;
+  while (b > a && std::fabs(real.pcm[b - 1]) < 0.01f) b--;
+  float rt0 = (float)a / real.rate, rt1 = (float)b / real.rate;
+  float mt0 = 0.12f, mt1 = mine.mouth.back().t - 0.45f; if (mt1 <= mt0) mt1 = mine.mouth.back().t;
+  real.mouth.clear();
+  for (float t = 0; t < (float)real.pcm.size() / real.rate; t += 0.01f) {
+    float u = clampf((t - rt0) / std::max(0.05f, rt1 - rt0), 0.f, 1.f);
+    float mt = mt0 + u * (mt1 - mt0);
+    size_t i = (size_t)clampf(mt / 0.01f, 0.f, (float)(mine.mouth.size() - 1));
+    MouthKey m = mine.mouth[i]; m.t = t;
+    size_t s0 = (size_t)(t * real.rate), s1 = std::min(real.pcm.size(), s0 + (size_t)(0.02f * real.rate));
+    float e = 0; for (size_t k = s0; k < s1; k++) e += real.pcm[k] * real.pcm[k];
+    e = std::sqrt(e / std::max<size_t>(1, s1 - s0)); e = clampf(e * 6.f, 0.f, 1.f);
+    m.energy = e;
+    if (e < 0.05f) { m.jaw *= 0.2f; m.wide *= 0.3f; m.round *= 0.3f; }   // silence in the real audio = mouth rests
+    else { m.jaw = std::max(m.jaw * 0.6f, m.jaw * 0.4f + e * 0.6f * 0.8f); }
+    real.mouth.push_back(m);
+  }
+  real.words = mine.words; real.phonemes = mine.phonemes;
+  if (!mine.words.empty()) { float sc = (rt1 - rt0) / std::max(0.05f, mt1 - mt0); for (auto& w : real.words) { w.t0 = rt0 + (w.t0 - mt0) * sc; w.t1 = rt0 + (w.t1 - mt0) * sc; } }
+}
+
+#ifndef __APPLE__
+void speakSystem(const std::string&, const std::string&, float, std::function<void(bool, Speech&)> cb) { Speech s; if (cb) cb(false, s); }
+#endif
 
 bool writeWav(const std::string& path, const Speech& s) {
   FILE* f = fopen(path.c_str(), "wb");

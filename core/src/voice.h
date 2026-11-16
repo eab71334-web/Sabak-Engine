@@ -3,6 +3,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <functional>
 
 namespace sk {
 
@@ -53,6 +54,15 @@ struct Speech {
 // Speak text. Arabic characters are read with Arabic rules (type diacritics for best result),
 // Latin text with English rules. "{AH0 B K}" injects raw ARPAbet-like phonemes. Punctuation drives pauses/intonation.
 bool speak(const std::string& utf8, const VoiceParams& vp, Speech& out);
+
+// Real human voice from the phone's own speech engine (iOS AVSpeechSynthesizer: natural Arabic/English voices,
+// works offline). Asynchronous: cb runs later on an arbitrary thread with ok=false if unavailable
+// (non-Apple build or no voice). The mouth track is our phoneme timeline stretched to the real audio length
+// and modulated by the real audio loudness, so lips match the real voice.
+void speakSystem(const std::string& utf8, const std::string& lang /*"ar-SA","en-US"..*/, float rate,
+                 std::function<void(bool ok, Speech& s)> cb);
+
+void fitMouthToAudio(const std::string& utf8, Speech& real);   // internal helper used by speakSystem
 
 // Write a 16-bit mono WAV file.
 bool writeWav(const std::string& path, const Speech& s);
