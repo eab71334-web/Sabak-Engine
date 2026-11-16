@@ -61,6 +61,7 @@ bool buildCharacter(Renderer& r,const CharDef& cd,Model& out);
 bool buildHuman(Renderer& r,const CharDef& cd,Model& out);
 bool buildCar(Renderer& r,const std::string& spec,Model& out);
 bool buildHorse(Renderer& r,const std::string& spec,Model& out);
+bool buildProp(Renderer& r,const std::string& kind,Model& out);   // gen:prop:<desk|books|bag|pens|tshirt|clothes|study>
 struct RigPrim { std::vector<SkinVertex> v; std::vector<uint32_t> idx; int mat=0; };
 bool rigStatic(Renderer& r,std::vector<RigPrim>& ps,Model& out,float targetHeight);   // humanoid auto-rig of unskinned geometry (raw model space, +Y up, facing +Z)
 bool exportGlb(const Model& m,const std::string& path,std::string& err);
