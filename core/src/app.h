@@ -76,7 +76,7 @@ private:
   std::string vcText_="Good morning students. Today we will learn about science."; int vcVoice_=0,vcPreset_=-1; bool vcFocus_=false,vcPlaying_=false,vcHas_=false,vcBusy_=false;
   Speech vcSp_; float vcT_=0; std::string vcStatus_="Pick a voice and press Play.";
   std::mutex vcMx_; Speech vcPend_; bool vcPendOk_=false,vcPendSet_=false;
-  void drawVoice(); void voiceTap(int id); void voiceUpdate(float dt); void voicePlay(); void drawFace(float cx,float cy,float sc);
+  void drawVoice(); void voiceTap(int id); void voiceUpdate(float dt); void voicePlay(); void drawFace(float cx,float cy,float sc); void voiceRenderFace(); Scene vcScene_; Target vcFace_; bool vcFaceOk_=false; float vcW_[16]={0}; int vcFaceId_=-1;
   bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);
   // character creator (creator.cpp)
   bool scEd_=false; Sculpt sc_; int scDrag_=-1,scDragId_=-1,scStroke_=-1,scBase_=0; Entity* scEntity(); void openSculpt(); void closeSculpt(); void scRebuild(); bool scPointer(int type,int id,float px,float py); void scTap(int id); void drawSculpt(float W,float H); void scLive(); void scBuildBase(int b); bool scModel(Model& m);

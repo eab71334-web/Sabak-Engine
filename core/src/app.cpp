@@ -170,7 +170,7 @@ void App::drawImport(){float W=W_/ui.s();header("Import project","Bring a projec
 }
 
 void App::render(){
-  btns_.clear();if(scr_!=EDITOR||thumbDirty_||(cbOpen_&&cbTab_==1))ensureThumbs();
+  btns_.clear();if(scr_!=EDITOR||thumbDirty_||(cbOpen_&&cbTab_==1))ensureThumbs();if(scr_==VOICE)voiceRenderFace();
   if(scr_==EDITOR){drawEditor();}
   else{drawBackground();if(scr_==HOME)drawHome();else if(scr_==TEMPLATES)drawTemplates();else if(scr_==VOICE)drawVoice();else drawImport();}
   A_=1;oy_=0;

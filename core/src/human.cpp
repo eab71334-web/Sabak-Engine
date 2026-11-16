@@ -118,27 +118,141 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
         if(cd.hair==3)w=std::min(w,sstep((s.p[1]-(eyeY+0.07f))/0.02f));
         return w;},
       [&](const SkinVertex& s,float w){float ang=std::atan2(s.p[0],s.p[2]-headZ);float cl=0.0022f*std::sin(ang*26.f+s.p[1]*55.f)+0.0015f*std::sin(ang*53.f-s.p[1]*31.f);
-        float base=cd.hair==3?0.0025f:cd.hair==2?0.016f:0.0115f;float top=sstep((s.p[1]-eyeY)/0.12f);return std::max(0.0022f,(base*(0.5f+0.5f*top)+(cd.hair==3?0.f:cl))*(0.5f+0.5f*w));},hair);}
-  for(int sd=0;sd<2;sd++){Vec3 e=sd?eR:eL;float sgn=sd?-1.f:1.f;patchF([&](const SkinVertex& s,const std::string&){float dx=(s.p[0]-e.x)*sgn;float dy=s.p[1]-e.y-0.026f-0.005f*std::max(0.f,1.f-std::fabs(dx+0.002f)/0.026f)-0.003f*std::max(0.f,-dx/0.026f);if(s.p[2]<e.z+0.004f)return -1.f;float u=dx/0.027f,v=dy/(0.0075f*(1.f-0.35f*std::max(0.f,u)));float q=1.f-(u*u+v*v);return q>0.f?q:-1.f;},[&](const SkinVertex&,float w){return 0.0010f+0.0014f*std::min(1.f,w*2.f);},brow);}
+        float base=cd.hair==3?0.0025f:cd.hair==2?0.007f:0.0035f;float top=sstep((s.p[1]-eyeY)/0.12f);return std::max(0.0022f,(base*(0.5f+0.5f*top)+(cd.hair==3?0.f:cl))*(0.5f+0.5f*w));},hair);}
+  for(int sd=0;sd<2;sd++){Vec3 e=sd?eR:eL;float sgn=sd?-1.f:1.f;patchF([&](const SkinVertex& s,const std::string&){float dx=(s.p[0]-e.x)*sgn;float dy=s.p[1]-e.y-0.026f-0.005f*std::max(0.f,1.f-std::fabs(dx+0.002f)/0.026f)-0.003f*std::max(0.f,-dx/0.026f);if(s.p[2]<e.z+0.004f)return -1.f;float u=dx/0.027f,v=dy/(0.0068f*(1.f-0.40f*std::max(0.f,u)));float q=1.f-(u*u+v*v);return q>0.f?q:-1.f;},[&](const SkinVertex&,float w){return 0.0010f+0.0014f*std::min(1.f,w*2.f);},brow);}
+  // ---- realistic hair: layered strand cards (alpha-cut strand texture, Kajiya-Kay shading, sway morphs)
+  Mb cardsU,cardsO;std::vector<float> tipU,tipO;
+  if(cd.hair==1||cd.hair==2||cd.hair==4){
+    struct V3{float x,y,z;};
+    auto vsub=[](V3 a,V3 b){return V3{a.x-b.x,a.y-b.y,a.z-b.z};};auto vadd=[](V3 a,V3 b){return V3{a.x+b.x,a.y+b.y,a.z+b.z};};auto vmul=[](V3 a,float s){return V3{a.x*s,a.y*s,a.z*s};};
+    auto vdot=[](V3 a,V3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};auto vcr=[](V3 a,V3 b){return V3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+    auto vnorm=[&](V3 a){float l=std::sqrt(vdot(a,a));return l<1e-9f?V3{0,1,0}:vmul(a,1.f/l);};
+    unsigned seed=cd.hair*7919u+13u;auto rnd=[&](){seed=seed*1664525u+1013904223u;return ((seed>>8)&0xffff)/65535.f;};
+    // area-weighted scalp triangles from the hair cap
+    std::vector<float> cum;std::vector<int> triIdx;float tot=0;
+    for(size_t i=0;i+2<hair.idx.size();i+=3){const SkinVertex &a=hair.v[hair.idx[i]],&b=hair.v[hair.idx[i+1]],&c=hair.v[hair.idx[i+2]];
+      V3 e1{b.p[0]-a.p[0],b.p[1]-a.p[1],b.p[2]-a.p[2]},e2{c.p[0]-a.p[0],c.p[1]-a.p[1],c.p[2]-a.p[2]};V3 cr=vcr(e1,e2);float ar=0.5f*std::sqrt(vdot(cr,cr));tot+=ar;cum.push_back(tot);triIdx.push_back((int)i);}
+    V3 crown{0.f,eyeY+0.085f,headZ-0.035f};V3 hc{0.f,eyeY+0.010f,headZ-0.020f};
+    int NC=cd.hair==2?5200:7200;if(cum.empty())NC=0;
+    const int K=cd.hair==2?9:7;
+    for(int n=0;n<NC;n++){
+      float r=rnd()*tot;size_t lo=0,hi=cum.size()-1;while(lo<hi){size_t mid=(lo+hi)/2;if(cum[mid]<r)lo=mid+1;else hi=mid;}
+      int ti=triIdx[lo];const SkinVertex &A=hair.v[hair.idx[ti]],&B=hair.v[hair.idx[ti+1]],&Cc=hair.v[hair.idx[ti+2]];
+      float u=rnd(),v=rnd();if(u+v>1){u=1-u;v=1-v;}float w=1-u-v;
+      V3 P{A.p[0]*w+B.p[0]*u+Cc.p[0]*v,A.p[1]*w+B.p[1]*u+Cc.p[1]*v,A.p[2]*w+B.p[2]*u+Cc.p[2]*v};
+      V3 Nn=vnorm(V3{A.n[0]*w+B.n[0]*u+Cc.n[0]*v,A.n[1]*w+B.n[1]*u+Cc.n[1]*v,A.n[2]*w+B.n[2]*u+Cc.n[2]*v});
+      float rel=P.y-eyeY;float top=sstep((rel-0.02f)/0.11f);
+      bool front=P.z>headZ+0.012f;bool backNape=P.z<headZ-0.035f;
+      if(front&&rel<0.046f&&rnd()<0.85f)continue;                       // keep forehead/temples clear (hairline)
+      int layer=rnd()<0.38f?0:(rnd()<0.62f?1:2);
+      float len;if(cd.hair==2){len=0.10f+0.14f*(0.35f+0.65f*(backNape?1.f:top))+0.03f*(rnd()-0.5f);}else{len=0.030f+0.034f*top;if(front&&top>0.4f)len*=1.18f;if(backNape&&rel<0.0f)len*=0.8f;len+=0.008f*(rnd()-0.5f);}
+      float lm=layer==0?0.62f:layer==1?0.86f:1.08f;len*=lm;
+      Mb& dst=layer==0?cardsU:cardsO;std::vector<float>& tip=layer==0?tipU:tipO;
+      // flow: from the crown outwards over the skull, swept to one side (side parting) in the front
+      V3 fl=vsub(P,crown);fl=vsub(fl,vmul(Nn,vdot(fl,Nn)));fl=vnorm(fl);
+      V3 sweep{front?0.75f:0.30f,0.f,0.f};fl=vnorm(vadd(fl,vmul(sweep,top)));
+      fl=vnorm(vadd(fl,V3{0.35f*(rnd()-0.5f),0.f,0.35f*(rnd()-0.5f)}));
+      float g=cd.hair==2?0.85f:(front?0.10f:0.34f);
+      V3 d=vnorm(vadd(vmul(Nn,0.20f),vmul(fl,0.90f)));
+      V3 pp=vadd(P,vmul(Nn,0.0015f+0.0028f*layer+0.0016f*rnd()));
+      float seg=len/(K-1);float ymin=front?eyeY+0.047f:(std::fabs(P.x)>0.055f&&P.z>headZ-0.03f)?eyeY-0.030f:eyeY-0.115f;
+      float wid=(layer==2?0.021f:layer==1?0.019f:0.016f)*(0.85f+0.3f*rnd());
+      std::vector<V3> path(K),sides(K);path[0]=pp;
+      float curl=(rnd()-0.5f)*0.12f;
+      for(int i=1;i<K;i++){float f=(float)i/(K-1);d=vnorm(vadd(d,vadd(vmul(fl,0.10f),V3{curl*std::sin(f*5.f+n),-g*std::pow(f,1.2f)*0.55f,curl*std::cos(f*4.f)})));
+        V3 np=vadd(path[i-1],vmul(d,seg));
+        V3 q=vsub(np,hc);V3 qs{q.x/0.088f,q.y/0.108f,q.z/0.108f};float ql=std::sqrt(vdot(qs,qs));float R=1.0f+0.007f+0.0035f*layer;   // stay outside the skull
+        if(ql<R){float k2=R/std::max(ql,1e-3f);np=V3{hc.x+q.x*k2,hc.y+q.y*k2,hc.z+q.z*k2};}
+        if(np.y<ymin){np.y=ymin+(np.y-ymin)*0.15f;}
+        path[i]=np;}
+      for(int i=0;i<K;i++){V3 dd=i+1<K?vsub(path[i+1],path[i]):vsub(path[i],path[i-1]);V3 out=vnorm(vsub(path[i],hc));sides[i]=vnorm(vcr(dd,out));}
+      uint32_t base=(uint32_t)dst.v.size();
+      for(int i=0;i<K;i++){float f=(float)i/(K-1);float ww=wid*(1.f-0.55f*f*f)*0.5f;
+        for(int s=0;s<2;s++){SkinVertex sv{};V3 q=vadd(path[i],vmul(sides[i],(s?1.f:-1.f)*ww));sv.p[0]=q.x;sv.p[1]=q.y;sv.p[2]=q.z;V3 on=vnorm(vsub(path[i],hc));sv.n[0]=on.x;sv.n[1]=on.y;sv.n[2]=on.z;sv.uv[0]=(float)s;sv.uv[1]=f;sv.j[0]=(unsigned char)jHead;sv.w[0]=1;dst.v.push_back(sv);tip.push_back(std::pow(f,1.5f));}}
+      for(int i=0;i+1<K;i++){uint32_t a=base+i*2,b=a+1,c=a+2,e=a+3;dst.idx.push_back(a);dst.idx.push_back(c);dst.idx.push_back(b);dst.idx.push_back(b);dst.idx.push_back(c);dst.idx.push_back(e);}
+    }
+  }
+  // strand texture: many fine strands per card, root-dark -> lighter tips, tapering to points (alpha-cut)
+  unsigned hairTex=0;
+  {const int TW=256,TH=512,S=18;std::vector<unsigned char> img((size_t)TW*TH*4);unsigned sd=99991u;auto rr=[&](){sd=sd*1664525u+1013904223u;return ((sd>>8)&0xffff)/65535.f;};
+   struct St{float c,ph,fr,am,hw,len,br;};std::vector<St> st(S+2);
+   for(int k=0;k<S+2;k++){st[k]={(k-0.5f)/S+0.012f*(rr()-0.5f),rr()*6.28f,2.f+4.f*rr(),0.010f+0.020f*rr(),0.30f/S*(0.8f+0.5f*rr()),0.62f+0.38f*rr(),0.62f+0.55f*rr()};}
+   for(int y=0;y<TH;y++){float v=(y+0.5f)/TH;for(int x=0;x<TW;x++){float u=(x+0.5f)/TW;float a=0,br=0;
+       int k0=(int)std::floor(u*S+0.5f);for(int k=std::max(0,k0-1);k<=std::min(S+1,k0+1);k++){const St& s=st[k];if(v>s.len)continue;float cx=s.c+s.am*std::sin(v*s.fr+s.ph);float tap=1.f-std::pow(v/s.len,2.5f)*0.9f;float hw=s.hw*tap*(v<0.04f?0.6f+v*10.f:1.f);float dd=std::fabs(u-cx);float cov=1.f-std::min(1.f,std::max(0.f,(dd-hw*0.55f)/(hw*0.45f+1e-5f)));
+         if(cov>a){a=cov;br=s.br;}}
+       float root=0.50f+0.50f*sstep(v/0.35f);float tipL=1.f+0.12f*sstep((v-0.7f)/0.3f);float val=std::min(1.f,br*root*tipL*0.95f);
+       unsigned char* q=&img[((size_t)y*TW+x)*4];q[0]=q[1]=q[2]=(unsigned char)(val*255.f);q[3]=(unsigned char)(a>0.5f?255:0);}}
+   hairTex=r.createTexture(img.data(),TW,TH);}
   // eyes: white ball + iris
   auto sphere=[&](Mb& m,Vec3 c,Vec3 rr,int jt){uint32_t base=(uint32_t)m.v.size();int seg=16,rings=10;for(int j=0;j<=rings;j++){float ph=3.14159265f*j/rings;for(int i=0;i<=seg;i++){float th=6.2831853f*i/seg;SkinVertex s{};Vec3 n{std::sin(ph)*std::cos(th),std::cos(ph),std::sin(ph)*std::sin(th)};s.p[0]=c.x+n.x*rr.x;s.p[1]=c.y+n.y*rr.y;s.p[2]=c.z+n.z*rr.z;s.n[0]=n.x;s.n[1]=n.y;s.n[2]=n.z;s.uv[0]=(float)i/seg;s.uv[1]=(float)j/rings;s.j[0]=(unsigned char)jt;s.w[0]=1;m.v.push_back(s);}}
     for(int j=0;j<rings;j++)for(int i=0;i<seg;i++){uint32_t a=base+j*(seg+1)+i,b=a+1,c2=a+seg+1,dd=c2+1;m.idx.push_back(a);m.idx.push_back(c2);m.idx.push_back(b);m.idx.push_back(b);m.idx.push_back(c2);m.idx.push_back(dd);}};
   (void)jEyeR;for(int sd=0;sd<2;sd++){Vec3 e=sd?eR:eL;sphere(eyeW,e,{0.0122f,0.0122f,0.0122f},jHead);sphere(iris,{e.x,e.y,e.z+0.0090f},{0.0066f,0.0066f,0.0042f},jHead);}
+  // ---- mouth interior: dark cavity, upper/lower teeth, tongue (lower parts follow the jaw via the same morph deltas)
+  Mb teethU,teethL,tongue,cavity;Vec3 lipC{0,0,0};float lipFront=0;Vec3 jawD{0,0,0};bool haveMouth=false;
+  {auto itc=d.T.find("x/mouth-compression"),ito=d.T.find("x/mouth-open");
+   if(itc!=d.T.end()&&ito!=d.T.end()){const Tgt& tc=itc->second;float mx=0;std::vector<float> mag(tc.i.size());
+     for(size_t e=0;e<tc.i.size();e++){float a=tc.d[e*3],b2=tc.d[e*3+1],c2=tc.d[e*3+2];mag[e]=std::sqrt(a*a+b2*b2+c2*c2);mx=std::max(mx,mag[e]);}
+     double sx=0,sy=0,sz=0;int n=0;float zmax=-1e9f;
+     for(size_t e=0;e<tc.i.size();e++){if(mag[e]<0.55f*mx)continue;uint32_t v=tc.i[e];float x=pos[v*3],y=pos[v*3+1],z=pos[v*3+2];if(std::fabs(x)>0.05f)continue;sx+=x;sy+=y;sz+=z;n++;if(std::fabs(x)<0.008f)zmax=std::max(zmax,z);}
+     if(n>6){lipC={(float)(sx/n),(float)(sy/n),(float)(sz/n)};lipFront=zmax>-1e8f?zmax:lipC.z;haveMouth=true;
+       // jaw displacement = mean open-delta of vertices around the lower lip / chin front
+       const Tgt& to=ito->second;float k=to.sc/32767.f;double dx=0,dy=0,dz=0;int m=0;
+       for(size_t e=0;e<to.i.size();e++){uint32_t v=to.i[e];float x=pos[v*3],y=pos[v*3+1],z=pos[v*3+2];if(std::fabs(x)<0.012f&&y<lipC.y&&y>lipC.y-0.03f&&z>lipC.z-0.02f){dx+=to.d[e*3]*k;dy+=to.d[e*3+1]*k;dz+=to.d[e*3+2]*k;m++;}}
+       if(m>0)jawD={(float)(dx/m)*0.1f,(float)(dy/m)*0.1f,(float)(dz/m)*0.1f};}}}
+  if(std::getenv("SABAK_HDBG"))fprintf(stderr,"mouth ok=%d lip=(%.3f %.3f %.3f) front=%.3f eyeY=%.3f jawD=(%.4f %.4f %.4f)\n",haveMouth,lipC.x,lipC.y,lipC.z,lipFront,eyeY,jawD.x,jawD.y,jawD.z);
+  if(haveMouth){
+    float depth=std::max(0.02f,lipFront-lipC.z+0.022f);float zc=lipFront-0.013f;   // mouth centre plane just behind the lips
+    auto ell=[&](Mb& m,Vec3 c,Vec3 rr){sphere(m,c,rr,jHead);};
+    // cavity: big dark ellipsoid behind the lips (inside-facing look comes from dark matte colour)
+    ell(cavity,{lipC.x,lipC.y,zc-0.040f},{0.034f,0.020f,0.040f});
+    // teeth arch: ellipsoids along a curve
+    const int NU=12,NL=12;
+    for(int i=0;i<NU;i++){float u=(i+0.5f)/NU*2.f-1.f;float x=u*0.0285f;float w=(1.f-0.35f*std::fabs(u));float z=zc-0.0085f-0.020f*u*u;
+      ell(teethU,{lipC.x+x,lipC.y+0.0022f,z},{0.0024f*w+0.0006f,0.0062f*w+0.0010f,0.0020f});}
+    for(int i=0;i<NL;i++){float u=(i+0.5f)/NL*2.f-1.f;float x=u*0.0260f;float w=(1.f-0.30f*std::fabs(u));float z=zc-0.0075f-0.018f*u*u;
+      ell(teethL,{lipC.x+x,lipC.y-0.0042f,z},{0.0020f*w+0.0006f,0.0052f*w+0.0010f,0.0018f});}
+    // gums
+    ell(teethU,{lipC.x,lipC.y+0.0105f,zc-0.0125f},{0.029f,0.0040f,0.0075f});ell(teethL,{lipC.x,lipC.y-0.0120f,zc-0.0115f},{0.026f,0.0040f,0.0070f});
+    // tongue: flat ellipsoid on the lower jaw
+    ell(tongue,{lipC.x,lipC.y-0.0095f,zc-0.0150f},{0.0185f,0.0058f,0.0195f});
+  }
   // assemble
   std::vector<unsigned char> white{255,255,255,255};unsigned wt=r.createTexture(white.data(),1,1);
   struct Part{Mb* m;unsigned col;};unsigned skin=cd.col[0];
   auto darker=[&](unsigned c,float k){return ((unsigned)(((c>>16)&255)*k)<<16)|((unsigned)(((c>>8)&255)*k)<<8)|(unsigned)((c&255)*k);};
-  Part parts[8]={{&body,skin},{&shirt,cd.col[2]},{&pants,cd.col[3]},{&shoes,cd.col[4]},{&hair,cd.col[1]},{&brow,darker(cd.col[1],0.8f)},{&eyeW,0xf2f2ee},{&iris,0x4a2f1c}};
+  Part parts[8]={{&body,skin},{&shirt,cd.col[2]},{&pants,cd.col[3]},{&shoes,cd.col[4]},{&hair,cd.col[1]},{&brow,cd.col[1]},{&eyeW,0xf2f2ee},{&iris,0x4a2f1c}};
   for(int i=0;i<8;i++){Mb& m=*parts[i].m;if(m.idx.empty())continue;if(i>0&&i<6&&i!=0)normals(m);ModelMat mm;mm.tex=wt;mm.kind=(i==0?1:i<=3?2:i<=5?3:4);unsigned c=parts[i].col;mm.col[0]=((c>>16)&255)/255.f;mm.col[1]=((c>>8)&255)/255.f;mm.col[2]=(c&255)/255.f;mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
     ModelPrim mp;mp.mesh=r.uploadSkin(m.v,m.idx);mp.mat=mi;mp.cv=m.v;mp.ci=m.idx;out.prims.push_back(std::move(mp));}
   // expression morphs (on the body prim = prim 0)
   struct Mix{const char* name;std::vector<std::pair<const char*,float>> u;};
   std::vector<Mix> mixes={{"Smile",{{"mouth-corner-puller",1.f},{"mouth-elevation",0.25f}}},{"MouthOpen",{{"mouth-open",1.f}}},{"Blink",{{"eye-left-closure",1.f},{"eye-right-closure",1.f}}},
     {"BrowUp",{{"eyebrows-left-up",1.f},{"eyebrows-right-up",1.f}}},{"Angry",{{"eyebrows-left-down",1.f},{"eyebrows-right-down",1.f},{"mouth-compression",0.5f},{"eye-left-slit",0.3f},{"eye-right-slit",0.3f}}},
-    {"Sad",{{"eyebrows-left-inner-up",1.f},{"eyebrows-right-inner-up",1.f},{"mouth-depression",0.7f}}}};
+    {"Sad",{{"eyebrows-left-inner-up",1.f},{"eyebrows-right-inner-up",1.f},{"mouth-depression",0.7f}}},
+    // lip-sync visemes (indices 6..11): driven live by the voice mouth track
+    {"vOpen",{{"mouth-open",1.f}}},{"vPucker",{{"mouth-pursing",1.f},{"mouth-protusion",0.55f}}},{"vWide",{{"mouth-corner-puller",0.55f},{"mouth-retraction",0.7f}}},
+    {"vPress",{{"mouth-compression",1.f}}},{"vUpTeeth",{{"mouth-upward-retraction",1.f}}},{"vLowLip",{{"mouth-depression-retraction",1.f}}},{"vTongue",{}},{"vSwayX",{}},{"vSwayZ",{}}};
   ModelPrim& bp=out.prims[0];bp.md.assign(mixes.size(),std::vector<float>(bp.cv.size()*3,0.f));out.morphNames.clear();
   for(size_t k=0;k<mixes.size();k++){out.morphNames.push_back(mixes[k].name);std::vector<float> dl(d.nV*3,0.f);for(auto& u:mixes[k].u)applyT(d,dl,std::string("x/")+u.first,u.second);
     for(size_t i=0;i<bp.cv.size();i++){uint32_t o=d.oOrig[i];for(int c=0;c<3;c++){float val=dl[o*3+c]*0.1f;if(flip&&c==0)val=-val;bp.md[k][i*3+c]=val;}}}
+  // mouth-interior prims (after the body morphs so prim 0 stays the body)
+  if(haveMouth){
+    auto addExtra=[&](Mb& m,Vec3 col,int kind,std::vector<std::pair<int,Vec3>> mv){if(m.idx.empty())return;ModelMat mm;mm.tex=wt;mm.kind=kind;mm.col[0]=col.x;mm.col[1]=col.y;mm.col[2]=col.z;mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
+      ModelPrim mp;mp.mesh=r.uploadSkin(m.v,m.idx);mp.mat=mi;mp.cv=m.v;mp.ci=m.idx;mp.md.assign(mixes.size(),std::vector<float>());
+      for(auto& q:mv){std::vector<float>& a=mp.md[q.first];a.assign(m.v.size()*3,0.f);for(size_t i=0;i<m.v.size();i++){a[i*3]=q.second.x;a[i*3+1]=q.second.y;a[i*3+2]=q.second.z;}}
+      out.prims.push_back(std::move(mp));};
+    Vec3 none{0,0,0};(void)none;
+    addExtra(cavity,{0.09f,0.02f,0.03f},9,{{6,jawD*0.35f}});
+    addExtra(teethU,{0.90f,0.87f,0.78f},9,{});
+    addExtra(teethL,{0.88f,0.85f,0.76f},9,{{6,jawD}});
+    addExtra(tongue,{0.62f,0.24f,0.25f},1,{{6,jawD*0.7f},{12,Vec3{0.f,0.0075f,0.006f}}});
+  }
+  {auto addCards=[&](Mb& m,std::vector<float>& tip,Vec3 col){if(m.idx.empty())return;ModelMat mm;mm.tex=hairTex;mm.kind=16;mm.mask=true;mm.col[0]=col.x;mm.col[1]=col.y;mm.col[2]=col.z;mm.col[3]=1;int mi=(int)out.mats.size();out.mats.push_back(mm);
+      ModelPrim mp;mp.mesh=r.uploadSkin(m.v,m.idx);mp.mat=mi;mp.cv=m.v;mp.ci=m.idx;mp.md.assign(mixes.size(),std::vector<float>());
+      float sw=cd.hair==2?0.030f:0.010f;std::vector<float>& ax=mp.md[13];std::vector<float>& az=mp.md[14];ax.assign(m.v.size()*3,0.f);az.assign(m.v.size()*3,0.f);
+      for(size_t i=0;i<m.v.size();i++){float t=tip[i];ax[i*3]=sw*t;ax[i*3+1]=-sw*0.25f*t;az[i*3+2]=sw*t;az[i*3+1]=-sw*0.15f*t;}
+      out.prims.push_back(std::move(mp));};
+   Vec3 hc0{((cd.col[1]>>16)&255)/255.f,((cd.col[1]>>8)&255)/255.f,(cd.col[1]&255)/255.f};
+   addCards(cardsU,tipU,hc0*0.55f);addCards(cardsO,tipO,hc0);}
   out.morphW.assign(mixes.size(),0.f);for(int k=0;k<6;k++)out.morphW[k]=cd.ex[k];out.applyMorphs(r);
   float rad=0.5f;out.fit=cd.height/Hh;out.foot=0;out.height=cd.height;out.radius=std::max(0.5f,rad*out.fit);out.autoRig=true;
   Anim lo;lo.name="Locomotion";lo.dur=1;out.anims.push_back(lo);out.builtin=(int)out.anims.size();return true;}

@@ -41,7 +41,7 @@ void main(){ vec3 albedo=vC;
   vec4 tc=texture(uTex,vUV)*uBase; if(uMask>0.5&&tc.a<0.5) discard; if(uKind==13){ o=vec4(tc.rgb*1.15,0.85*tc.a); return; } albedo=pow(tc.rgb,vec3(2.2))*vC; if(uKind==10)albedo*=pow(vVC,vec3(2.2));
 #endif
   vec3 N=normalize(vN); if(!gl_FrontFacing) N=-N; vec3 L=normalize(uSun); vec3 V=normalize(uCam-vW);
-  float sssK=0.0, specK=0.15, specP=48.0, sheen=0.0, envK=0.0, envT=0.0; float dist=length(uCam-vW); float lod=clamp(1.3-dist*0.28,0.0,1.0);
+  float kk1=0.0,kk2=0.0; float sssK=0.0, specK=0.15, specP=48.0, sheen=0.0, envK=0.0, envT=0.0; float dist=length(uCam-vW); float lod=clamp(1.3-dist*0.28,0.0,1.0);
 #ifdef SKIN
   if(uKind>0){ vec3 T=normalize(cross(N,vec3(0.0,1.0,0.001))); vec3 B=cross(N,T);
     if(uKind==1){ float a=(vn(vUV*1100.0)-0.5), b=(vn(vUV*1100.0+7.3)-0.5), c=vn(vUV*2600.0)-0.5; N=normalize(N+(T*(a+c*0.6)+B*(b+c*0.6))*0.16*lod);
@@ -57,6 +57,11 @@ void main(){ vec3 albedo=vC;
     else if(uKind==11){ float pr=vn(vUV*520.0); albedo*=0.80+0.35*pr; N=normalize(N+(T*(pr-0.5)+B*(vn(vUV*520.0+5.0)-0.5))*0.25*lod); float row=abs(fract(vUV.y*11.0)-0.5); float stl=smoothstep(0.035,0.0,abs(row-0.455))*step(0.5,fract(vUV.x*70.0)); float seam=smoothstep(0.02,0.0,abs(row-0.5)); albedo=mix(albedo,vec3(0.72,0.66,0.55),stl*0.85); albedo*=1.0-0.45*seam; specK=0.38; specP=16.0; sheen=0.5; }
     else if(uKind==10){ specK=0.10; specP=26.0; sssK=0.35; }
     else if(uKind==9){ albedo*=0.7+0.5*vn(vUV*220.0); specK=0.05; specP=10.0; }
+    else if(uKind==16){ vec3 px=dFdx(vW),py=dFdy(vW); vec2 ua=dFdx(vUV),ub=dFdy(vUV); float det=ua.x*ub.y-ua.y*ub.x; vec3 Tt=vec3(0.0,-1.0,0.0); if(abs(det)>1e-12) Tt=normalize((py*ua.x-px*ub.x)/det);
+      vec3 Hh=normalize(normalize(uSun)+normalize(uCam-vW)); vec3 T1=normalize(Tt+N*0.10), T2=normalize(Tt-N*0.18);
+      float s1=sqrt(max(1.0-pow(dot(T1,Hh),2.0),0.0)), s2=sqrt(max(1.0-pow(dot(T2,Hh),2.0),0.0));
+      float sp=0.55+0.9*vn(vUV*vec2(260.0,22.0)); kk1=pow(s1,110.0)*sp; kk2=pow(s2,38.0)*(0.6+0.8*vn(vUV*vec2(90.0,10.0)));
+      N=normalize(N+normalize(cross(Tt,N))*(vUV.x-0.5)*1.1); specK=0.0; sheen=0.10; albedo*=0.88+0.24*vn(vUV*vec2(40.0,6.0)); }
     else if(uKind==14||uKind==15){ float hgt=dot(tc.rgb,vec3(0.30,0.59,0.11)); vec3 dpx=dFdx(vW),dpy=dFdy(vW); vec2 dh=vec2(dFdx(hgt),dFdy(hgt))*(uKind==15?1.2:0.7); vec3 R1=cross(dpy,N),R2=cross(N,dpx); float det=dot(dpx,R1); if(abs(det)>1e-12){ vec3 gr=sign(det)*(dh.x*R1+dh.y*R2); N=normalize(abs(det)*N-gr); }
       if(uKind==14){ specK=0.42; specP=64.0; sheen=0.08; } else { specK=0.05; specP=10.0; sheen=0.65; albedo*=0.92+0.16*vn(vUV*60.0); } }
   }
@@ -68,7 +73,7 @@ void main(){ vec3 albedo=vC;
   float fres=pow(1.0-max(dot(N,V),0.0),3.0);
   float rim=fres*0.10; vec3 col=albedo*(amb*ao+vec3(1.45,1.22,0.96)*ndl*sh)+spec+vec3(0.55,0.68,0.9)*rim*(N.y*0.5+0.5);
   float wrapT=clamp((dot(N,L)+0.5)/1.5,0.0,1.0); col+=albedo*vec3(0.95,0.28,0.16)*sssK*max(wrapT-ndl,0.0)*0.9*sh+albedo*vec3(0.9,0.3,0.2)*sssK*fres*0.12;
-  col+=vec3(0.5,0.55,0.6)*sheen*fres*0.5;
+  col+=vec3(0.5,0.55,0.6)*sheen*fres*0.5; col+=(vec3(1.0,0.96,0.90)*kk1*0.85+albedo*2.4*kk2*0.60)*sh*smoothstep(-0.05,0.45,dot(N,L));
 #ifdef SKIN
   if(uKind==5){ vec2 cell=floor(vUV*420.0); float hh=h21(cell); vec3 fn=normalize(N+(vec3(h21(cell+3.1),h21(cell+7.7),h21(cell+11.3))-0.5)*1.1); col+=albedo*2.2*pow(max(dot(fn,H),0.0),36.0)*step(0.5,hh)*sh*0.14; col+=vec3(1.0)*pow(max(dot(N,H),0.0),420.0)*1.4*sh; }
   if(uKind==12)col=albedo*1.8;

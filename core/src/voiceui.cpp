@@ -48,47 +48,25 @@ void App::voiceTap(int id){
   else if(id==1013){vcPlaying_=false;vcT_=0;if(playAudio)playAudio(nullptr,0,24000);}
   else if(id==1014){vcText_.clear();vcPreset_=-1;vcFocus_=true;}}
 
-void App::drawFace(float cx,float cy,float sc){
-  MouthKey m{};m.jaw=0;m.wide=0.3f;
-  if(vcHas_){size_t i=(size_t)std::max(0.f,std::min((float)vcSp_.mouth.size()-1,vcT_*100.f));if(vcPlaying_&&!vcSp_.mouth.empty())m=vcSp_.mouth[i];}
-  float bob=vcPlaying_?std::sin(vcT_*9.f)*1.2f*sc*m.energy:0.f;cy+=bob;
-  Col skin=Col::hex(0xd9a77f),skin2=Col::hex(0xc08760);
-  // neck + shoulders (teacher shirt)
-  R(cx-100*sc,cy+92*sc,200*sc,56*sc,14*sc,Col::hex(0x35507a),Col::hex(0x28405f));R(cx-18*sc,cy+70*sc,36*sc,40*sc,8*sc,skin2,skin2);
-  R(cx-26*sc,cy+96*sc,52*sc,28*sc,4*sc,Col::hex(0xe8e6df),Col::hex(0xe8e6df));
-  // head
-  SH(cx-82*sc,cy-100*sc+4,164*sc,200*sc,80*sc,18,Col::hex(0,0.4f));
-  R(cx-82*sc,cy-100*sc,164*sc,200*sc,78*sc,skin,skin2);
-  // hair
-  R(cx-84*sc,cy-108*sc,168*sc,58*sc,42*sc,Col::hex(0x2b2118),Col::hex(0x1d1610));
-  // beard shadow (adult male feel)
-  R(cx-58*sc,cy+40*sc,116*sc,56*sc,30*sc,Col::hex(0x3a2d24,0.28f),Col::hex(0x3a2d24,0.45f));
-  // eyes
-  float blink=(std::fmod(t_,3.6f)>3.45f)?0.15f:1.f;
-  for(int s=-1;s<=1;s+=2){float ex=cx+s*34*sc,ey=cy-22*sc;R(ex-13*sc,ey-8*sc*blink,26*sc,16*sc*blink,8*sc*blink,Col::hex(0xf4f1ea),Col::hex(0xe5e0d6));
-    if(blink>0.5f){ui.circle(ex+s*0.5f*sc,ey+oy_,5.5f*sc,Col::hex(0x3a2a1c),Col::hex(0x20150b));}
-    R(ex-17*sc,ey-24*sc,34*sc,5*sc,2.5f*sc,Col::hex(0x2b2118),Col::hex(0x2b2118));}
-  // nose
-  R(cx-6*sc,cy-6*sc,12*sc,26*sc,6*sc,skin2.with(0.6f),skin2.with(0.9f));
-  // mouth
-  float my=cy+55*sc+m.jaw*7*sc;
-  float w=(44+24*m.wide-16*m.round-10*m.close+4*m.fv)*sc;
-  float h=(3+34*m.jaw)*sc*(1.f-0.7f*m.close);if(m.fv>0.5f)h=std::max(h,6*sc);
-  float lipT=5.5f*sc;
-  Col lip=Col::hex(0xa8514f),lip2=Col::hex(0x8c3f40);
-  float ow=w+2*lipT*0.8f,oh=h+2*lipT*(m.close>0.5f?0.4f:1.f);
-  R(cx-ow/2,my-oh/2,ow,oh,std::min(ow,oh)/2,lip,lip2);
-  if(h>2.5f*sc){
-    float iw=w,ih=h;R(cx-iw/2,my-ih/2,iw,ih,std::min(iw,ih)/2,Col::hex(0x2a0a0d),Col::hex(0x14030a));
-    float tt=m.teeth>0.3f||m.jaw>0.22f?std::min(ih*0.42f,5.5f*sc*(0.5f+m.teeth)):0.f;
-    if(tt>0.5f)R(cx-iw*0.42f,my-ih/2,iw*0.84f,tt,2*sc,Col::hex(0xf2efe6),Col::hex(0xe3dfd3));
-    if(m.fv>0.5f)R(cx-iw*0.4f,my-ih/2,iw*0.8f,std::min(ih*0.6f,6*sc),2*sc,Col::hex(0xf2efe6),Col::hex(0xe3dfd3));
-    float tg=std::max(m.tongue,m.jaw*0.45f);
-    if(ih>5*sc)R(cx-iw*0.30f,my+ih/2-ih*(0.25f+0.4f*tg),iw*0.60f,ih*(0.25f+0.4f*tg),ih*0.3f,Col::hex(0xb5544f),Col::hex(0x9c403c));}
-  else{R(cx-w/2,my-0.8f*sc,w,1.6f*sc,0.8f*sc,Col::hex(0x4a1c1c),Col::hex(0x4a1c1c));}
-  // chin highlight
-  R(cx-30*sc,cy+88*sc+m.jaw*7*sc,60*sc,6*sc,3*sc,skin.with(0.0f),skin.with(0.0f));
+void App::voiceRenderFace(){
+  if(!vcFaceOk_){if(vcFace_.fbo==0&&!r_->createTarget(vcFace_,720,640))return;
+    vcScene_=Scene();{auto& f=vcScene_.add(P_PLANE,"StudioFloor");f.pos={0,0,0};f.scale={40,1,40};f.color=Col::hex(0x23272e);}
+    auto& en=vcScene_.add(P_MODEL,"Teacher");en.asset="gen:teacher";en.pos={0,0,0};vcFaceId_=en.id;vcFaceOk_=true;}
+  Model* m=modelFor("gen:teacher");if(!m)return;
+  // mouth key -> viseme morph weights (6 vOpen,7 vPucker,8 vWide,9 vPress,10 vUpTeeth,11 vLowLip,12 vTongue; 2 blink, 3 brows)
+  MouthKey k{};k.jaw=0;if(vcHas_&&vcPlaying_&&!vcSp_.mouth.empty()){size_t i=(size_t)std::max(0.f,std::min((float)vcSp_.mouth.size()-1,vcT_*100.f));k=vcSp_.mouth[i];}
+  float tgt[16]={0};float press=k.close;
+  tgt[6]=std::min(1.f,k.jaw*1.05f)*(1.f-press);tgt[7]=k.round*(1.f-0.5f*k.wide);tgt[8]=k.wide*(1.f-press);tgt[9]=press;
+  tgt[10]=std::min(1.f,k.teeth*0.5f+k.fv*0.6f);tgt[11]=k.fv*0.7f;tgt[12]=k.tongue;
+  float bl=(std::fmod(t_,3.7f)>3.55f)?1.f:0.f;tgt[2]=bl;tgt[3]=0.12f+0.35f*k.energy;
+  static float prevT=0;float dt=std::max(0.001f,std::min(0.05f,t_-prevT));prevT=t_;float a=1.f-std::exp(-dt*28.f);
+  for(int i=0;i<13&&i<(int)m->morphNames.size();i++){vcW_[i]+=(tgt[i]-vcW_[i])*(i==2?1.f:a);m->morphW[i]=vcW_[i];}
+  {float sx=std::sin(t_*1.3f)*0.5f+std::sin(t_*0.47f)*0.3f,sz=std::sin(t_*0.9f+1.f)*0.4f;sx+=(vcPlaying_?std::sin(t_*7.f)*0.25f*k.energy:0.f);if((int)m->morphNames.size()>14){m->morphW[13]=sx;m->morphW[14]=sz;}}
+  m->applyMorphs(*r_);
+  Entity* en=vcScene_.get(vcFaceId_);if(en){en->rot={0,std::sin(t_*0.6f)*4.f,0};}
+  renderThumb(vcFace_,vcScene_,Vec3{0.0f,1.655f,0.78f},Vec3{0.0f,1.640f,0.0f},0.62f);
 }
+void App::drawFace(float cx,float cy,float sc){(void)cx;(void)cy;(void)sc;}
 
 void App::drawVoice(){
   float W=W_/ui.s(),H=H_/ui.s();(void)H;
@@ -116,7 +94,7 @@ void App::drawVoice(){
   T(vcStatus_,380,350,10.5f,TXT3,F_REG,0);
   // ---- face
   sect(2);float px=470,py=62,pw=W-470-24,ph=316;panel(px,py,pw,ph,"PREVIEW");
-  drawFace(px+pw/2,py+ph/2-6,0.98f);
+  if(vcFaceOk_){float fw=pw-12,fh=ph-28;ui.image(vcFace_.tex,px+6,py+22+oy_,fw,fh,5,Col{1,1,1,A_});}
   if(vcHas_){float dur=vcSp_.duration();float bw=pw-28;R(px+14,py+ph-22,bw,6,3,BG0,BG0);float f=dur>0?std::min(1.f,vcT_/dur):0.f;R(px+14,py+ph-22,std::max(6.f,bw*f),6,3,ACC,ACC2);
     char buf[48];snprintf(buf,sizeof buf,"%.1f / %.1f s",std::min(vcT_,dur),dur);T(buf,px+pw-14,py+8,10.5f,TXT3,F_BOLD,2);}
   (void)W;
