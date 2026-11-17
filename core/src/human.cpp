@@ -129,10 +129,10 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
   unsigned seed=cd.hair*7919u+13u;auto rnd=[&](){seed=seed*1664525u+1013904223u;return ((seed>>8)&0xffff)/65535.f;};
   V3 hc{0.f,eyeY+0.010f,headZ-0.020f};
   // ribbon from a path: side vectors face the viewer; uv.x in [u0,u1] picks a strand sub-range of the texture
-  auto buildCard=[&](Mb& dst,std::vector<float>& tip,const std::vector<V3>& path,const std::vector<V3>& outN,float wid,float u0,float u1,float taper){
+  auto buildCard=[&](Mb& dst,std::vector<float>& tip,const std::vector<V3>& path,const std::vector<V3>& outN,float wid,float u0,float u1,float taper,float aoBase=1.f,float aoRoot=0.6f){
     int K=(int)path.size();uint32_t base=(uint32_t)dst.v.size();
     for(int i=0;i<K;i++){V3 dd=i+1<K?vsub(path[i+1],path[i]):vsub(path[i],path[i-1]);V3 sd=vnorm(vcr(dd,outN[i]));float f=(float)i/(K-1);float ww=wid*(1.f-taper*f*f)*0.5f;
-      for(int s=0;s<2;s++){SkinVertex sv{};V3 q=vadd(path[i],vmul(sd,(s?1.f:-1.f)*ww));sv.p[0]=q.x;sv.p[1]=q.y;sv.p[2]=q.z;sv.n[0]=outN[i].x;sv.n[1]=outN[i].y;sv.n[2]=outN[i].z;sv.uv[0]=s?u1:u0;sv.uv[1]=f;sv.j[0]=(unsigned char)jHead;sv.w[0]=1;dst.v.push_back(sv);tip.push_back(std::pow(f,1.5f));}}
+      for(int s=0;s<2;s++){SkinVertex sv{};V3 q=vadd(path[i],vmul(sd,(s?1.f:-1.f)*ww));sv.p[0]=q.x;sv.p[1]=q.y;sv.p[2]=q.z;sv.n[0]=outN[i].x;sv.n[1]=outN[i].y;sv.n[2]=outN[i].z;sv.uv[0]=s?u1:u0;sv.uv[1]=f;sv.j[0]=(unsigned char)jHead;sv.w[0]=1;{float ao=aoBase*(aoRoot+(1.f-aoRoot)*std::min(1.f,f*2.5f));unsigned char c8=(unsigned char)(std::min(1.f,ao)*255.f);sv.c[0]=sv.c[1]=sv.c[2]=c8;sv.c[3]=255;}dst.v.push_back(sv);tip.push_back(std::pow(f,1.5f));}}
     for(int i=0;i+1<K;i++){uint32_t a=base+i*2,b=a+1,c=a+2,e=a+3;dst.idx.push_back(a);dst.idx.push_back(c);dst.idx.push_back(b);dst.idx.push_back(b);dst.idx.push_back(c);dst.idx.push_back(e);}};
   if(cd.hair==1||cd.hair==2||cd.hair==4){
     std::vector<float> cum;std::vector<int> triIdx;float tot=0;
@@ -175,7 +175,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
         q=keepOutside(q,0.0045f+0.0032f*depth);path[i]=q;}
       path[0]=vadd(P,vmul(Nn,0.0008f+0.0016f*depth));
       for(int i=0;i<K;i++)on[i]=vnorm(vsub(path[i],hc));
-      buildCard(strands[grp],tipS[grp],path,on,0.00135f*(0.8f+0.4f*rnd()),0.f,1.f,0.65f);
+      buildCard(strands[grp],tipS[grp],path,on,0.00135f*(0.8f+0.4f*rnd()),0.f,1.f,0.65f,depth==0?0.40f:depth==1?0.70f:1.0f,0.50f);
     }
     // flyaways + hairline wisps: single thin strands that break the silhouette
     int NF=cum.empty()?0:(cd.hair==2?420:330);
@@ -199,7 +199,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
        float len=0.011f+0.006f*rnd()+0.002f*(1.f-std::fabs(t));
        std::vector<V3> path(4),on(4);bool ok=true;
        for(int i=0;i<4;i++){float f=(float)i/3.f;float aa=a-0.45f*f*(a>0?1.f:0.f)-0.25f*f;float x=x0+sgn*std::cos(aa)*len*f;float y=y0+std::sin(aa)*len*f;float z;if(!surfZ(x,y,z)){ok=false;break;}path[i]=V3{x,y,z+0.0007f+0.0006f*f};on[i]=V3{0.f,0.f,1.f};}
-       if(!ok)continue;buildCard(cardsB,tipB,path,on,0.0036f*(0.75f+0.5f*cd.browK),0.f,1.f,0.45f);}}}
+       if(!ok)continue;buildCard(cardsB,tipB,path,on,0.0036f*(0.75f+0.5f*cd.browK),0.f,1.f,0.45f,0.95f,0.55f);}}}
   // strand texture: many fine strands per card, root-dark -> lighter tips, strongly varied brightness, tapering to points (alpha-cut)
   unsigned hairTex=0;
   {const int TW=512,TH=1024,S=26;std::vector<unsigned char> img((size_t)TW*TH*4);unsigned sd=99991u;auto rr=[&](){sd=sd*1664525u+1013904223u;return ((sd>>8)&0xffff)/65535.f;};
@@ -212,7 +212,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
        unsigned char* q=&img[((size_t)y*TW+x)*4];q[0]=q[1]=q[2]=(unsigned char)(val*255.f);q[3]=(unsigned char)(a>0.5f?255:0);}}
    hairTex=r.createTexture(img.data(),TW,TH);}
   unsigned stripTex=0;
-  {const int W=32,H=256;std::vector<unsigned char> im((size_t)W*H*4);for(int y=0;y<H;y++){float v=(y+0.5f)/H;for(int x=0;x<W;x++){float u=(x+0.5f)/W;float c=std::fabs(2.f*u-1.f);float round_=1.f-0.30f*c*c;float root=0.50f+0.50f*sstep(v/0.45f);float tipL=1.f+0.15f*sstep((v-0.7f)/0.3f);float val=std::min(1.f,round_*root*tipL);unsigned char* q=&im[((size_t)y*W+x)*4];q[0]=q[1]=q[2]=(unsigned char)(val*255.f);q[3]=c<0.86f?255:0;}}stripTex=r.createTexture(im.data(),W,H);}
+  {const int W=32,H=256;std::vector<unsigned char> im((size_t)W*H*4);for(int y=0;y<H;y++){float v=(y+0.5f)/H;for(int x=0;x<W;x++){float u=(x+0.5f)/W;float c=std::fabs(2.f*u-1.f);float round_=1.f-0.30f*c*c;float root=0.50f+0.50f*sstep(v/0.45f);float tipL=1.f+0.15f*sstep((v-0.7f)/0.3f);float val=std::min(1.f,round_*root*tipL);unsigned char* q=&im[((size_t)y*W+x)*4];q[0]=q[1]=q[2]=(unsigned char)(val*255.f);q[3]=(unsigned char)(255.f*std::min(1.f,std::max(0.f,(0.94f-c)/0.28f)));}}stripTex=r.createTexture(im.data(),W,H);}
   // eyes: white ball + iris
   auto sphere=[&](Mb& m,Vec3 c,Vec3 rr,int jt){uint32_t base=(uint32_t)m.v.size();int seg=16,rings=10;for(int j=0;j<=rings;j++){float ph=3.14159265f*j/rings;for(int i=0;i<=seg;i++){float th=6.2831853f*i/seg;SkinVertex s{};Vec3 n{std::sin(ph)*std::cos(th),std::cos(ph),std::sin(ph)*std::sin(th)};s.p[0]=c.x+n.x*rr.x;s.p[1]=c.y+n.y*rr.y;s.p[2]=c.z+n.z*rr.z;s.n[0]=n.x;s.n[1]=n.y;s.n[2]=n.z;s.uv[0]=(float)i/seg;s.uv[1]=(float)j/rings;s.j[0]=(unsigned char)jt;s.w[0]=1;m.v.push_back(s);}}
     for(int j=0;j<rings;j++)for(int i=0;i<seg;i++){uint32_t a=base+j*(seg+1)+i,b=a+1,c2=a+seg+1,dd=c2+1;m.idx.push_back(a);m.idx.push_back(c2);m.idx.push_back(b);m.idx.push_back(b);m.idx.push_back(c2);m.idx.push_back(dd);}};
@@ -276,7 +276,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
       if(st==3&&dy<-0.030f)dir=vnorm(vadd(dir,V3{0.f,-0.2f,0.25f}));
       const int KK=4;std::vector<V3> path(KK),on(KK,Nn);path[0]=vadd(P,vmul(Nn,0.0004f));V3 d=dir;float seg=len/(KK-1);
       for(int i=1;i<KK;i++){float f=(float)i/(KK-1);d=vnorm(vadd(d,V3{0.2f*(rnd()-0.5f),-0.15f*f*(st>=2?1.f:0.2f),0.2f*(rnd()-0.5f)}));path[i]=vadd(path[i-1],vmul(d,seg));}
-      int g=rnd()<0.5f?0:1;buildCard(beardS[g],tipBd[g],path,on,st==1?0.0009f:0.0013f,0.f,1.f,0.6f);}
+      int g=rnd()<0.5f?0:1;buildCard(beardS[g],tipBd[g],path,on,st==1?0.0009f:0.0013f,0.f,1.f,0.6f,0.85f,0.45f);}
   }
   // assemble
   std::vector<unsigned char> white{255,255,255,255};unsigned wt=r.createTexture(white.data(),1,1);

@@ -33,7 +33,7 @@ void App::renderScene(const Scene& sc,Vec3 cam,Vec3 target,float fov){std::vecto
       for(auto& mp:m->prims){SkinDraw sd;sd.mesh=mp.mesh;sd.model=w;const ModelMat& mm=m->mats[std::min<size_t>(mp.mat,m->mats.size()-1)];sd.tex=mm.tex;for(int k=0;k<4;k++)sd.col[k]=mm.col[k];sd.mask=mm.mask;sd.kind=mm.kind;sd.sway[0]=m->sway[0];sd.sway[1]=m->sway[1];sd.sway[2]=m->sway[2];sd.tint={e.color.r,e.color.g,e.color.b};sd.joints=mi.joints.data();sd.nj=(int)m->joints.size();skin.push_back(sd);}
       continue;}
     if(e.prim==P_EMPTY)continue;DrawItem it;it.mesh=meshFor(e.prim);it.model=sc.world(e.id);it.tint={e.color.r,e.color.g,e.color.b};it.castShadow=e.prim!=P_TERRAIN&&e.prim!=P_PLANE;items.push_back(it);}
-  r_->setCamera(cam,target,fov);r_->setSun({0.55f,0.52f,0.42f},{target.x,target.y,target.z},55);r_->render(items,skin);}
+  r_->setCamera(cam,target,fov);r_->setSun({0.55f,0.52f,0.42f},{target.x,target.y,target.z},shadowR_);r_->render(items,skin);}
 
 void App::saveScene(bool quiet){if(cur_<0||cur_>=(int)projects_.size())return;bool ok=scene_.save(projects_[cur_].dir+"/scenes/main.scene");for(auto& kv:models_)if(kv.second&&!kv.second->clips.empty()){kv.second->saveClips(projects_[cur_].dir+"/anims",kv.first);kv.second->saveSM(projects_[cur_].dir+"/anims",kv.first);}thumbDirty_=true;if(!quiet)toast(ok?"Scene saved":"Save failed");}
 void App::select(int id){sel_=id;}

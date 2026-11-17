@@ -38,10 +38,10 @@ float shadow(){ vec3 p=vL.xyz/vL.w*0.5+0.5; if(p.z>1.0||p.x<0.0||p.x>1.0||p.y<0.
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
 void main(){ vec3 albedo=vC;
 #ifdef SKIN
-  vec4 tc=texture(uTex,vUV)*uBase; if(uMask>0.5&&tc.a<0.5) discard; if(uKind==13){ o=vec4(tc.rgb*1.15,0.85*tc.a); return; } albedo=pow(tc.rgb,vec3(2.2))*vC; if(uKind==10)albedo*=pow(vVC,vec3(2.2));
+  vec4 tc=texture(uTex,vUV)*uBase; if(uMask>0.5&&tc.a<(uMask>1.5?0.01:0.5)) discard; if(uKind==13){ o=vec4(tc.rgb*1.15,0.85*tc.a); return; } albedo=pow(tc.rgb,vec3(2.2))*vC; if(uKind==10)albedo*=pow(vVC,vec3(2.2));
 #endif
   vec3 N=normalize(vN); if(!gl_FrontFacing) N=-N; vec3 L=normalize(uSun); vec3 V=normalize(uCam-vW);
-  float kk1=0.0,kk2=0.0; float sssK=0.0, specK=0.15, specP=48.0, sheen=0.0, envK=0.0, envT=0.0; float dist=length(uCam-vW); float lod=clamp(1.3-dist*0.28,0.0,1.0);
+  float kk1=0.0,kk2=0.0,hairAO=1.0; float sssK=0.0, specK=0.15, specP=48.0, sheen=0.0, envK=0.0, envT=0.0; float dist=length(uCam-vW); float lod=clamp(1.3-dist*0.28,0.0,1.0);
 #ifdef SKIN
   if(uKind>0){ vec3 T=normalize(cross(N,vec3(0.0,1.0,0.001))); vec3 B=cross(N,T);
     if(uKind==1){ float a=(vn(vUV*1100.0)-0.5), b=(vn(vUV*1100.0+7.3)-0.5), c=vn(vUV*2600.0)-0.5; N=normalize(N+(T*(a+c*0.6)+B*(b+c*0.6))*0.16*lod);
@@ -61,7 +61,7 @@ void main(){ vec3 albedo=vC;
       vec3 Hh=normalize(normalize(uSun)+normalize(uCam-vW)); vec3 T1=normalize(Tt+N*0.10), T2=normalize(Tt-N*0.18);
       float s1=sqrt(max(1.0-pow(dot(T1,Hh),2.0),0.0)), s2=sqrt(max(1.0-pow(dot(T2,Hh),2.0),0.0));
       float sp=0.55+0.9*vn(vUV*vec2(260.0,22.0)); kk1=pow(s1,110.0)*sp; kk2=pow(s2,38.0)*(0.6+0.8*vn(vUV*vec2(90.0,10.0)));
-      N=normalize(N+normalize(cross(Tt,N))*(vUV.x-0.5)*1.1); specK=0.0; sheen=0.10; albedo*=0.88+0.24*vn(vUV*vec2(40.0,6.0)); }
+      N=normalize(N+normalize(cross(Tt,N))*(vUV.x-0.5)*1.1); specK=0.0; sheen=0.0; albedo*=0.88+0.24*vn(vUV*vec2(40.0,6.0)); albedo=pow(albedo,vec3(0.78))*vec3(1.25,1.05,0.85)*vVC.r; hairAO=vVC.r; }
     else if(uKind==14||uKind==15){ float hgt=dot(tc.rgb,vec3(0.30,0.59,0.11)); vec3 dpx=dFdx(vW),dpy=dFdy(vW); vec2 dh=vec2(dFdx(hgt),dFdy(hgt))*(uKind==15?1.2:0.7); vec3 R1=cross(dpy,N),R2=cross(N,dpx); float det=dot(dpx,R1); if(abs(det)>1e-12){ vec3 gr=sign(det)*(dh.x*R1+dh.y*R2); N=normalize(abs(det)*N-gr); }
       if(uKind==14){ specK=0.42; specP=64.0; sheen=0.08; } else { specK=0.05; specP=10.0; sheen=0.65; albedo*=0.92+0.16*vn(vUV*60.0); } }
   }
@@ -73,7 +73,10 @@ void main(){ vec3 albedo=vC;
   float fres=pow(1.0-max(dot(N,V),0.0),3.0);
   float rim=fres*0.10; vec3 col=albedo*(amb*ao+vec3(1.45,1.22,0.96)*ndl*sh)+spec+vec3(0.55,0.68,0.9)*rim*(N.y*0.5+0.5);
   float wrapT=clamp((dot(N,L)+0.5)/1.5,0.0,1.0); col+=albedo*vec3(0.95,0.28,0.16)*sssK*max(wrapT-ndl,0.0)*0.9*sh+albedo*vec3(0.9,0.3,0.2)*sssK*fres*0.12;
-  col+=vec3(0.5,0.55,0.6)*sheen*fres*0.5; col+=(vec3(1.0,0.96,0.90)*kk1*0.85+albedo*2.4*kk2*0.60)*sh*smoothstep(-0.05,0.45,dot(N,L));
+  col+=vec3(0.5,0.55,0.6)*sheen*fres*0.5; col+=(mix(vec3(1.0,0.95,0.88),albedo*2.2,0.35)*kk1*0.85+albedo*2.6*kk2*0.60)*sh*hairAO*smoothstep(-0.05,0.45,dot(N,L));
+#ifdef SKIN
+  if(uKind>=16){ col+=albedo*vec3(1.0,0.55,0.25)*pow(max(dot(-L,V),0.0),3.0)*0.35*hairAO; }
+#endif
 #ifdef SKIN
   if(uKind==5){ vec2 cell=floor(vUV*420.0); float hh=h21(cell); vec3 fn=normalize(N+(vec3(h21(cell+3.1),h21(cell+7.7),h21(cell+11.3))-0.5)*1.1); col+=albedo*2.2*pow(max(dot(fn,H),0.0),36.0)*step(0.5,hh)*sh*0.14; col+=vec3(1.0)*pow(max(dot(N,H),0.0),420.0)*1.4*sh; }
   if(uKind==12)col=albedo*1.8;
@@ -85,6 +88,7 @@ void main(){ vec3 albedo=vC;
   col=aces(col*1.0); col=mix(vec3(dot(col,vec3(0.299,0.587,0.114))),col,1.08); float ga=1.0;
 #ifdef SKIN
   if(uKind==6)ga=clamp(0.10+0.8*pow(1.0-max(dot(N,V),0.0),3.0),0.0,0.7);
+  if(uKind>=16)ga=tc.a;
 #endif
   o=vec4(pow(col,vec3(1.0/2.2)),ga); })";
 static const char* SVS=R"(#version 300 es
@@ -133,13 +137,19 @@ bool Renderer::init(int w,int h){
   GLenum none=GL_NONE;glDrawBuffers(1,&none);glReadBuffer(GL_NONE);
   glGenFramebuffers(1,&fbo_);glGenRenderbuffers(1,&colorRb_);glGenRenderbuffers(1,&depthRb_);resize(w,h);
   shadersOk=!g_bad;glError=glGetError();return shadersOk&&glError==GL_NO_ERROR;}
-bool Renderer::createTarget(Target& t,int w,int h){t.w=w;t.h=h;glGenTextures(1,&t.tex);glBindTexture(GL_TEXTURE_2D,t.tex);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+bool Renderer::createTarget(Target& t,int w,int h,int samples){t.w=w;t.h=h;t.samples=samples;glGenTextures(1,&t.tex);glBindTexture(GL_TEXTURE_2D,t.tex);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
   glGenRenderbuffers(1,&t.depth);glBindRenderbuffer(GL_RENDERBUFFER,t.depth);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,w,h);
   glGenFramebuffers(1,&t.fbo);glBindFramebuffer(GL_FRAMEBUFFER,t.fbo);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,t.tex,0);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,t.depth);
-  bool ok=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;glBindFramebuffer(GL_FRAMEBUFFER,useExt_?ext_:fbo_);return ok;}
-void Renderer::pushTarget(const Target& t){sExt_=ext_;sUse_=useExt_;sW_=w_;sH_=h_;ext_=t.fbo;useExt_=true;w_=t.w;h_=t.h;}
-void Renderer::popTarget(){ext_=sExt_;useExt_=sUse_;w_=sW_;h_=sH_;}
+  bool ok=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+  if(ok&&samples>1){GLint mx=4;glGetIntegerv(GL_MAX_SAMPLES,&mx);int sm=std::min(samples,(int)mx);
+    glGenRenderbuffers(1,&t.msCol);glBindRenderbuffer(GL_RENDERBUFFER,t.msCol);glRenderbufferStorageMultisample(GL_RENDERBUFFER,sm,GL_RGBA8,w,h);
+    glGenRenderbuffers(1,&t.msDep);glBindRenderbuffer(GL_RENDERBUFFER,t.msDep);glRenderbufferStorageMultisample(GL_RENDERBUFFER,sm,GL_DEPTH_COMPONENT24,w,h);
+    glGenFramebuffers(1,&t.msFbo);glBindFramebuffer(GL_FRAMEBUFFER,t.msFbo);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_RENDERBUFFER,t.msCol);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,t.msDep);
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE){glDeleteFramebuffers(1,&t.msFbo);t.msFbo=0;}}
+  glBindFramebuffer(GL_FRAMEBUFFER,useExt_?ext_:fbo_);return ok;}
+void Renderer::pushTarget(const Target& t){curMs_=t.msFbo;curFbo_=t.fbo;curMsOn_=t.msFbo!=0;sExt_=ext_;sUse_=useExt_;sW_=w_;sH_=h_;ext_=t.msFbo?t.msFbo:t.fbo;useExt_=true;w_=t.w;h_=t.h;}
+void Renderer::popTarget(){if(curMs_){glBindFramebuffer(GL_READ_FRAMEBUFFER,curMs_);glBindFramebuffer(GL_DRAW_FRAMEBUFFER,curFbo_);glBlitFramebuffer(0,0,w_,h_,0,0,w_,h_,GL_COLOR_BUFFER_BIT,GL_NEAREST);glBindFramebuffer(GL_FRAMEBUFFER,0);curMs_=0;curMsOn_=false;}ext_=sExt_;useExt_=sUse_;w_=sW_;h_=sH_;}
 void Renderer::resize(int w,int h){w_=w;h_=h;glBindRenderbuffer(GL_RENDERBUFFER,colorRb_);glRenderbufferStorage(GL_RENDERBUFFER,GL_RGBA8,w,h);
   glBindRenderbuffer(GL_RENDERBUFFER,depthRb_);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT24,w,h);
   glBindFramebuffer(GL_FRAMEBUFFER,fbo_);glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_RENDERBUFFER,colorRb_);
@@ -197,8 +207,8 @@ void Renderer::render(const std::vector<DrawItem>& items,const std::vector<SkinD
     glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,shTex_);glUniform1i(glGetUniformLocation(skinProg_,"uShadow"),0);glUniform1i(glGetUniformLocation(skinProg_,"uTex"),1);
     int kM=glGetUniformLocation(skinProg_,"uModel"),kJ=glGetUniformLocation(skinProg_,"uJ"),kT=glGetUniformLocation(skinProg_,"uTint"),kB=glGetUniformLocation(skinProg_,"uBase"),kMk=glGetUniformLocation(skinProg_,"uMask"),kK=glGetUniformLocation(skinProg_,"uKind"),kSw=glGetUniformLocation(skinProg_,"uSway");
     for(int pass=0;pass<2;pass++){if(pass==1){glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);}
-    for(auto&s:skin){if((s.kind==6||s.kind==13)!=(pass==1))continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);glUniform1f(kMk,s.mask?1.f:0.f);glUniform1i(kK,s.kind);glUniform4f(kSw,s.sway[0],s.sway[1],s.sway[2],s.kind==16?1.f:0.f);
-      glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,s.tex);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);stats.draws++;stats.tris+=g.count/3;}
+    for(auto&s:skin){if((s.kind==6||s.kind==13)!=(pass==1))continue;auto&g=skinMeshes_[s.mesh];glBindVertexArray(g.vao);glUniformMatrix4fv(kM,1,GL_FALSE,s.model.m);glUniformMatrix4fv(kJ,s.nj,GL_FALSE,s.joints);glUniform3f(kT,s.tint.x,s.tint.y,s.tint.z);glUniform4fv(kB,1,s.col);bool a2c=s.mask&&curMsOn_&&s.kind>=16;glUniform1f(kMk,s.mask?(a2c?2.f:1.f):0.f);glUniform1i(kK,s.kind);glUniform4f(kSw,s.sway[0],s.sway[1],s.sway[2],s.kind==16?1.f:0.f);
+      glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,s.tex);if(a2c)glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);glDrawElements(GL_TRIANGLES,g.count,GL_UNSIGNED_INT,0);if(a2c)glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);stats.draws++;stats.tris+=g.count/3;}
     }glDisable(GL_BLEND);glDepthMask(GL_TRUE);
     glActiveTexture(GL_TEXTURE0);}
 }

@@ -81,6 +81,7 @@ private:
   int vcMode_=0; bool vcHairDirty_=false; CharDef vcCd_; bool vcCdInit_=false; int vcHairPreset_=0,vcColor_=2,vcBeard_=0;
   CharDef& teacherDef();
   void applyHairPreset(int i); void rebuildTeacher(); void drawHairPanels();
+  float shadowR_=55.f;
   bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);
   // character creator (creator.cpp)
   bool scEd_=false; Sculpt sc_; int scDrag_=-1,scDragId_=-1,scStroke_=-1,scBase_=0; Entity* scEntity(); void openSculpt(); void closeSculpt(); void scRebuild(); bool scPointer(int type,int id,float px,float py); void scTap(int id); void drawSculpt(float W,float H); void scLive(); void scBuildBase(int b); bool scModel(Model& m);

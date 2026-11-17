@@ -60,7 +60,7 @@ void App::voiceTap(int id){
   else if(id==1014){vcText_.clear();vcPreset_=-1;vcFocus_=true;}}
 
 void App::voiceRenderFace(){
-  if(!vcFaceOk_){if(vcFace_.fbo==0&&!r_->createTarget(vcFace_,1024,880))return;
+  if(!vcFaceOk_){if(vcFace_.fbo==0&&!r_->createTarget(vcFace_,1024,880,4))return;
     vcScene_=Scene();{auto& f=vcScene_.add(P_PLANE,"StudioFloor");f.pos={0,0,0};f.scale={40,1,40};f.color=Col::hex(0x23272e);}
     auto& en=vcScene_.add(P_MODEL,"Teacher");en.asset="gen:teacher";en.pos={0,0,0};vcFaceId_=en.id;vcFaceOk_=true;}
   Model* m=modelFor("gen:teacher");if(!m)return;
@@ -75,7 +75,7 @@ void App::voiceRenderFace(){
   {float sx=std::sin(t_*1.3f)*0.5f+std::sin(t_*0.47f)*0.3f,sz=std::sin(t_*0.9f+1.f)*0.4f;sx+=(vcPlaying_?std::sin(t_*7.f)*0.25f*k.energy:0.f);m->sway[0]=sx*0.010f;m->sway[1]=-0.0015f*std::fabs(sx);m->sway[2]=sz*0.008f;}
   m->applyMorphs(*r_);
   Entity* en=vcScene_.get(vcFaceId_);if(en){en->rot={0,std::sin(t_*0.6f)*4.f,0};}
-  renderThumb(vcFace_,vcScene_,Vec3{0.012f,1.672f,0.80f},Vec3{0.012f,1.650f,0.0f},0.50f);
+  shadowR_=0.30f;renderThumb(vcFace_,vcScene_,Vec3{0.012f,1.672f,0.80f},Vec3{0.012f,1.650f,0.0f},0.50f);shadowR_=55.f;
 }
 void App::drawFace(float cx,float cy,float sc){(void)cx;(void)cy;(void)sc;}
 
