@@ -56,7 +56,7 @@ bool App::btn(int id,float x,float y,float w,float h){btns_.push_back({id,x,y+0,
 void App::update(float dt){for(auto& kv:minst_){const Entity* e=nullptr;if(kv.first.first==&scene_)e=scene_.get(kv.first.second);if(e)kv.second.param=e->animParam;if(e&&!(animEd_&&e->id==sel_)){kv.second.lookOn=e->lookOn;kv.second.lookYaw=e->lookYaw;kv.second.lookPitch=e->lookPitch;}if(e&&e->anim=="StateMachine"){Entity* me=scene_.get(kv.first.second);if(me&&!me->trigger.empty()){kv.second.trigger=me->trigger;me->trigger.clear();}kv.second.smTick(e->animParam);}kv.second.update(dt,e?e->animSpeed:1.f);if(!kv.second.fired.empty()){if(e){Entity* me=scene_.get(kv.first.second);if(me)me->event=kv.second.fired.back();}kv.second.fired.clear();}}t_+=dt;trT_+=dt;A_=1;oy_=0;
   for(int i=0;i<1200;i++){float tg=(heldId_==i)?1.f:0.f;press_[i]+=(tg-press_[i])*std::min(1.0f,dt*20);}
   if(toastT_>0)toastT_-=dt;fpsAcc_+=dt;fpsN_++;if(fpsAcc_>0.5f){fps_=fpsN_/fpsAcc_;fpsAcc_=0;fpsN_=0;}
-  if(scr_==EDITOR)editorUpdate(dt);if(scr_==VOICE)voiceUpdate(dt);}
+  if(scr_==EDITOR)editorUpdate(dt);if(scr_==VOICE){voiceUpdate(dt);if(vcMode_==2)teachUpdate(dt);}}
 
 void App::pointer(int type,int id,float px,float py){float s=ui.s();float x=px/s,y=py/s;
   if(type==0){
@@ -170,7 +170,7 @@ void App::drawImport(){float W=W_/ui.s();header("Import project","Bring a projec
 }
 
 void App::render(){
-  btns_.clear();if(scr_!=EDITOR||thumbDirty_||(cbOpen_&&cbTab_==1))ensureThumbs();if(scr_==VOICE)voiceRenderFace();
+  btns_.clear();if(scr_!=EDITOR||thumbDirty_||(cbOpen_&&cbTab_==1))ensureThumbs();if(scr_==VOICE){if(vcMode_==2)teachRender();else voiceRenderFace();}
   if(scr_==EDITOR){drawEditor();}
   else{drawBackground();if(scr_==HOME)drawHome();else if(scr_==TEMPLATES)drawTemplates();else if(scr_==VOICE)drawVoice();else drawImport();}
   A_=1;oy_=0;

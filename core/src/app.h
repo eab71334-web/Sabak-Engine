@@ -17,6 +17,7 @@
 #include <functional>
 namespace sk {
 struct Project { std::string name,dir; int tmpl=1; long created=0; };
+CharDef studentDef(int i);
 class App {
 public:
   bool init(Renderer& r,const std::string& dataDir,int w,int h);
@@ -76,10 +77,13 @@ private:
   std::string vcText_="Good morning students. Today we will learn about science."; int vcVoice_=0,vcPreset_=-1; bool vcFocus_=false,vcPlaying_=false,vcHas_=false,vcBusy_=false;
   Speech vcSp_; float vcT_=0; std::string vcStatus_="Pick a voice and press Play.";
   std::mutex vcMx_; Speech vcPend_; bool vcPendOk_=false,vcPendSet_=false;
-  void drawVoice(); void voiceTap(int id); void voiceUpdate(float dt); void voicePlay(); void drawFace(float cx,float cy,float sc); void voiceRenderFace(); Scene vcScene_; Target vcFace_; bool vcFaceOk_=false; float vcW_[16]={0}; int vcFaceId_=-1;
+  void drawVoice(); void voiceTap(int id); void voiceUpdate(float dt); void voicePlay(); void drawFace(float cx,float cy,float sc); void voiceRenderFace(); void voiceMouthApply(Model* m); Scene vcScene_; Target vcFace_; bool vcFaceOk_=false; float vcW_[16]={0}; int vcFaceId_=-1;
   // hair studio state
   int vcMode_=0; bool vcHairDirty_=false; CharDef vcCd_; bool vcCdInit_=false; int vcHairPreset_=0,vcColor_=2,vcBeard_=0;
   CharDef& teacherDef();
+  // class scene (teachscene.cpp)
+  Scene tcScene_; Target tcTarget_; bool tcOk_=false,tcRun_=false; float tcT_=0; int tcCam_=0,tcTeacher_=-1,tcBook_=-1,tcStu_[6]={-1,-1,-1,-1,-1,-1}; bool tcSpoke_=false; int tcPh_=0; float tcPT_=0,tcX_=-3.2f,tcYaw_=90.f;
+  void teachBuild(); void teachUpdate(float dt); void teachRender(); void drawTeach(); void teachTap(int id);
   void applyHairPreset(int i); void rebuildTeacher(); void drawHairPanels();
   float shadowR_=55.f;
   bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);

@@ -43,6 +43,8 @@ void App::voiceUpdate(float dt){
 
 void App::voiceTap(int id){
   CharDef& cd=teacherDef();
+  if(id==1072){vcMode_=2;vcFocus_=false;return;}
+  if(id>=1080&&id<=1082){teachTap(id);return;}
   if(id==1070){vcMode_=0;return;}
   if(id==1071){vcMode_=1;vcFocus_=false;return;}
   if(id>=1020&&id<=1027){int row=(id-1020)/2;bool plus=(id&1)==1;float* pv[4]={&cd.hairLen,&cd.hairDens,&cd.hairCurl,&cd.hairClump};float lo[4]={0.3f,0.3f,0.f,0.f},hi[4]={1.8f,1.5f,1.f,1.f};
@@ -59,11 +61,7 @@ void App::voiceTap(int id){
   else if(id==1013){vcPlaying_=false;vcT_=0;if(playAudio)playAudio(nullptr,0,24000);}
   else if(id==1014){vcText_.clear();vcPreset_=-1;vcFocus_=true;}}
 
-void App::voiceRenderFace(){
-  if(!vcFaceOk_){if(vcFace_.fbo==0&&!r_->createTarget(vcFace_,1024,880,4))return;
-    vcScene_=Scene();{auto& f=vcScene_.add(P_PLANE,"StudioFloor");f.pos={0,0,0};f.scale={40,1,40};f.color=Col::hex(0x23272e);}
-    auto& en=vcScene_.add(P_MODEL,"Teacher");en.asset="gen:teacher";en.pos={0,0,0};vcFaceId_=en.id;vcFaceOk_=true;}
-  Model* m=modelFor("gen:teacher");if(!m)return;
+void App::voiceMouthApply(Model* m){
   // mouth key -> viseme morph weights (6 vOpen,7 vPucker,8 vWide,9 vPress,10 vUpTeeth,11 vLowLip,12 vTongue; 2 blink, 3 brows)
   MouthKey k{};k.jaw=0;if(vcHas_&&vcPlaying_&&!vcSp_.mouth.empty()){size_t i=(size_t)std::max(0.f,std::min((float)vcSp_.mouth.size()-1,vcT_*100.f));k=vcSp_.mouth[i];}
   float tgt[16]={0};float press=k.close;
@@ -74,6 +72,14 @@ void App::voiceRenderFace(){
   for(int i=0;i<13&&i<(int)m->morphNames.size();i++){vcW_[i]+=(tgt[i]-vcW_[i])*(i==2?1.f:a);m->morphW[i]=vcW_[i];}
   {float sx=std::sin(t_*1.3f)*0.5f+std::sin(t_*0.47f)*0.3f,sz=std::sin(t_*0.9f+1.f)*0.4f;sx+=(vcPlaying_?std::sin(t_*7.f)*0.25f*k.energy:0.f);m->sway[0]=sx*0.010f;m->sway[1]=-0.0015f*std::fabs(sx);m->sway[2]=sz*0.008f;}
   m->applyMorphs(*r_);
+}
+
+void App::voiceRenderFace(){
+  if(!vcFaceOk_){if(vcFace_.fbo==0&&!r_->createTarget(vcFace_,1024,880,4))return;
+    vcScene_=Scene();{auto& f=vcScene_.add(P_PLANE,"StudioFloor");f.pos={0,0,0};f.scale={40,1,40};f.color=Col::hex(0x23272e);}
+    auto& en=vcScene_.add(P_MODEL,"Teacher");en.asset="gen:teacher";en.pos={0,0,0};vcFaceId_=en.id;vcFaceOk_=true;}
+  Model* m=modelFor("gen:teacher");if(!m)return;
+  voiceMouthApply(m);
   Entity* en=vcScene_.get(vcFaceId_);if(en){en->rot={0,std::sin(t_*0.6f)*4.f,0};}
   shadowR_=0.30f;renderThumb(vcFace_,vcScene_,Vec3{0.012f,1.672f,0.80f},Vec3{0.012f,1.650f,0.0f},0.50f);shadowR_=55.f;
 }
@@ -110,7 +116,8 @@ void App::drawHairPanels(){
 void App::drawVoice(){
   float W=W_/ui.s(),H=H_/ui.s();(void)H;
   header("Voice Studio","Type or pick a line, choose a voice, press Play - lips follow the sound.");
-  fbtn(1070,24,60,100,20,"Voice",1,vcMode_==0);fbtn(1071,128,60,100,20,"Hair",1,vcMode_==1);
+  if(vcMode_==2){drawTeach();return;}
+  fbtn(1070,24,60,100,20,"Voice",1,vcMode_==0);fbtn(1071,128,60,100,20,"Hair",1,vcMode_==1);fbtn(1072,232,60,100,20,"Class",1,false);
   if(vcMode_==1){drawHairPanels();}else{
   // ---- text panel
   sect(1);panel(24,84,430,92,"TEXT");

@@ -170,6 +170,7 @@ void study(PB& P){desk(P);P.push(T(-0.40f,0.7575f,0.05f)*Mat4::rotY(0.12f));book
 bool buildProp(Renderer& r,const std::string& kind,Model& out){PB P(&r);float h=1,rad=1;
   if(kind=="desk"){desk(P);h=0.76f;rad=1.0f;}
   else if(kind=="books"){books(P);h=0.20f;rad=0.25f;}
+  else if(kind=="book"){book(P,0.215f,0.032f,0.285f,0.45f,0.08f,0.10f,0.88f,0.72f,0.32f,3);h=0.032f;rad=0.2f;}
   else if(kind=="bag"){bag(P);h=0.55f;rad=0.35f;}
   else if(kind=="pens"){cup(P,true);h=0.28f;rad=0.15f;}
   else if(kind=="tshirt"){tshirt(P);h=0.7f;rad=0.45f;}
