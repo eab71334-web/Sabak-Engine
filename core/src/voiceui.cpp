@@ -44,7 +44,7 @@ void App::voiceUpdate(float dt){
 void App::voiceTap(int id){
   CharDef& cd=teacherDef();
   if(id==1072){vcMode_=2;vcFocus_=false;return;}
-  if(id>=1080&&id<=1082){teachTap(id);return;}
+  if(id>=1080&&id<=1084){teachTap(id);return;}
   if(id==1070){vcMode_=0;return;}
   if(id==1071){vcMode_=1;vcFocus_=false;return;}
   if(id>=1020&&id<=1027){int row=(id-1020)/2;bool plus=(id&1)==1;float* pv[4]={&cd.hairLen,&cd.hairDens,&cd.hairCurl,&cd.hairClump};float lo[4]={0.3f,0.3f,0.f,0.f},hi[4]={1.8f,1.5f,1.f,1.f};
@@ -61,15 +61,29 @@ void App::voiceTap(int id){
   else if(id==1013){vcPlaying_=false;vcT_=0;if(playAudio)playAudio(nullptr,0,24000);}
   else if(id==1014){vcText_.clear();vcPreset_=-1;vcFocus_=true;}}
 
-void App::voiceMouthApply(Model* m){
-  // mouth key -> viseme morph weights (6 vOpen,7 vPucker,8 vWide,9 vPress,10 vUpTeeth,11 vLowLip,12 vTongue; 2 blink, 3 brows)
-  MouthKey k{};k.jaw=0;if(vcHas_&&vcPlaying_&&!vcSp_.mouth.empty()){size_t i=(size_t)std::max(0.f,std::min((float)vcSp_.mouth.size()-1,vcT_*100.f));k=vcSp_.mouth[i];}
+// Drive one head: mouth key -> viseme morph weights (6 vOpen,7 vPucker,8 vWide,9 vPress,10 vUpTeeth,11 vLowLip,12 vTongue; 2 blink).
+// W[0..15] = smoothed weights, W[16..31] = weights last uploaded (the mesh is only re-morphed when something changed).
+void App::mouthDrive(Model* m,const MouthKey& k,float* W,float tt,float dt,bool speaking,float blinkOff){
   float tgt[16]={0};float press=k.close;
   tgt[6]=std::min(1.f,k.jaw*1.05f)*(1.f-press);tgt[7]=k.round*(1.f-0.5f*k.wide);tgt[8]=k.wide*(1.f-press);tgt[9]=press;
   tgt[10]=std::min(1.f,k.teeth*0.5f+k.fv*0.6f);tgt[11]=k.fv*0.7f;tgt[12]=k.tongue;
-  float bl=(std::fmod(t_,3.7f)>3.55f)?1.f:0.f;tgt[2]=bl;tgt[3]=0.f;
-  static float prevT=0;float dt=std::max(0.001f,std::min(0.05f,t_-prevT));prevT=t_;float a=1.f-std::exp(-dt*28.f);
-  for(int i=0;i<13&&i<(int)m->morphNames.size();i++){vcW_[i]+=(tgt[i]-vcW_[i])*(i==2?1.f:a);m->morphW[i]=vcW_[i];}
+  tgt[2]=(std::fmod(tt+blinkOff,3.7f)>3.55f)?1.f:0.f;
+  float a=1.f-std::exp(-std::max(0.001f,std::min(0.05f,dt))*28.f);bool ch=false;
+  for(int i=0;i<13&&i<(int)m->morphNames.size();i++){W[i]+=(tgt[i]-W[i])*(i==2?1.f:a);m->morphW[i]=W[i];if(std::fabs(W[i]-W[16+i])>0.004f)ch=true;}
+  {float sx=std::sin(tt*1.3f+blinkOff)*0.5f+std::sin(tt*0.47f+blinkOff)*0.3f,sz=std::sin(tt*0.9f+1.f+blinkOff)*0.4f;sx+=(speaking?std::sin(tt*7.f)*0.25f*k.energy:0.f);m->sway[0]=sx*0.010f;m->sway[1]=-0.0015f*std::fabs(sx);m->sway[2]=sz*0.008f;}
+  if(ch){for(int i=0;i<16;i++)W[16+i]=W[i];m->applyMorphs(*r_);}
+}
+void App::voiceMouthApply(Model* m){
+  MouthKey k{};k.jaw=0;if(vcHas_&&vcPlaying_&&!vcSp_.mouth.empty()){size_t i=(size_t)std::max(0.f,std::min((float)vcSp_.mouth.size()-1,vcT_*100.f));k=vcSp_.mouth[i];}
+  static float prevT=0;float dt=std::max(0.001f,std::min(0.05f,t_-prevT));prevT=t_;
+  static float W[32]={0};float* w=vcW_;(void)W;
+  mouthDriveV(m,k,w,dt);
+}
+void App::mouthDriveV(Model* m,const MouthKey& k,float* w16,float dt){
+  float tgt[16]={0};float press=k.close;
+  tgt[6]=std::min(1.f,k.jaw*1.05f)*(1.f-press);tgt[7]=k.round*(1.f-0.5f*k.wide);tgt[8]=k.wide*(1.f-press);tgt[9]=press;
+  tgt[10]=std::min(1.f,k.teeth*0.5f+k.fv*0.6f);tgt[11]=k.fv*0.7f;tgt[12]=k.tongue;tgt[2]=(std::fmod(t_,3.7f)>3.55f)?1.f:0.f;
+  float a=1.f-std::exp(-dt*28.f);for(int i=0;i<13&&i<(int)m->morphNames.size();i++){w16[i]+=(tgt[i]-w16[i])*(i==2?1.f:a);m->morphW[i]=w16[i];}
   {float sx=std::sin(t_*1.3f)*0.5f+std::sin(t_*0.47f)*0.3f,sz=std::sin(t_*0.9f+1.f)*0.4f;sx+=(vcPlaying_?std::sin(t_*7.f)*0.25f*k.energy:0.f);m->sway[0]=sx*0.010f;m->sway[1]=-0.0015f*std::fabs(sx);m->sway[2]=sz*0.008f;}
   m->applyMorphs(*r_);
 }

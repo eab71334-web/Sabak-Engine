@@ -94,7 +94,7 @@ bool buildHuman(Renderer& r,const CharDef& cd,Model& out){
   float waistY=hp[bidx("spine05")].y;
   if(cd.outfit!=2){
     float fold=1.f;
-    patchF([&](const SkinVertex& s,const std::string& n){bool torso=starts(n,"spine")||starts(n,"clavicle");bool arm=starts(n,"upperarm")||(longSl&&starts(n,"lowerarm"));
+    patchF([&](const SkinVertex& s,const std::string& n){bool torso=starts(n,"spine")||starts(n,"clavicle")||n=="root";bool arm=starts(n,"upperarm")||(longSl&&starts(n,"lowerarm"));
         if(!torso&&!arm&&n!="neck01")return -1.f;float hemY=waistY-0.10f;float w=sstep((s.p[1]-hemY)/0.05f);
         if(n=="neck01"||s.p[1]>hNeck.y-0.012f)w=std::min(w,sstep((hNeck.y+0.03f-s.p[1])/0.03f));
         if(arm||starts(n,"clavicle")){float ax=std::fabs(s.p[0]);w=std::min(w,sstep((sleeveEnd-ax)/0.035f));}

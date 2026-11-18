@@ -27,6 +27,7 @@ public:
   void pointer(int type,int id,float x,float y);   // type 0 down, 1 move, 2 up. x,y in framebuffer pixels
   void key(const std::string& k,bool down);
   const char* screenName() const;
+  void cineBegin(int w,int h); void setDbgCam(bool on,Vec3 c,Vec3 t,float f){dbgCam_=on;dbgC0_=c;dbgC1_=t;dbgFov_=f;} void cineJump(float t); float cineDuration(); bool cineAudio(std::vector<float>& out,int& rate);
   // ---- Voice Studio (voiceui.cpp)
   std::function<void(const float*,int,int)> playAudio;   // set by the platform: play mono float PCM (data,count,rate)
   void textInput(const std::string& s); void keyCode(int c);   // c: 1 backspace, 2 return
@@ -77,13 +78,15 @@ private:
   std::string vcText_="Good morning students. Today we will learn about science."; int vcVoice_=0,vcPreset_=-1; bool vcFocus_=false,vcPlaying_=false,vcHas_=false,vcBusy_=false;
   Speech vcSp_; float vcT_=0; std::string vcStatus_="Pick a voice and press Play.";
   std::mutex vcMx_; Speech vcPend_; bool vcPendOk_=false,vcPendSet_=false;
-  void drawVoice(); void voiceTap(int id); void voiceUpdate(float dt); void voicePlay(); void drawFace(float cx,float cy,float sc); void voiceRenderFace(); void voiceMouthApply(Model* m); Scene vcScene_; Target vcFace_; bool vcFaceOk_=false; float vcW_[16]={0}; int vcFaceId_=-1;
+  void drawVoice(); void voiceTap(int id); void voiceUpdate(float dt); void voicePlay(); void drawFace(float cx,float cy,float sc); void voiceRenderFace(); void voiceMouthApply(Model* m); void mouthDrive(Model* m,const MouthKey& k,float* W,float tt,float dt,bool speaking,float blinkOff); void mouthDriveV(Model* m,const MouthKey& k,float* w16,float dt); Scene vcScene_; Target vcFace_; bool vcFaceOk_=false; float vcW_[16]={0}; int vcFaceId_=-1;
   // hair studio state
   int vcMode_=0; bool vcHairDirty_=false; CharDef vcCd_; bool vcCdInit_=false; int vcHairPreset_=0,vcColor_=2,vcBeard_=0;
   CharDef& teacherDef();
   // class scene (teachscene.cpp)
-  Scene tcScene_; Target tcTarget_; bool tcOk_=false,tcRun_=false; float tcT_=0; int tcCam_=0,tcTeacher_=-1,tcBook_=-1,tcStu_[6]={-1,-1,-1,-1,-1,-1}; bool tcSpoke_=false; int tcPh_=0; float tcPT_=0,tcX_=-3.2f,tcYaw_=90.f;
-  void teachBuild(); void teachUpdate(float dt); void teachRender(); void drawTeach(); void teachTap(int id);
+  Scene tcScene_; Target tcTarget_,tcFullT_; bool tcOk_=false,tcRun_=false,tcFull_=false,tcAuto_=true; float tcT_=0; int tcCam_=0,tcTeacher_=-1,tcBook_=-1,tcStu_[6]={-1,-1,-1,-1,-1,-1}; int tcInk_[6][5]; int tcChalk_[6]; int tcSeq_=0; int tcFW_=0,tcFH_=0;
+  std::shared_ptr<struct TcCine> tcC_; bool dbgCam_=false; Vec3 dbgC0_,dbgC1_; float dbgFov_=0.9f; std::string tcSub_; float tcFade_=1.f;
+  void teachBuild(); void teachUpdate(float dt); void teachRender(); void drawTeach(); void teachTap(int id); void teachCineMake();
+ 
   void applyHairPreset(int i); void rebuildTeacher(); void drawHairPanels();
   float shadowR_=55.f;
   bool bhOpen_=false; int bhSel_=0; void bhTap(int id); void drawBehavior(float W,float H);

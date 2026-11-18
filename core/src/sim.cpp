@@ -27,6 +27,17 @@ int main(int argc,char** argv){
     else if(c=="reset"){std::filesystem::remove_all(data);std::puts("{\"reset\":true}");}
     else if(c=="shot"){std::string p;s>>p;app->render();std::vector<unsigned char> px;r.readPixels(px);stbi_write_png(p.c_str(),r.width(),r.height(),4,px.data(),r.width()*4);
       std::printf("{\"shot\":\"%s\",\"screen\":\"%s\",\"draws\":%d}\n",p.c_str(),app->screenName(),r.stats.draws);}
+    else if(c=="cam"){float a[7];for(float& q:a)s>>q;app->setDbgCam(true,{a[0],a[1],a[2]},{a[3],a[4],a[5]},a[6]);}
+    else if(c=="camoff"){app->setDbgCam(false,{0,0,0},{0,0,0},0.9f);}
+    else if(c=="cinebegin"){int w,h;s>>w>>h;W=w;H=h;r.resize(W,H);app->resize(W,H);app->cineBegin(W,H);}
+    else if(c=="cinejump"){float t;s>>t;app->cineJump(t);}
+    else if(c=="cine"){int fps=24;std::string out;float t0=0,t1=-1;s>>fps>>out>>t0>>t1;if(t1<0)t1=app->cineDuration();
+      char cmd[1024];std::snprintf(cmd,sizeof cmd,"ffmpeg -y -loglevel error -f rawvideo -pix_fmt rgba -s %dx%d -r %d -i - -vf format=yuv420p -c:v libx264 -preset medium -crf 18 %s",r.width(),r.height(),fps,out.c_str());
+      FILE* pf=popen(cmd,"w");int n=0;float dtf=1.f/fps;if(t0>0)app->cineJump(t0);
+      for(float t=t0;t<t1;t+=dtf){app->update(dtf);app->render();std::vector<unsigned char> px;r.readPixels(px);fwrite(px.data(),1,px.size(),pf);if((n++%24)==0){std::fprintf(stderr,"cine t=%.1f\n",t);}}
+      pclose(pf);std::printf("{\"cine\":\"%s\",\"frames\":%d}\n",out.c_str(),n);}
+    else if(c=="cineaudio"){std::string p;s>>p;std::vector<float> a;int rate=24000;if(app->cineAudio(a,rate)){FILE* f2=fopen(p.c_str(),"wb");std::vector<short> pcm(a.size());for(size_t i=0;i<a.size();i++)pcm[i]=(short)std::max(-32767.f,std::min(32767.f,a[i]*32767.f));
+      unsigned dl=(unsigned)(pcm.size()*2),sr=rate,br=rate*2;short fmt=1,ch=1,ba=2,bits=16;unsigned fl=16,rl=36+dl;fwrite("RIFF",1,4,f2);fwrite(&rl,4,1,f2);fwrite("WAVEfmt ",1,8,f2);fwrite(&fl,4,1,f2);fwrite(&fmt,2,1,f2);fwrite(&ch,2,1,f2);fwrite(&sr,4,1,f2);fwrite(&br,4,1,f2);fwrite(&ba,2,1,f2);fwrite(&bits,2,1,f2);fwrite("data",1,4,f2);fwrite(&dl,4,1,f2);fwrite(pcm.data(),2,pcm.size(),f2);fclose(f2);std::printf("{\"audio\":\"%s\"}\n",p.c_str());}}
     else if(c=="state")std::printf("{\"frames\":%d,\"screen\":\"%s\",\"entities\":%d,\"selected\":%d,\"playing\":%d}\n",frames,app->screenName(),app->entityCount(),app->selected(),app->playing()?1:0);
     else std::printf("{\"error\":\"unknown command %s\"}\n",c.c_str());}
   return 0;}

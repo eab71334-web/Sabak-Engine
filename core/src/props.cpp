@@ -22,7 +22,7 @@ Img mkTex(int W,int H,const std::function<void(float,float,float*)>& f){g_tw=W;g
 // ---- procedural textures (greyscale/tintable where possible; material colour multiplies them) ----
 // wood: long grain along v, growth rings, pores, knots-like figure
 Img woodTex(int seed){return mkTex(2048,2048,[=](float u,float v,float* c){float warp=fbm(u*2.f,v*3.f,seed)*2.4f+fbm(u*5.f,v*8.f,seed+3)*0.35f;float ring=std::sin((v*10.f+warp)*PI)*0.5f+0.5f;ring=std::pow(ring,1.5f);
-  float pore=vnoise(u*60.f,v*300.f,seed+9);pore=pore>0.72f?(pore-0.72f)*2.8f:0.f;float fig=fbm(u*1.5f,v*2.f,seed+4);float fiber=vnoise(u*30.f,v*500.f,seed+12);
+  float pore=vnoise(u*60.f,v*300.f,seed+9);pore=pore>0.72f?(pore-0.72f)*1.6f:0.f;float fig=fbm(u*1.5f,v*2.f,seed+4);float fiber=vnoise(u*30.f,v*500.f,seed+12);
   float t=0.86f+0.07f*ring-0.10f*pore+0.05f*(fiber-0.5f)+0.08f*(fig-0.5f);c[0]=0.84f*t;c[1]=0.70f*t;c[2]=0.54f*t;});}
 // paper page edge: fine horizontal sheet lines;  paper top: ruled lines + noise
 Img paperEdgeTex(){return mkTex(1024,1024,[](float u,float v,float* c){float sheet=std::sin(v*1024.f*PI/1.5f)*0.5f+0.5f;float n=vnoise(u*200.f,v*400.f,3);float t=0.90f-0.07f*sheet-0.04f*n;c[0]=t;c[1]=t*0.97f;c[2]=t*0.90f;});}
@@ -167,8 +167,80 @@ void study(PB& P){desk(P);P.push(T(-0.40f,0.7575f,0.05f)*Mat4::rotY(0.12f));book
   P.push(T(-0.95f,0,-0.05f)*Mat4::rotY(0.55f));bag(P);P.pop();P.push(T(0.95f,0,0.55f)*Mat4::rotY(-0.40f));folded(P);P.pop();
   P.push(T(0.22f,0.7575f,0.20f)*Mat4::rotY(0.4f)*Mat4::rotX(PI/2));pen(P,0.10f,0.30f,0.15f);P.pop();}
 
+
+// ------------------------------------------------------------------ classroom furniture
+Img ruledTex(){return mkTex(1024,1024,[](float u,float v,float* c){float t=0.93f-0.03f*vnoise(u*300.f,v*300.f,4)-0.015f*fbm(u*8.f,v*8.f,2);float r=t,g=t*0.985f,b=t*0.93f;
+  float ln=std::fabs(std::fmod(v*24.f,1.f)-0.5f);if(ln<0.03f&&v>0.06f){float k=1.f-ln/0.03f;r=r*(1-0.55f*k);g=g*(1-0.40f*k);b=b*(1-0.10f*k);}
+  if(std::fabs(u-0.13f)<0.004f){r=r*0.8f+0.2f;g*=0.45f;b*=0.45f;}
+  float e=std::min(u,1.f-u);if(e<0.04f){float k=1.f-e/0.04f;r*=1-0.08f*k;g*=1-0.08f*k;b*=1-0.1f*k;}c[0]=r;c[1]=g;c[2]=b;});}
+Img scribbleTex(){return mkTex(1024,64,[](float u,float v,float* c){float cov=0;int cell=(int)(u*34.f);float cu=u*34.f-cell;float h1=hsh(cell,1,5),h2=hsh(cell,2,5),h3=hsh(cell,3,5);
+  bool gap=(cell%6)==5||h1<0.08f;if(!gap){float y=0.5f+0.26f*std::sin(6.2831f*(cu*(1.2f+h2*1.6f)+h3));if(std::fabs(v-y)<0.09f)cov=1;float asc=0.35f+0.3f*h2;if(h1>0.55f&&std::fabs(cu-asc)<0.07f&&v>0.18f&&v<0.84f)cov=1;}
+  c[0]=0.07f;c[1]=0.10f;c[2]=0.36f;c[3]=cov;});}
+void notebook(PB& P,int seed){unsigned rt=P.T("ruled",[]{return ruledTex();});int pg=P.mat(14,1,1,1,rt),edge=P.mat(14,1,1,1,P.T("pedge",[]{return paperEdgeTex();})),cv=P.mat(15,0.10f,0.25f,0.55f,P.T("cover",[]{return clothCoverTex(5);}));(void)seed;
+  P.rbox(cv,{0,0.0013f,0},{0.158f,0.0013f,0.112f},0.0010f,2,2.f);
+  for(int sd=-1;sd<=1;sd+=2){P.rbox(edge,{sd*0.077f,0.0033f,0},{0.074f,0.0026f,0.104f},0.0008f,2,3.f);
+    P.surf(pg,14,6,false,[sd](float u,float v){float x=sd*(0.003f+u*0.148f);float h=0.0078f+0.0045f*std::pow(1.f-u,2.2f);return Vec3{x,h,(v-0.5f)*0.208f};});}}
+Img chalkTex(){return mkTex(1024,64,[](float u,float v,float* c){float cov=0;int cell=(int)(u*26.f);float cu=u*26.f-cell;float h1=hsh(cell,1,8),h2=hsh(cell,2,8),h3=hsh(cell,3,8);
+  bool gap=(cell%5)==4||h1<0.07f;if(!gap){float y=0.5f+0.24f*std::sin(6.2831f*(cu*(1.0f+h2*1.4f)+h3));float d=std::fabs(v-y);float dust=0.75f+0.25f*vnoise(u*400.f,v*60.f,3);if(d<0.11f)cov=dust;float asc=0.3f+0.4f*h2;if(h1>0.45f&&std::fabs(cu-asc)<0.08f&&v>0.1f&&v<0.9f)cov=dust;}
+  c[0]=c[1]=c[2]=0.95f;c[3]=cov;});}
+void chalkline(PB& P){int ink=P.mat(9,1,1,1,P.T("chalk",[]{return chalkTex();}));P.mats[ink].mask=true;
+  P.surf(ink,2,2,false,[](float u,float v){return Vec3{u*1.0f,0.0006f,(v-0.5f)*0.075f};});}
+void inkline(PB& P){int ink=P.mat(14,1,1,1,P.T("scribble",[]{return scribbleTex();}));P.mats[ink].mask=true;
+  P.surf(ink,2,2,false,[](float u,float v){return Vec3{u*0.14f,0.0006f,(v-0.5f)*0.012f*2.f};});}
+void schooldesk(PB& P){unsigned lam=P.T("wood31",[]{return woodTex(31);}),ply=P.T("wood17",[]{return woodTex(17);});
+  int top=P.mat(14,1.0f,0.93f,0.80f,lam),band=P.mat(14,0.62f,0.46f,0.30f,ply),steel=P.mat(7,0.78f,0.79f,0.82f),blk=P.mat(9,0.03f,0.03f,0.035f),dark=P.mat(9,0.07f,0.06f,0.05f),pl=P.mat(14,0.95f,0.82f,0.64f,ply);
+  P.rbox(top,{0,0.7325f,0},{0.40f,0.0125f,0.275f},0.007f,3,1.2f);P.rbox(band,{0,0.7205f,0},{0.402f,0.004f,0.277f},0.003f,2,1.f);
+  P.rbox(dark,{0,0.7452f,0.205f},{0.27f,0.0008f,0.006f},0.0004f,1);                                  // pencil groove
+  for(int sx=-1;sx<=1;sx+=2){for(int sz=-1;sz<=1;sz+=2){P.push(T(sx*0.355f,0.025f,sz*0.225f));P.cyl(steel,0.0125f,0.69f,20);P.pop();P.rbox(blk,{sx*0.355f,0.012f,sz*0.225f},{0.020f,0.012f,0.020f},0.007f,2);}
+    P.beam(steel,{sx*0.355f,0.20f,-0.225f},{sx*0.355f,0.20f,0.225f},0.022f,0.022f,{0,1,0},0.008f);P.beam(steel,{sx*0.355f,0.700f,-0.225f},{sx*0.355f,0.700f,0.225f},0.024f,0.020f,{0,1,0},0.006f);}
+  P.beam(steel,{-0.355f,0.700f,-0.225f},{0.355f,0.700f,-0.225f},0.024f,0.020f,{0,1,0},0.006f);
+  // book tray under the top (open toward the student, +Z)
+  P.rbox(pl,{0,0.5f,-0.01f},{0.355f,0.007f,0.225f},0.003f,2,2.f);P.rbox(pl,{0,0.585f,-0.232f},{0.355f,0.085f,0.007f},0.003f,2,2.f);
+  for(int sx=-1;sx<=1;sx+=2)P.rbox(pl,{sx*0.349f,0.585f,-0.01f},{0.007f,0.085f,0.225f},0.003f,2,2.f);
+  P.push(T(-0.12f,0.5075f+0.020f,-0.02f)*Mat4::rotY(0.06f));book(P,0.215f,0.040f,0.285f,0.12f,0.30f,0.52f,0.86f,0.84f,0.78f,9);P.pop();
+  P.push(T(-0.10f,0.5075f+0.040f+0.012f,-0.02f)*Mat4::rotY(-0.05f));book(P,0.19f,0.024f,0.26f,0.55f,0.18f,0.15f,0.86f,0.84f,0.78f,9);P.pop();
+  // drawer, ajar
+  float sl=0.10f,dx=0.215f;int dr=P.mat(14,0.95f,0.80f,0.58f,ply);
+  P.rbox(dr,{dx,0.655f,0.275f+sl},{0.125f,0.036f,0.009f},0.004f,2,1.5f);P.rbox(steel,{dx,0.665f,0.2865f+sl},{0.040f,0.004f,0.003f},0.0015f,2);
+  P.rbox(dr,{dx,0.625f,0.275f+sl-0.125f},{0.118f,0.006f,0.125f},0.002f,1,2.f);P.rbox(dr,{dx,0.655f,0.275f+sl-0.250f},{0.118f,0.030f,0.006f},0.002f,1,2.f);
+  for(int sx=-1;sx<=1;sx+=2)P.rbox(dr,{dx+sx*0.118f,0.655f,0.275f+sl-0.125f},{0.006f,0.030f,0.125f},0.002f,1,2.f);
+  P.push(T(dx-0.03f,0.636f+0.018f,0.275f+sl-0.09f)*Mat4::rotY(0.15f));{int cs=P.mat(15,0.78f,0.20f,0.22f,P.T("weave",[]{return weaveTex(256,8,3);}));P.rbox(cs,{0,0,0},{0.085f,0.018f,0.030f},0.016f,3,3.f);P.rbox(steel,{0,0.0175f,0},{0.07f,0.0012f,0.002f},0.0008f,1);}P.pop();
+  P.push(T(dx+0.04f,0.633f,0.275f+sl-0.17f)*Mat4::rotY(-0.08f));{int rl=P.mat(5,0.85f,0.78f,0.5f);P.rbox(rl,{0,0,0},{0.075f,0.0015f,0.015f},0.0008f,1);}P.pop();}
+void chair(PB& P){unsigned ply=P.T("wood17",[]{return woodTex(17);});int w=P.mat(14,0.92f,0.74f,0.52f,ply),steel=P.mat(7,0.78f,0.79f,0.82f),blk=P.mat(9,0.03f,0.03f,0.035f);
+  P.rbox(w,{0,0.43f,0},{0.21f,0.0125f,0.20f},0.012f,3,1.5f);
+  for(int sx=-1;sx<=1;sx+=2){for(int sz=-1;sz<=1;sz+=2){P.push(T(sx*0.175f,0.02f,sz*0.165f));P.cyl(steel,0.0115f,0.40f,18);P.pop();P.rbox(blk,{sx*0.175f,0.012f,sz*0.165f},{0.017f,0.012f,0.017f},0.006f,2);}
+    P.beam(steel,{sx*0.175f,0.15f,-0.165f},{sx*0.175f,0.15f,0.165f},0.02f,0.02f,{0,1,0},0.008f);
+    P.beam(steel,{sx*0.175f,0.42f,0.165f},{sx*0.175f,0.80f,0.185f},0.022f,0.022f,{0,1,0},0.009f);}
+  P.beam(steel,{-0.175f,0.42f,-0.165f},{0.175f,0.42f,-0.165f},0.02f,0.02f,{0,1,0},0.008f);
+  for(int th=0;th<2;th++){float off=th*0.012f;P.surf(w,10,6,false,[off](float u,float v){float x=(u-0.5f)*0.40f;float k=1.f-std::pow(2*u-1.f,2.f);return Vec3{x,0.58f+v*0.19f,0.188f+off-0.018f*k+0.012f*v};});}
+  P.rbox(w,{0,0.58f,0.196f},{0.20f,0.006f,0.008f},0.003f,2);P.rbox(w,{0,0.77f,0.204f},{0.20f,0.006f,0.008f},0.003f,2);}
+void teacherdesk(PB& P){unsigned oak=P.T("wood11",[]{return woodTex(11);}),wal=P.T("wood23",[]{return woodTex(23);});
+  int top=P.mat(14,1.0f,0.88f,0.72f,oak),car=P.mat(14,0.60f,0.46f,0.35f,wal),fr=P.mat(14,0.84f,0.68f,0.52f,oak),dark=P.mat(9,0.03f,0.025f,0.02f),brass=P.mat(7,0.85f,0.65f,0.28f),pap=P.mat(14,1,1,1,P.T("pedge",[]{return paperEdgeTex();})),leather=P.mat(11,0.10f,0.22f,0.14f);
+  P.rbox(top,{0,0.7375f,0},{0.80f,0.0225f,0.375f},0.012f,3,1.3f);P.rbox(car,{0,0.711f,0},{0.77f,0.0045f,0.345f},0.003f,1,1.f);
+  for(int sd=-1;sd<=1;sd+=2){float cx=sd*0.575f;P.rbox(car,{cx,0.395f,0.0f},{0.225f,0.325f,0.340f},0.006f,2,1.2f);P.rbox(dark,{cx,0.035f,0},{0.205f,0.035f,0.315f},0.004f,1);
+    for(int k=0;k<3;k++){float y=0.615f-k*0.18f;bool open=(sd>0&&k==1);float z=-0.352f-(open?0.13f:0.f);
+      if(open){P.rbox(dark,{cx,y,-0.345f},{0.200f,0.074f,0.004f},0.001f,1);P.rbox(fr,{cx,y-0.055f,-0.352f-0.065f},{0.186f,0.006f,0.19f},0.002f,1,2.f);for(int e=-1;e<=1;e+=2)P.rbox(fr,{cx+e*0.19f,y-0.01f,-0.352f-0.065f},{0.006f,0.05f,0.19f},0.002f,1,2.f);P.rbox(fr,{cx,y-0.01f,-0.352f+0.125f},{0.186f,0.05f,0.006f},0.002f,1,2.f);
+        P.push(T(cx-0.03f,y-0.049f,-0.45f)*Mat4::rotY(0.1f));P.rbox(pap,{0,0.012f,0},{0.10f,0.012f,0.07f},0.001f,1,2.f);P.pop();P.push(T(cx+0.09f,y-0.03f,-0.43f)*Mat4::rotY(-0.2f));P.rbox(P.mat(9,0.9f,0.9f,0.88f),{0,0,0},{0.05f,0.016f,0.03f},0.003f,2);P.pop();}
+      else P.rbox(dark,{cx,y,-0.349f},{0.202f,0.076f,0.006f},0.001f,1);
+      P.rbox(fr,{cx,y,z-0.0f},{0.200f,0.074f,0.009f},0.004f,2,1.4f);
+      P.rbox(brass,{cx,y+0.02f,z-0.018f},{0.060f,0.004f,0.004f},0.002f,2);for(int e=-1;e<=1;e+=2)P.rbox(brass,{cx+e*0.052f,y+0.02f,z-0.010f},{0.0035f,0.0035f,0.007f},0.0015f,1);
+      P.rbox(brass,{cx,y+0.055f,z-0.0095f},{0.011f,0.016f,0.0015f},0.0008f,1);P.rbox(dark,{cx,y+0.057f,z-0.0112f},{0.0025f,0.0075f,0.0006f},0.0003f,1);}}
+  P.rbox(car,{0,0.45f,0.352f},{0.34f,0.27f,0.010f},0.004f,1,1.f);                                    // modesty panel (class side)
+  P.rbox(dark,{0,0.69f,-0.340f},{0.33f,0.024f,0.006f},0.001f,1);P.rbox(fr,{0,0.69f,-0.349f},{0.325f,0.022f,0.009f},0.004f,2,1.f);P.rbox(brass,{0,0.692f,-0.368f},{0.050f,0.004f,0.004f},0.002f,2);
+  // desk top items
+  P.rbox(leather,{-0.20f,0.7625f,-0.05f},{0.27f,0.0025f,0.19f},0.002f,1);
+  P.push(T(0.58f,0.76f,0.05f));cup(P,true);P.pop();
+  P.push(T(-0.55f,0.76f,0.12f)*Mat4::rotY(0.12f));for(int k=0;k<3;k++){P.push(T(0,0.016f+k*0.026f,0)*Mat4::rotY(0.07f*k));book(P,0.2f+0.01f*k,0.024f,0.27f,0.55f-0.2f*k,0.25f+0.2f*k,0.15f+0.15f*k,0.86f,0.84f,0.78f,4+k);P.pop();}P.pop();
+  P.push(T(0.30f,0.76f+0.0,-0.12f));P.lathe(P.mat(11,0.75f,0.1f,0.08f),{{0,0.0f},{0.020f,0.003f},{0.034f,0.020f},{0.037f,0.040f},{0.030f,0.062f},{0.012f,0.070f},{0,0.066f}},24);P.beam(P.mat(9,0.2f,0.12f,0.05f),{0,0.066f,0},{0.004f,0.082f,0},0.004f,0.004f,{0,0,1},0.001f);P.pop();}   // apple
+
 bool buildProp(Renderer& r,const std::string& kind,Model& out){PB P(&r);float h=1,rad=1;
   if(kind=="desk"){desk(P);h=0.76f;rad=1.0f;}
+  else if(kind=="schooldesk"){schooldesk(P);h=0.76f;rad=0.6f;}
+  else if(kind=="teacherdesk"){teacherdesk(P);h=0.95f;rad=1.0f;}
+  else if(kind=="chair"){chair(P);h=0.82f;rad=0.35f;}
+  else if(kind=="notebook"){notebook(P,1);h=0.012f;rad=0.2f;}
+  else if(kind=="chalkline"){chalkline(P);h=0.001f;rad=0.5f;}
+  else if(kind=="inkline"){inkline(P);h=0.001f;rad=0.1f;}
   else if(kind=="books"){books(P);h=0.20f;rad=0.25f;}
   else if(kind=="book"){book(P,0.215f,0.032f,0.285f,0.45f,0.08f,0.10f,0.88f,0.72f,0.32f,3);h=0.032f;rad=0.2f;}
   else if(kind=="bag"){bag(P);h=0.55f;rad=0.35f;}

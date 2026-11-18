@@ -12,110 +12,274 @@ static const float D2R=0.0174532925f;
 
 CharDef studentDef(int i){CharDef c;c.name="Student"+std::to_string(i);static const unsigned hair[6]={0x241812,0x35210f,0x4a2f1e,0x241812,0x6a4a26,0x35210f};static const unsigned skin[6]={0xc99872,0xb98a62,0xd9a77f,0xa87a54,0xd2a078,0xc08e66};
   static const unsigned shirt[6]={0x3b6fb6,0xb64b4b,0x4b9a6a,0xd0a23a,0x7a5ab0,0x4a8fb0};
-  c.height=1.50f+0.04f*(i%3);c.hv[0]=(i%2)?0.f:1.f;c.hv[1]=0.24f;c.hv[2]=0.35f;c.hv[3]=0.45f;c.hv[7]=1.f;c.hair=1+(i%3);c.outfit=1;c.col[0]=skin[i%6];c.col[1]=hair[i%6];c.col[2]=shirt[i%6];c.col[3]=0x2b2f3a;
-  c.hairLen=(i%2)?1.2f:0.5f;c.hairDens=0.4f;c.browK=0.6f;c.beard=0;return c;}
-static int roleNode(const Model& m,const char* role){for(size_t i=0;i<m.nodeName.size();i++)if(m.boneRole((int)i)==role)return (int)i;return -1;}
+  c.height=1.50f+0.04f*(i%3);c.hv[0]=(i%2)?1.f:0.f;c.hv[1]=0.24f;c.hv[2]=0.35f;c.hv[3]=0.45f;c.hv[7]=1.f;c.hair=(i%2)?1:2;c.outfit=3;c.col[0]=skin[i%6];c.col[1]=hair[i%6];c.col[2]=shirt[i%6];c.col[3]=0x2b2f3a;
+  c.hairLen=(i%2)?0.45f:0.9f;c.hairDens=0.4f;c.browK=0.6f;c.beard=0;return c;}
+static int roleNode(const Model& m,const char* role){for(size_t i=0;i<m.nodeName.size();i++)if(m.boneRole((int)i)==role)return (int)i;for(size_t i=0;i<m.nodeName.size();i++)if(m.nodeName[i]==role)return (int)i;return -1;}
 struct JP{Vec3 r{0,0,0},p{0,0,0};};
 typedef std::map<std::string,JP> PoseMap;
-static void mkClip(Model& m,const char* name,float dur,int N,const std::function<void(float,PoseMap&)>& f){
-  if(m.animIndex(name)>=0)return;int ci=m.addClip(name,"");ClipDef& d=m.clips[ci];d.dur=dur;d.loop=true;
+static void mkClip(Model& m,const char* name,float dur,int N,const std::function<void(float,PoseMap&)>& f,bool loop=true){
+  if(m.animIndex(name)>=0)return;int ci=m.addClip(name,"");ClipDef& d=m.clips[ci];d.dur=dur;d.loop=loop;
   for(int k=0;k<=N;k++){float u=(float)k/N;PoseMap pm;f(u,pm);for(auto& kv:pm){int n=roleNode(m,kv.first.c_str());if(n<0)continue;ClipKey ck;ck.t=u*dur;ck.rot=kv.second.r;ck.pos=kv.second.p;ck.ease=0;d.keys[n].push_back(ck);}}
   m.bakeClip(ci);}
 
-// arm carrying a book against the chest (right arm), left arm free
-static void carryArm(PoseMap& pm,const char* up,const char* lo,const char* hand,float sgn,float swing){
-  pm[up].r={swing,0,sgn*-62.f};pm[lo].r={0,0,0};(void)hand;(void)lo;}
 
-static void armHang(PoseMap& pm,const char* L,float sw,float bend){float s=(L[0]=='L')?-1.f:1.f;pm[std::string("uparm")+L].r={sw,0,s*40.f};pm[std::string("loarm")+L].r={-bend,0,0};}
-static void armCarry(PoseMap& pm){pm["uparmR"].r={0,0,36.f};pm["loarmR"].r={-70.f,34.f,0};pm["handR"].r={0,0,0};}
+// ---------------------------------------------------------------- animation clips (all authored here, procedural)
+static void add(PoseMap& pm,const std::string& n,Vec3 r){JP& j=pm[n];j.r=j.r+r;}
+static void addp(PoseMap& pm,const std::string& n,Vec3 p){JP& j=pm[n];j.p=j.p+p;}
+// finger curl: c = 0 flat .. 1 fist; thumb tucks
+static void hand(PoseMap& pm,char side,float c,float thumb=0.3f){
+  for(int f=2;f<=5;f++){float w=1.f+0.12f*(f-2);for(int j=1;j<=3;j++){char nm[40];std::snprintf(nm,sizeof nm,"finger%d-%d.%c",f,j,side);add(pm,nm,{c*w*(j==1?38.f:j==2?52.f:34.f),0,0});}}
+  for(int j=1;j<=3;j++){char nm[40];std::snprintf(nm,sizeof nm,"finger1-%d.%c",j,side);add(pm,nm,{0,(side=='L'?-1.f:1.f)*thumb*22.f,0});}}
+static void breath(PoseMap& pm,float th,float k=1.f){float b=std::sin(th);add(pm,"spine2",{1.6f*b*k,0,0});add(pm,"clavL",{0,0,-1.8f*b*k});add(pm,"clavR",{0,0,1.8f*b*k});add(pm,"neck",{-0.6f*b*k,0,0});}
+static void armHang(PoseMap& pm,char L,float sw,float bend){float s=(L=='L')?-1.f:1.f;add(pm,std::string("uparm")+L,{sw,0,s*40.f});add(pm,std::string("loarm")+L,{-bend,0,0});}
+static void armCarry(PoseMap& pm){add(pm,"uparmR",{0,0,36.f});add(pm,"loarmR",{-70.f,34.f,0});hand(pm,'R',0.35f);}
+static void legsSit(PoseMap& pm){addp(pm,"hips",{0,-45.f,-8.f});for(int s=0;s<2;s++){const char* L=s?"R":"L";add(pm,std::string("upleg")+L,{-88.f,0,0});add(pm,std::string("loleg")+L,{88.f,0,0});add(pm,std::string("foot")+L,{-2.f,0,0});}}
+static void walkLegs(PoseMap& pm,float th,float amp){
+  for(int s=0;s<2;s++){float ph=th+(s?3.14159f:0.f);const char* L=s?"R":"L";
+    add(pm,std::string("upleg")+L,{-amp*std::sin(ph),0,0});add(pm,std::string("loleg")+L,{5.f+42.f*std::pow(std::max(0.f,std::cos(ph)),1.5f),0,0});add(pm,std::string("foot")+L,{6.f*std::sin(ph),0,0});}
+  addp(pm,"hips",{0,-1.4f*std::fabs(std::cos(th)),0});add(pm,"spine1",{2.f,4.f*std::sin(th),0});add(pm,"head",{0,-3.f*std::sin(th),0});}
 
+static const float TP=6.2831853f;
 static void setupClips(Model& m){
   if(m.animIndex("tc_walk")>=0)return;
   m.fx.foot=false;m.fx.gait=false;
-  mkClip(m,"tc_walk",1.1f,16,[](float u,PoseMap& pm){
-    float th=u*6.2831853f;
-    for(int s=0;s<2;s++){float ph=th+(s?3.14159f:0.f);const char* L=s?"R":"L";
-      float thigh=-27.f*std::sin(ph);float knee=5.f+42.f*std::pow(std::max(0.f,std::cos(ph)),1.5f);float foot=12.f*std::sin(ph);
-      pm[std::string("upleg")+L].r={thigh,0,0};pm[std::string("loleg")+L].r={knee,0,0};pm[std::string("foot")+L].r={foot*0.5f,0,0};}
-    pm["hips"].p={0,-1.4f*std::fabs(std::cos(th)),0};
-    pm["spine1"].r={2.f,4.f*std::sin(th),0};
-    armHang(pm,"L",-16.f*std::sin(th),12.f);armCarry(pm);
-  });
-  mkClip(m,"tc_idle",3.f,12,[](float u,PoseMap& pm){float th=u*6.2831853f;pm["spine1"].r={1.5f*std::sin(th),0,0};pm["head"].r={0,3.f*std::sin(th),0};armHang(pm,"L",0,14.f);armCarry(pm);});
-  mkClip(m,"tc_talk",2.4f,24,[](float u,PoseMap& pm){float th=u*6.2831853f;pm["spine1"].r={1.5f*std::sin(th),2.f*std::sin(th),0};pm["head"].r={2.f*std::sin(th*2),5.f*std::sin(th),0};
-    pm["uparmL"].r={-22.f+8.f*std::sin(th*2),0,-30.f};pm["loarmL"].r={-50.f+24.f*std::sin(th*2+1.f),-14.f,0};pm["handL"].r={0,0,12.f*std::sin(th*2)};armCarry(pm);});
-  mkClip(m,"tc_sit",3.f,12,[](float u,PoseMap& pm){float th=u*6.2831853f;
-    pm["hips"].p={0,-45.f,-8.f};
-    for(int s=0;s<2;s++){const char* L=s?"R":"L";pm[std::string("upleg")+L].r={-88.f,0,0};pm[std::string("loleg")+L].r={88.f,0,0};armHang(pm,L,0,42.f);}
-    pm["spine1"].r={4.f+1.f*std::sin(th),0,0};pm["head"].r={5.f,6.f*std::sin(th*0.5f),0};});
+
+  // ---- teacher
+  mkClip(m,"tc_walk",1.1f,16,[](float u,PoseMap& pm){float th=u*TP;walkLegs(pm,th,27.f);armHang(pm,'L',-16.f*std::sin(th),12.f);hand(pm,'L',0.3f);armCarry(pm);});
+  mkClip(m,"tc_idle",4.f,16,[](float u,PoseMap& pm){float th=u*TP;add(pm,"spine1",{0.8f*std::sin(th),0,0});add(pm,"head",{0.6f*std::sin(th*2),3.f*std::sin(th),0});armHang(pm,'L',0,14.f);hand(pm,'L',0.3f);armCarry(pm);breath(pm,th);});
+  mkClip(m,"tc_talk",4.f,32,[](float u,PoseMap& pm){float th=u*TP;add(pm,"spine1",{1.f*std::sin(th),2.f*std::sin(th*2),0});add(pm,"head",{2.f*std::sin(th*3),4.f*std::sin(th*2),0});
+    add(pm,"uparmL",{-22.f+8.f*std::sin(th*3),0,-30.f});add(pm,"loarmL",{-50.f+24.f*std::sin(th*3+1.f),-14.f,0});add(pm,"handL",{0,0,10.f*std::sin(th*3)});hand(pm,'L',0.15f+0.1f*std::sin(th*3));armCarry(pm);breath(pm,th);});
+  mkClip(m,"tc_write",4.f,32,[](float u,PoseMap& pm){float th=u*TP;add(pm,"spine1",{2.f,0,0});add(pm,"head",{-6.f,0,0});
+    add(pm,"uparmL",{-96.f,0,-26.f});add(pm,"loarmL",{-34.f+3.f*std::sin(th*5),-10.f,0});add(pm,"handL",{-10.f,8.f*std::sin(th*5),0});hand(pm,'L',0.55f);armCarry(pm);breath(pm,th,0.8f);});
+  // ---- walking without a book (students)
+  mkClip(m,"tc_walk_free",1.1f,16,[](float u,PoseMap& pm){float th=u*TP;walkLegs(pm,th,26.f);armHang(pm,'L',-18.f*std::sin(th),10.f);armHang(pm,'R',18.f*std::sin(th),10.f);hand(pm,'L',0.3f);hand(pm,'R',0.3f);});
+  mkClip(m,"tc_stand",4.f,16,[](float u,PoseMap& pm){float th=u*TP;add(pm,"head",{16.f,0,0});add(pm,"spine1",{4.f,0,0});armHang(pm,'L',0,16.f);armHang(pm,'R',0,16.f);hand(pm,'L',0.35f);hand(pm,'R',0.35f);breath(pm,th);});
+  mkClip(m,"tc_wall",4.f,16,[](float u,PoseMap& pm){float th=u*TP;add(pm,"head",{8.f,0,0});add(pm,"spine1",{1.f,0,0});
+    for(int s=0;s<2;s++){char L=s?'R':'L';float sg=s?1.f:-1.f;add(pm,std::string("uparm")+L,{22.f,0,sg*34.f});add(pm,std::string("loarm")+L,{38.f,sg*-18.f,0});hand(pm,L,0.35f);}breath(pm,th);});
+  mkClip(m,"tc_standup",0.9f,12,[](float u,PoseMap& pm){float e=u*u*(3-2*u),s=1.f-e;addp(pm,"hips",{0,-45.f*s,-8.f*s});
+    for(int q=0;q<2;q++){const char* L=q?"R":"L";add(pm,std::string("upleg")+L,{-88.f*s,0,0});add(pm,std::string("loleg")+L,{88.f*s,0,0});}
+    add(pm,"spine1",{(14.f*std::sin(u*3.14159f))*1.f+4.f*e,0,0});add(pm,"head",{16.f*e,0,0});armHang(pm,'L',0,16.f);armHang(pm,'R',0,16.f);hand(pm,'L',0.3f);hand(pm,'R',0.3f);},false);
+  // ---- seated students (all 4 s loops, breathing, hands never frozen)
+  auto sit=[&](const char* name,std::function<void(float,PoseMap&)> extra){mkClip(m,name,4.f,32,[extra](float u,PoseMap& pm){float th=u*TP;legsSit(pm);breath(pm,th);extra(th,pm);});};
+  for(int v=0;v<3;v++){float yaw=(v==0?18.f:v==1?0.f:-18.f);std::string nm=std::string("tc_sit_look")+char('a'+v);
+    sit(nm.c_str(),[yaw](float th,PoseMap& pm){add(pm,"spine1",{3.f,0,0});add(pm,"head",{-2.f+1.f*std::sin(th*2),yaw+1.5f*std::sin(th),0});
+      armHang(pm,'L',8.f,52.f);armHang(pm,'R',8.f,52.f);hand(pm,'L',0.18f+0.04f*std::sin(th*2));hand(pm,'R',0.18f+0.04f*std::sin(th*3));});}
+  sit("tc_sit_chat",[](float th,PoseMap& pm){add(pm,"spine1",{2.f,5.f*std::sin(th),0});add(pm,"head",{0,14.f*std::sin(th)+6.f,3.f*std::sin(th*2)});armHang(pm,'L',8.f,52.f);armHang(pm,'R',8.f+10.f*std::max(0.f,std::sin(th*2)),52.f);hand(pm,'L',0.2f);hand(pm,'R',0.25f);});
+  sit("tc_sit_write",[](float th,PoseMap& pm){add(pm,"spine1",{16.f,0,0});add(pm,"head",{20.f+2.f*std::sin(th*2),-4.f*std::sin(th),0});
+    armHang(pm,'L',14.f,50.f);add(pm,"loarmL",{0,0,0});hand(pm,'L',0.1f);
+    armHang(pm,'R',14.f+3.f*std::sin(th*8),52.f+4.f*std::sin(th*4));add(pm,"loarmR",{0,10.f*std::sin(th*8),0});add(pm,"handR",{6.f*std::sin(th*8),0,0});hand(pm,'R',0.55f,0.6f);});
+  sit("tc_sit_board",[](float th,PoseMap& pm){add(pm,"spine1",{1.f,0,0});add(pm,"head",{-10.f,3.f*std::sin(th),0});armHang(pm,'L',10.f,50.f);armHang(pm,'R',10.f,50.f);hand(pm,'L',0.15f);hand(pm,'R',0.5f,0.6f);});
+  sit("tc_sit_idle",[](float th,PoseMap& pm){add(pm,"spine1",{8.f+1.5f*std::sin(th),0,0});add(pm,"head",{14.f,8.f*std::sin(th*0.5f),0});armHang(pm,'L',20.f,70.f);armHang(pm,'R',20.f,70.f);add(pm,"loarmL",{0,-18.f,0});add(pm,"loarmR",{0,18.f,0});hand(pm,'L',0.3f+0.1f*std::sin(th*2));hand(pm,'R',0.3f+0.1f*std::sin(th*3));});
 }
 
+// ---------------------------------------------------------------- the director: script, timeline, cameras, audio
+struct Key{float t,x,z,yaw;std::string anim;};
+static float wrap180(float a){while(a>180.f)a-=360.f;while(a<-180.f)a+=360.f;return a;}
+struct Track{
+  std::vector<Key> k;
+  void add(float t,float x,float z,float yaw,const char* a){k.push_back({t,x,z,yaw,a});}
+  void eval(float t,float& x,float& z,float& yaw,std::string& an)const{
+    if(k.empty())return;if(t<=k[0].t){x=k[0].x;z=k[0].z;yaw=k[0].yaw;an=k[0].anim;return;}
+    for(size_t i=0;i+1<k.size();i++)if(t<k[i+1].t){const Key&a=k[i],&b=k[i+1];float d=b.t-a.t;float u=d>1e-4f?(t-a.t)/d:1.f;bool turn=std::fabs(b.x-a.x)<1e-3f&&std::fabs(b.z-a.z)<1e-3f;
+      float us=turn?u*u*(3-2*u):u;x=a.x+(b.x-a.x)*u;z=a.z+(b.z-a.z)*u;yaw=a.yaw+wrap180(b.yaw-a.yaw)*us;an=a.anim;return;}
+    const Key& b=k.back();x=b.x;z=b.z;yaw=b.yaw;an=b.anim;}
+};
+struct Walker{Track* tr;float t,x,z,yaw;
+  void hold(float d,const char* an){tr->add(t,x,z,yaw,an);t+=d;tr->add(t,x,z,yaw,an);}
+  void turn(float ny,float d,const char* an){tr->add(t,x,z,yaw,an);t+=d;yaw=ny;tr->add(t,x,z,yaw,an);}
+  void go(float tx,float tz,float v,const char* wa){float dx=tx-x,dz=tz-z;float len=std::sqrt(dx*dx+dz*dz);if(len<1e-3f)return;float h=std::atan2(dx,dz)/D2R;float td=std::fabs(wrap180(h-yaw))/180.f*0.8f+0.12f;
+    tr->add(t,x,z,yaw,"tc_idle");t+=td;yaw=h;tr->add(t,x,z,yaw,wa);t+=len/v;x=tx;z=tz;}
+  void end(const char* an){tr->add(t,x,z,yaw,an);}
+};
+struct Shot{float t0,t1;std::function<void(float,float,Vec3&,Vec3&,float&)> fn;};
+struct TcCine{
+  struct Line{int spk;std::string text;Speech sp;float t0=0,t1=0;};
+  std::vector<Line> L;Track th,s1,s4;std::vector<Shot> shots;std::vector<float> audio;int rate=24000;float total=60.f;
+  float tE=2.2f,tA,tB,tW0,tW1,tAr1,tAr2,tStand,tEnd;float W[3][32]={};float WS[6][32]={};float ink[6]={},chalk=0;float prevT=-1;
+};
+static Vec3 mixv(Vec3 a,Vec3 b,float u){return a+(b-a)*u;}
+static float sstep(float u){u=std::max(0.f,std::min(1.f,u));return u*u*(3-2*u);}
+
+void App::teachCineMake(){
+  if(tcC_)return;auto C=std::make_shared<TcCine>();tcC_=C;
+  struct S{int spk;const char* txt;};
+  const S script[8]={{0,"Good morning, students. Please look at me."},{0,"Today we will learn about the human heart. Open your notebooks and copy this from the board."},
+    {0,"Where is your book?"},{1,"I left it at home, sir."},{0,"And you? Where is your book?"},{2,"I forgot it at home, sir. I am sorry."},{0,"Both of you, go and stand by the wall."},{0,"Now, let us continue our lesson."}};
+  VoiceParams vt=VoiceParams::maleTeacher();vt.f0=108.f;vt.room=0.14f;vt.rate=0.95f;
+  VoiceParams vb=VoiceParams::child();vb.f0=185.f;vb.tract=1.26f;vb.range=1.1f;vb.room=0.1f;vb.seed=21;
+  VoiceParams vg=VoiceParams::child();vg.f0=240.f;vg.tract=1.22f;vg.range=1.2f;vg.room=0.1f;vg.seed=33;
+  for(int i=0;i<8;i++){TcCine::Line l;l.spk=script[i].spk;l.text=script[i].txt;speak(l.text,l.spk==0?vt:l.spk==1?vb:vg,l.sp);C->L.push_back(std::move(l));}
+  auto D=[&](int i){return C->L[i].sp.duration();};
+  // ---- teacher timeline
+  Walker w{&C->th,0,-4.15f,-1.9f,90.f};
+  w.hold(C->tE,"tc_idle");w.go(-0.9f,-1.9f,0.62f,"tc_walk");C->tA=w.t;w.turn(0.f,0.9f,"tc_idle");C->tB=w.t;w.hold(0.25f,"tc_idle");
+  C->L[0].t0=w.t;C->L[0].t1=w.t+D(0);w.hold(D(0)+0.6f,"tc_idle");
+  C->L[1].t0=w.t;C->L[1].t1=w.t+D(1);
+  w.hold(0.4f,"tc_idle");w.go(-0.3f,-2.62f,0.55f,"tc_walk");w.turn(180.f,0.5f,"tc_idle");C->tW0=w.t;
+  C->tW1=std::max(C->tW0+7.5f,C->L[1].t1+3.8f);w.hold(C->tW1-C->tW0,"tc_write");
+  w.go(-0.75f,-1.4f,0.7f,"tc_walk");w.go(-0.75f,1.4f,0.7f,"tc_walk");w.turn(85.f,0.6f,"tc_idle");C->tAr1=w.t;w.hold(0.7f,"tc_idle");
+  C->L[2].t0=w.t;C->L[2].t1=w.t+D(2);w.hold(D(2)+0.35f,"tc_idle");
+  C->L[3].t0=w.t;C->L[3].t1=w.t+D(3);w.hold(D(3)+0.5f,"tc_idle");
+  w.go(-0.75f,3.2f,0.8f,"tc_walk");w.turn(85.f,0.6f,"tc_idle");C->tAr2=w.t;w.hold(0.5f,"tc_idle");
+  C->L[4].t0=w.t;C->L[4].t1=w.t+D(4);w.hold(D(4)+0.35f,"tc_idle");
+  C->L[5].t0=w.t;C->L[5].t1=w.t+D(5);w.hold(D(5)+0.5f,"tc_idle");
+  w.turn(-90.f,0.5f,"tc_idle");C->L[6].t0=w.t;C->L[6].t1=w.t+D(6);w.hold(D(6)+0.3f,"tc_idle");C->tStand=w.t;
+  w.go(-0.75f,2.25f,0.8f,"tc_walk");w.go(1.1f,2.25f,0.8f,"tc_walk");w.go(1.1f,-1.2f,0.8f,"tc_walk");w.go(-0.4f,-1.2f,0.8f,"tc_walk");w.turn(0.f,0.8f,"tc_idle");
+  C->L[7].t0=std::max(w.t+0.3f,C->tStand+9.5f);C->L[7].t1=C->L[7].t0+D(7);w.hold(C->L[7].t1+2.2f-w.t,"tc_idle");C->tEnd=w.t;C->total=w.t;w.end("tc_idle");
+  // ---- the two students who forgot their books (S1 boy at 0,1.52 ; S4 girl at 0,3.62)
+  {Walker s{&C->s1,0,0.f,1.52f,180.f};s.hold(C->tStand+0.3f,"tc_sit_idle");s.hold(0.9f,"tc_standup");s.go(-1.1f,1.55f,0.85f,"tc_walk_free");s.go(-1.1f,0.2f,0.85f,"tc_walk_free");s.go(-4.1f,0.2f,0.85f,"tc_walk_free");s.turn(-90.f,0.7f,"tc_stand");s.hold(60.f,"tc_wall");s.end("tc_wall");}
+  {Walker s{&C->s4,0,0.f,3.62f,180.f};s.hold(C->tStand+1.4f,"tc_sit_idle");s.hold(0.9f,"tc_standup");s.go(-1.1f,3.6f,0.85f,"tc_walk_free");s.go(-1.1f,-0.7f,0.85f,"tc_walk_free");s.go(-4.1f,-0.7f,0.85f,"tc_walk_free");s.turn(-90.f,0.7f,"tc_stand");s.hold(60.f,"tc_wall");s.end("tc_wall");}
+  C->total=std::max(C->total,C->s4.k.empty()?0.f:C->L[7].t1+2.2f);
+  // ---- cameras
+  TcCine* c=C.get();
+  auto thPos=[c](float t,float& x,float& z,float& yaw){std::string a;c->th.eval(t,x,z,yaw,a);};
+  auto& S=c->shots;
+  S.push_back({0,c->tE+0.5f,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({3.9f,2.0f,5.7f},{3.2f,1.85f,4.9f},sstep(u));tg={-1.0f,1.0f,-0.2f};fov=0.88f;}});
+  S.push_back({c->tE+0.5f,c->tA-0.3f,[thPos](float,float t,Vec3& cam,Vec3& tg,float& fov){float x,z,y;thPos(t,x,z,y);cam={x+1.8f,1.35f,-0.1f};tg={x+0.2f,1.15f,z};fov=0.75f;}});
+  S.push_back({c->tA-0.3f,c->L[0].t0+D(0)*0.55f,[thPos](float u,float t,Vec3& cam,Vec3& tg,float& fov){float x,z,y;thPos(t,x,z,y);cam={x+0.35f-0.2f*u,1.64f,-0.05f};tg={x,1.57f,z};fov=0.5f;}});
+  S.push_back({c->L[0].t0+D(0)*0.55f,c->L[1].t0,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({-0.05f,1.62f,-2.85f},{0.25f,1.58f,-2.8f},u);tg={0.5f,1.0f,1.8f};fov=0.9f;}});
+  S.push_back({c->L[1].t0,c->tW0+0.8f,[thPos](float u,float t,Vec3& cam,Vec3& tg,float& fov){float x,z,y;thPos(t,x,z,y);cam={1.5f-0.6f*u,1.5f,0.6f};tg={x,1.25f,z};fov=0.8f;}});
+  float wd=(c->tW1-c->tW0-0.8f)/4.f,wa=c->tW0+0.8f;
+  S.push_back({wa,wa+wd,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({1.9f,1.55f,-1.1f},{1.5f,1.6f,-1.2f},u);tg={-0.5f,1.6f,-3.0f};fov=0.62f;}});
+  S.push_back({wa+wd,wa+2*wd,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({1.2f,1.12f,0.15f},{1.5f,1.1f,0.3f},u);tg={2.2f,0.92f,1.35f};fov=0.5f;}});
+  S.push_back({wa+2*wd,wa+3*wd,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({-1.9f,1.32f,0.4f},{-2.05f,1.2f,0.55f},u);tg={-2.15f,0.8f,1.05f};fov=0.4f;}});
+  S.push_back({wa+3*wd,c->tW1,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({0.4f,1.75f,4.2f},{0.8f,1.7f,3.6f},u);tg={-0.4f,1.5f,-2.6f};fov=0.7f;}});
+  S.push_back({c->tW1,c->tAr1-0.2f,[thPos](float,float t,Vec3& cam,Vec3& tg,float& fov){float x,z,y;thPos(t,x,z,y);cam={-3.4f,1.5f,std::min(z+1.2f,2.6f)};tg={x+0.3f,1.2f,z};fov=0.8f;}});
+  S.push_back({c->tAr1-0.2f,c->L[3].t0-0.1f,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({-2.6f,1.45f,0.2f},{-2.3f,1.45f,0.4f},u);tg={-0.4f,1.1f,1.45f};fov=0.65f;}});
+  S.push_back({c->L[3].t0-0.1f,c->L[3].t1+0.3f,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({0.5f,1.02f,0.45f},{0.35f,1.02f,0.6f},u);tg={0.0f,0.99f,1.5f};fov=0.42f;}});
+  S.push_back({c->L[3].t1+0.3f,c->tAr2+0.4f,[thPos](float,float t,Vec3& cam,Vec3& tg,float& fov){float x,z,y;thPos(t,x,z,y);cam={-3.4f,1.5f,z+0.9f};tg={x+0.4f,1.2f,z};fov=0.8f;}});
+  S.push_back({c->tAr2+0.4f,c->L[5].t0-0.1f,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({-2.6f,1.45f,2.2f},{-2.3f,1.45f,2.4f},u);tg={-0.4f,1.1f,3.4f};fov=0.65f;}});
+  S.push_back({c->L[5].t0-0.1f,c->L[5].t1+0.4f,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({0.5f,1.02f,2.55f},{0.35f,1.02f,2.7f},u);tg={0.0f,0.99f,3.58f};fov=0.42f;}});
+  S.push_back({c->L[5].t1+0.4f,c->tStand+1.5f,[thPos](float u,float t,Vec3& cam,Vec3& tg,float& fov){float x,z,y;thPos(t,x,z,y);cam={x+2.0f,1.5f,z-1.6f};tg={x-0.5f,1.4f,z};fov=0.62f;}});
+  S.push_back({c->tStand+1.5f,c->tStand+7.f,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({3.8f,2.1f,5.4f},{2.2f,1.9f,4.6f},sstep(u));tg={-1.8f,0.95f,1.2f};fov=0.95f;}});
+  S.push_back({c->tStand+7.f,c->L[7].t0-0.2f,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({-1.2f,1.5f,3.0f},{-1.6f,1.45f,2.5f},u);tg={-4.1f,1.1f,-0.3f};fov=0.75f;}});
+  S.push_back({c->L[7].t0-0.2f,9999.f,[](float u,float,Vec3& cam,Vec3& tg,float& fov){cam=mixv({3.9f,2.05f,5.7f},{3.3f,1.9f,5.0f},sstep(u*0.3f));tg={-1.0f,1.0f,-0.2f};fov=0.9f;}});
+  // ---- audio mix (voices, bell, murmur, footsteps, chalk, chair)
+  int R=C->rate;size_t N=(size_t)((C->total+0.5f)*R);auto& A=C->audio;A.assign(N,0.f);
+  unsigned rs=12345;auto rnd=[&](){rs=rs*1664525u+1013904223u;return ((rs>>8)&0xffff)/32768.f-1.f;};
+  for(auto& l:C->L){size_t o=(size_t)(l.t0*R);float g=l.spk==0?1.0f:0.95f;for(size_t i=0;i<l.sp.pcm.size()&&o+i<N;i++)A[o+i]+=l.sp.pcm[i]*g;}
+  {float lp=0;for(size_t i=0;i<N;i++){float t=(float)i/R;float amb=0.012f*(1.f-sstep((t-C->tA)/1.5f));lp+=(rnd()-lp)*0.06f;A[i]+=lp*amb*(0.6f+0.4f*std::sin(t*3.1f)+0.3f*std::sin(t*7.3f));}}
+  for(size_t i=0;i<(size_t)(2.2f*R)&&i+(size_t)(0.3f*R)<N;i++){float t=(float)i/R;float env=std::exp(-t*1.3f)*(0.55f+0.45f*std::sin(t*2*3.14159f*22.f));float s=std::sin(t*2*3.14159f*1850.f)+0.6f*std::sin(t*2*3.14159f*2780.f)+0.35f*std::sin(t*2*3.14159f*3720.f);A[i+(size_t)(0.3f*R)]+=0.11f*env*s;}
+  auto step=[&](float t,float g,float f){size_t o=(size_t)(t*R);for(int i=0;i<(int)(0.11f*R)&&o+i<N;i++){float tt=(float)i/R;float e=std::exp(-tt*38.f);A[o+i]+=g*e*(std::sin(tt*6.28318f*f)+0.4f*rnd());}};
+  auto steps=[&](const Track& tr,float gain,float f){for(size_t i=0;i+1<tr.k.size();i++)if(tr.k[i].anim.find("walk")!=std::string::npos){float a=tr.k[i].t,b=tr.k[i+1].t;for(float t=a+0.25f;t<b;t+=0.55f)step(t,gain,f);}};
+  steps(c->th,0.22f,95.f);steps(c->s1,0.14f,110.f);steps(c->s4,0.12f,120.f);
+  {float lp=0;size_t a=(size_t)(c->tW0*R),b=std::min(N,(size_t)(c->tW1*R));for(size_t i=a;i<b;i++){float t=(float)(i-a)/R;float e=std::pow(std::max(0.f,std::sin(t*6.28318f*3.1f)),1.5f);float n=rnd();lp+=(n-lp)*0.35f;A[i]+=(n-lp)*0.05f*e;}}
+  for(float t:{c->tStand+0.2f,c->tStand+1.3f}){size_t o=(size_t)(t*R);float lp=0;for(int i=0;i<(int)(0.45f*R)&&o+i<N;i++){float tt=(float)i/R;float n=rnd();lp+=(n-lp)*0.08f;A[o+i]+=lp*0.35f*std::exp(-tt*6.f)*(0.5f+0.5f*std::sin(tt*60.f));}}
+  float pk=0;for(float v:A)pk=std::max(pk,std::fabs(v));if(pk>0.9f){float g=0.9f/pk;for(float& v:A)v*=g;}
+}
+
+// ---------------------------------------------------------------- scene construction
 void App::teachBuild(){
   if(tcOk_)return;
   if(tcTarget_.fbo==0&&!r_->createTarget(tcTarget_,1024,280,4))return;
   tcScene_=Scene();Scene& S=tcScene_;
-  auto box=[&](const char* n,Vec3 p,Vec3 sc,unsigned col){auto& e=S.add(P_BOX,n);e.pos=p;e.scale=sc;e.color=Col::hex(col);return e.id;};
+  auto box=[&](const char* n,Vec3 p,Vec3 sc,unsigned col){auto& e=S.add(P_BOX,n);e.pos=p;e.scale=sc;e.color=Col::hex(col);};
   {auto& f=S.add(P_PLANE,"Floor");f.pos={0,0,0};f.scale={14,1,14};f.color=Col::hex(0x8a7a62);}
-  box("WallBack",{0,1.6f,-3.2f},{9.f,3.2f,0.12f},0xd8d2c4);box("WallL",{-4.5f,1.6f,0.6f},{0.12f,3.2f,7.6f},0xcfc9ba);box("WallR",{4.5f,1.6f,0.6f},{0.12f,3.2f,7.6f},0xcfc9ba);
-  box("Board",{-0.4f,1.55f,-3.12f},{3.6f,1.25f,0.05f},0x24402f);box("BoardFrame",{-0.4f,1.55f,-3.14f},{3.75f,1.4f,0.04f},0x8a6a3e);
-  box("Chalk",{-0.4f,0.93f,-3.05f},{3.4f,0.04f,0.08f},0x6e4f2a);
-  {auto& e=S.add(P_MODEL,"TeacherDesk");e.asset="gen:prop:desk";e.pos={2.9f,0,-2.3f};e.rot={0,180,0};}
-  for(int r=0;r<2;r++)for(int c=0;c<3;c++){float x=-2.2f+c*2.2f,z=0.9f+r*2.1f;
-    auto& d=S.add(P_MODEL,"Desk");d.asset="gen:prop:desk";d.pos={x,0,z};d.rot={0,180,0};
-    box("Seat",{x,0.44f,z+0.95f},{0.46f,0.05f,0.44f},0x6a4a2c);box("SeatBack",{x,0.72f,z+1.17f},{0.46f,0.42f,0.04f},0x6a4a2c);
-    auto& st=S.add(P_MODEL,"Student");st.asset="gen:student:"+std::to_string(r*3+c);st.pos={x,0,z+0.95f};st.rot={0,180,0};st.anim="tc_sit";tcStu_[r*3+c]=st.id;}
-  {auto& t=S.add(P_MODEL,"Teacher");t.asset="gen:teacher";t.pos={tcX_,0,-1.9f};t.rot={0,tcYaw_,0};t.anim="tc_walk";tcTeacher_=t.id;}
-  {auto& b=S.add(P_MODEL,"Book");b.asset="gen:prop:book";b.pos={tcX_,1.1f,-1.9f};tcBook_=b.id;}
+  box("WallBack",{0,1.6f,-3.2f},{9.f,3.2f,0.12f},0xd8d2c4);box("WallR",{4.5f,1.6f,0.6f},{0.12f,3.2f,7.6f},0xcfc9ba);box("WallL",{-4.5f,1.6f,0.6f},{0.12f,3.2f,7.6f},0xcfc9ba);box("WallFront",{0,1.6f,7.0f},{9.f,3.2f,0.12f},0xcfc9ba);
+  box("Skirt",{0,0.07f,-3.12f},{8.9f,0.14f,0.05f},0x6a5a46);box("SkirtR",{4.42f,0.07f,0.6f},{0.05f,0.14f,7.5f},0x6a5a46);box("SkirtL",{-4.42f,0.07f,0.6f},{0.05f,0.14f,7.5f},0x6a5a46);
+  box("Board",{-0.4f,1.55f,-3.12f},{3.6f,1.25f,0.05f},0x24402f);box("BoardFrame",{-0.4f,1.55f,-3.14f},{3.75f,1.4f,0.04f},0x8a6a3e);box("Tray",{-0.4f,0.89f,-3.04f},{3.4f,0.04f,0.1f},0x6e4f2a);
+  box("Doorway",{-4.43f,1.03f,-1.9f},{0.03f,2.06f,0.95f},0x14181f);box("DoorFrameT",{-4.42f,2.1f,-1.9f},{0.08f,0.09f,1.12f},0x5a3d22);box("DoorFrameA",{-4.42f,1.05f,-2.4f},{0.08f,2.1f,0.09f},0x5a3d22);box("DoorFrameB",{-4.42f,1.05f,-1.4f},{0.08f,2.1f,0.09f},0x5a3d22);
+  for(int k=0;k<3;k++){float z=-1.2f+k*2.4f;box("Win",{4.43f,1.8f,z},{0.03f,1.3f,1.5f},0xdfeeff);box("WinFrameT",{4.41f,2.48f,z},{0.07f,0.07f,1.62f},0x6a5a46);box("WinFrameB",{4.41f,1.12f,z},{0.07f,0.07f,1.62f},0x6a5a46);box("WinFrameM",{4.41f,1.8f,z},{0.07f,1.3f,0.05f},0x6a5a46);}
+  box("Clock",{1.8f,2.55f,-3.1f},{0.4f,0.4f,0.04f},0xf2efe6);
+  {auto& e=S.add(P_MODEL,"TeacherDesk");e.asset="gen:prop:teacherdesk";e.pos={2.9f,0,-2.35f};}
+  const float yl[6]={2.02f,1.85f,1.68f,1.51f,1.34f,1.17f};
+  for(int k=0;k<6;k++){auto& e=S.add(P_MODEL,"Chalk");e.asset="gen:prop:chalkline";e.pos={-1.8f,yl[k],-3.085f};e.rot={90,0,0};e.scale={0.001f,1,k==0?1.5f:1.f};tcChalk_[k]=e.id;}
+  for(int r=0;r<2;r++)for(int c=0;c<3;c++){int si=r*3+c;float x=-2.2f+c*2.2f,z=0.9f+r*2.1f;
+    {auto& d=S.add(P_MODEL,"Desk");d.asset="gen:prop:schooldesk";d.pos={x,0,z};}
+    {auto& ch=S.add(P_MODEL,"Chair");ch.asset="gen:prop:chair";ch.pos={x,0,z+0.62f};}
+    for(int k=0;k<5;k++)tcInk_[si][k]=-1;
+    if(!(si==1||si==4)){auto& nb=S.add(P_MODEL,"Notebook");nb.asset="gen:prop:notebook";nb.pos={x+0.02f,0.745f,z+0.12f};
+      for(int k=0;k<5;k++){auto& ik=S.add(P_MODEL,"Ink");ik.asset="gen:prop:inkline";ik.pos={x+0.05f,0.7558f,z+0.12f-0.075f+k*0.034f};ik.scale={0.001f,1,1};tcInk_[si][k]=ik.id;}}
+    auto& st=S.add(P_MODEL,"Student");st.asset="gen:student:"+std::to_string(si);st.pos={x,0,z+0.62f};st.rot={0,180,0};st.anim="tc_sit_idle";tcStu_[si]=st.id;}
+  {auto& t=S.add(P_MODEL,"Teacher");t.asset="gen:teacher";t.pos={-4.15f,0,-1.9f};t.rot={0,90,0};t.anim="tc_idle";tcTeacher_=t.id;}
+  {auto& b=S.add(P_MODEL,"Book");b.asset="gen:prop:book";b.pos={-4.1f,1.1f,-1.9f};tcBook_=b.id;}
   tcOk_=true;}
 
 static Vec3 xf(const Mat4& m,Vec3 p){return {m.m[0]*p.x+m.m[4]*p.y+m.m[8]*p.z+m.m[12],m.m[1]*p.x+m.m[5]*p.y+m.m[9]*p.z+m.m[13],m.m[2]*p.x+m.m[6]*p.y+m.m[10]*p.z+m.m[14]};}
+static int activeLine(const TcCine& C,float t,int spk){for(size_t i=0;i<C.L.size();i++)if(C.L[i].spk==spk&&t>=C.L[i].t0&&t<C.L[i].t1)return (int)i;return -1;}
+static const char* lookVar(float teacherX,float studentX){float d=teacherX-studentX;return d<-0.5f?"tc_sit_looka":d>0.5f?"tc_sit_lookc":"tc_sit_lookb";}
 
 void App::teachUpdate(float dt){
-  if(!tcOk_)return;
+  if(!tcOk_||!tcC_)return;TcCine& C=*tcC_;
+  if(tcRun_){tcT_+=dt;if(tcT_>C.total){tcT_=C.total;tcRun_=false;}}
+  float t=tcT_;
   Entity* T=tcScene_.get(tcTeacher_);if(!T)return;
-  if(tcRun_){tcPT_+=dt;
-    const float V=0.62f;
-    if(tcPh_==0){T->anim="tc_walk";tcX_+=V*dt;tcYaw_=90.f;if(tcX_>=-0.9f){tcPh_=1;tcPT_=0;}}
-    else if(tcPh_==1){T->anim="tc_idle";float k=std::min(1.f,tcPT_/0.9f);tcYaw_=90.f*(1.f-k*k*(3-2*k));if(tcPT_>1.1f){tcPh_=2;tcPT_=0;tcSpoke_=false;}}
-    else if(tcPh_==2){T->anim="tc_talk";if(!tcSpoke_&&tcPT_>0.3f){tcSpoke_=true;voicePlay();}
-      if(tcSpoke_&&tcPT_>1.0f&&!vcPlaying_&&!vcBusy_){tcPh_=3;tcPT_=0;}}
-    else if(tcPh_==3){T->anim="tc_idle";if(tcPT_>0.8f){tcPh_=4;tcPT_=0;}}
-    else if(tcPh_==4){T->anim="tc_walk";tcYaw_=-90.f;tcX_-=V*dt;if(tcX_<=-2.2f){tcPh_=5;tcPT_=0;}}
-    else {T->anim="tc_idle";float k=std::min(1.f,tcPT_/0.9f);tcYaw_=-90.f*(1.f-k*k*(3-2*k));}
-  }
-  T->pos.x=tcX_;T->rot.y=tcYaw_;}
+  {float x,z,yaw;std::string an;C.th.eval(t,x,z,yaw,an);if(an=="tc_idle"&&(activeLine(C,t,0)>=0))an="tc_talk";T->pos.x=x;T->pos.z=z;T->rot.y=yaw;T->anim=an;}
+  float tx,tz,ty;{std::string a;C.th.eval(t,tx,tz,ty,a);}
+  for(int i=0;i<6;i++){Entity* e=tcScene_.get(tcStu_[i]);if(!e)continue;float sx=-2.2f+(i%3)*2.2f;
+    if(i==1||i==4){const Track& tr=i==1?C.s1:C.s4;float x,z,yaw;std::string an;tr.eval(t,x,z,yaw,an);e->pos.x=x;e->pos.z=z;e->rot.y=yaw;
+      float la=i==1?C.tAr1:C.tAr2,lb=(i==1?C.L[3].t1:C.L[5].t1)+0.6f;
+      if(an=="tc_sit_idle"){if(t>=la&&t<lb)an=lookVar(tx,sx);else if(t<C.L[0].t0-0.3f)an="tc_sit_chat";else if(t>=C.L[0].t0-0.3f&&t<C.L[1].t0+1.5f)an=lookVar(tx,sx);else if(t>=C.L[1].t0+1.5f&&t<C.tW0)an="tc_sit_board";}
+      e->anim=an;}
+    else{std::string an;
+      if(t<C.L[0].t0-0.3f)an=(i==0||i==3)?"tc_sit_chat":"tc_sit_lookb";
+      else if(t<C.L[1].t0+1.5f)an=lookVar(tx,sx);
+      else if(t<C.tW0)an="tc_sit_board";
+      else if(t<C.tW1+1.5f){float cyc=std::fmod(t*0.17f+i*0.31f,1.f);an=cyc<0.72f?"tc_sit_write":"tc_sit_board";}
+      else an=lookVar(tx,sx);
+      e->anim=an;}}
+  // writing progress: notebooks and chalk board
+  float p0=C.tW0+0.8f,p1=C.tW1+0.6f;
+  for(int i=0;i<6;i++)for(int k=0;k<5;k++){if(tcInk_[i][k]<0)continue;Entity* e=tcScene_.get(tcInk_[i][k]);if(!e)continue;float p=std::max(0.f,std::min(1.f,(t-p0-i*0.25f)/(p1-p0)))*5.f-k;p=std::max(0.f,std::min(1.f,p));e->scale.x=std::max(0.001f,p*(0.62f+0.3f*std::fabs(std::sin((float)(i*7+k*3)))));}
+  {float cp=std::max(0.f,std::min(1.f,(t-C.tW0-0.6f)/(C.tW1-C.tW0-1.2f)))*6.f;for(int k=0;k<6;k++){Entity* e=tcScene_.get(tcChalk_[k]);if(!e)continue;float p=std::max(0.f,std::min(1.f,cp-k));e->scale.x=std::max(0.001f,p*(k==0?1.3f:0.8f+0.5f*std::fabs(std::sin(k*2.3f))));}}
+  // subtitle
+  tcSub_.clear();for(auto& l:C.L)if(t>=l.t0&&t<l.t1+0.25f){tcSub_=(l.spk==0?"Teacher: ":l.spk==1?"Boy: ":"Girl: ")+l.text;}
+  tcFade_=std::min(1.f,std::min(t/0.7f,(C.total-t)/1.4f));
+}
 
 void App::teachRender(){
-  teachBuild();if(!tcOk_)return;
+  teachBuild();if(!tcOk_)return;if(!tcC_)teachCineMake();TcCine& C=*tcC_;
   Model* tm=modelFor("gen:teacher");if(!tm)return;setupClips(*tm);
-  for(int i=0;i<6;i++){Model* sm=modelFor("gen:student:"+std::to_string(i));if(sm)setupClips(*sm);}
-  // mouth + hair sway for the teacher (same morph mapping as the Voice tab)
-  voiceMouthApply(tm);
-  // book follows the right hand
+  Model* sm[6];for(int i=0;i<6;i++){sm[i]=modelFor("gen:student:"+std::to_string(i));if(sm[i])setupClips(*sm[i]);}
+  float t=tcT_;float dt=C.prevT<0?0.016f:std::max(0.001f,std::min(0.05f,t-C.prevT));C.prevT=t;
+  // lips: teacher + the two talking students, blinking for everybody
+  auto key=[&](int spk)->MouthKey{MouthKey k{};int li=activeLine(C,t,spk);if(li>=0){const Speech& s=C.L[li].sp;size_t i=(size_t)std::max(0.f,std::min((float)s.mouth.size()-1,(t-C.L[li].t0)*100.f));if(!s.mouth.empty())k=s.mouth[i];}return k;};
+  mouthDrive(tm,key(0),C.W[0],t,dt,activeLine(C,t,0)>=0,0.f);
+  for(int i=0;i<6;i++)if(sm[i])mouthDrive(sm[i],i==1?key(1):i==4?key(2):MouthKey{},i==1?C.W[1]:i==4?C.W[2]:C.WS[i],t,dt,(i==1&&activeLine(C,t,1)>=0)||(i==4&&activeLine(C,t,2)>=0),i*0.9f+0.4f);
   Entity* B=tcScene_.get(tcBook_);Entity* T=tcScene_.get(tcTeacher_);
   if(B&&T){auto it=minst_.find({&tcScene_,tcTeacher_});int hn=roleNode(*tm,"handR");
-    if(it!=minst_.end()&&hn>=0&&hn<(int)it->second.world.size()){Mat4 W=tcScene_.world(tcTeacher_)*Mat4::scale({tm->fit,tm->fit,tm->fit})*Mat4::translate({0,-tm->foot,0});Vec3 hp{it->second.world[hn].m[12],it->second.world[hn].m[13],it->second.world[hn].m[14]};Vec3 p0=xf(W,hp);float yw=T->rot.y*D2R;Vec3 off{0.07f,0.05f,0.09f};B->pos=p0+Vec3{off.x*std::cos(yw)+off.z*std::sin(yw),off.y,-off.x*std::sin(yw)+off.z*std::cos(yw)};B->rot={-72.f,T->rot.y,90.f};}}
-  Vec3 cam,tg;float fov=0.9f;
-  if(tcCam_==0){cam={3.4f,2.1f,5.2f};tg={-0.4f,1.0f,-0.8f};fov=0.9f;}
-  else if(tcCam_==1){cam={tcX_+1.2f,1.5f,0.9f};tg={tcX_,1.25f,-1.9f};fov=0.8f;}
-  else if(tcCam_==2){cam={tcX_+0.05f,1.62f,-0.05f};tg={tcX_,1.56f,-1.9f};fov=0.5f;}
+    if(it!=minst_.end()&&hn>=0&&hn<(int)it->second.world.size()){Mat4 W=tcScene_.world(tcTeacher_)*Mat4::scale({tm->fit,tm->fit,tm->fit})*Mat4::translate({0,-tm->foot,0});Vec3 hp{it->second.world[hn].m[12],it->second.world[hn].m[13],it->second.world[hn].m[14]};
+      Vec3 p0=xf(W,hp);float yw=T->rot.y*D2R;Vec3 off{0.07f,0.05f,0.09f};B->pos=p0+Vec3{off.x*std::cos(yw)+off.z*std::sin(yw),off.y,-off.x*std::sin(yw)+off.z*std::cos(yw)};B->rot={-72.f,T->rot.y,90.f};}}
+  Vec3 cam{3.4f,2.1f,5.2f},tg{-0.4f,1.0f,-0.8f};float fov=0.9f;float tx,tz,ty;{std::string a;C.th.eval(t,tx,tz,ty,a);}
+  if(tcAuto_){bool f=false;for(auto& s:C.shots)if(t>=s.t0&&t<s.t1){float u=(t-s.t0)/std::max(0.01f,std::min(s.t1,C.total)-s.t0);s.fn(std::max(0.f,std::min(1.f,u)),t,cam,tg,fov);f=true;break;}
+    if(!f&&!C.shots.empty()){auto& s=C.shots.back();s.fn(1.f,t,cam,tg,fov);}}
+  else if(tcCam_==0){cam={3.4f,2.1f,5.2f};tg={-0.4f,1.0f,-0.8f};fov=0.9f;}
+  else if(tcCam_==1){cam={tx+1.4f,1.5f,tz+2.4f};tg={tx,1.25f,tz};fov=0.8f;}
+  else if(tcCam_==2){cam={tx+0.05f,1.62f,tz+1.85f};tg={tx,1.56f,tz};fov=0.5f;}
   else {cam={0.6f,1.75f,-2.6f};tg={0.0f,1.0f,2.6f};fov=0.95f;}
-  shadowR_=6.f;renderThumb(tcTarget_,tcScene_,cam,tg,fov);shadowR_=55.f;
+  if(dbgCam_){cam=dbgC0_;tg=dbgC1_;fov=dbgFov_;}
+  Target& tgt=tcFull_?tcFullT_:tcTarget_;
+  shadowR_=7.f;renderThumb(tgt,tcScene_,cam,tg,fov);shadowR_=55.f;
 }
 
 void App::teachTap(int id){
-  if(id==1080){tcRun_=true;tcPh_=0;tcPT_=0;tcX_=-3.2f;tcYaw_=90.f;tcSpoke_=false;vcPlaying_=false;if(playAudio)playAudio(nullptr,0,24000);}
-  else if(id==1081){tcRun_=false;vcPlaying_=false;if(playAudio)playAudio(nullptr,0,24000);}
-  else if(id==1082)tcCam_=(tcCam_+1)%4;}
+  if(id==1080){teachBuild();teachCineMake();tcRun_=true;tcT_=0;tcC_->prevT=-1;if(playAudio&&tcC_){playAudio(nullptr,0,24000);playAudio(tcC_->audio.data(),(int)tcC_->audio.size(),tcC_->rate);}}
+  else if(id==1081){tcRun_=false;if(playAudio)playAudio(nullptr,0,24000);}
+  else if(id==1082){if(tcAuto_){tcAuto_=false;tcCam_=0;}else{tcCam_++;if(tcCam_>3){tcCam_=0;tcAuto_=true;}}}
+  else if(id==1083){tcFull_=true;}
+  else if(id==1084){tcFull_=false;}}
+
+void App::cineBegin(int w,int h){
+  scr_=VOICE;vcMode_=2;tcFull_=true;tcAuto_=true;teachBuild();teachCineMake();tcRun_=true;tcT_=0;tcC_->prevT=-1;
+  if(tcFullT_.fbo==0)r_->createTarget(tcFullT_,w,h,4);tcFW_=w;tcFH_=h;}
+void App::cineJump(float t){tcRun_=true;tcT_=std::max(0.f,t-0.7f);for(int i=0;i<42;i++){update(1.f/60.f);if(i>=40)render();}tcT_=t;tcRun_=false;}
+float App::cineDuration(){return tcC_?tcC_->total:0.f;}
+bool App::cineAudio(std::vector<float>& out,int& rate){if(!tcC_)return false;out=tcC_->audio;rate=tcC_->rate;return true;}
 
 void App::drawTeach(){
-  float W=W_/ui.s();
-  header("Class Scene","A teacher walks in with a book and teaches - voice and lips follow.");
+  float W=W_/ui.s(),H=H_/ui.s();
+  if(tcFull_){
+    ui.rrect(0,0,W,H,0,Col{0,0,0,1},Col{0,0,0,1});
+    if(tcOk_)ui.image(tcFullT_.tex,0,0,W,H,0,Col{tcFade_,tcFade_,tcFade_,1});
+    if(!tcSub_.empty()){float tw=std::min(W-40,(float)tcSub_.size()*7.4f+30);ui.rrect(W*0.5f-tw*0.5f,H-52,tw,30,8,Col{0,0,0,0.55f},Col{0,0,0,0.55f});T(tcSub_,W*0.5f,H-44,13.f,Col{1,1,1,1},F_REG,1);}
+    if(!tcRun_||tcT_<0.1f)fbtn(1084,W-70,10,60,24,"Close",1);
+    return;}
+  header("Class Scene","A one-minute lesson: teacher, students, writing, voices, lip-sync.");
   fbtn(1070,24,60,100,20,"Voice",1,false);fbtn(1071,128,60,100,20,"Hair",1,false);fbtn(1072,232,60,100,20,"Class",1,true);
   sect(1);float px=24,py=84,pw=W-48,ph=pw*280.f/1024.f;panel(px,py,pw,ph+8,"");
   if(tcOk_)ui.image(tcTarget_.tex,px+4,py+4+oy_,pw-8,ph,5,Col{1,1,1,A_});
   sect(2);float by=py+ph+16;
-  fbtn(1080,24,by,150,34,tcRun_?"Restart":"Start lesson",0);fbtn(1081,182,by,90,34,"Stop",1);fbtn(1082,280,by,130,34,tcCam_==0?"Camera: Wide":tcCam_==1?"Camera: Teacher":tcCam_==2?"Camera: Face":"Camera: Class",1);
-  T(vcStatus_,420,by+10,10.5f,TXT3,F_REG,0);
+  fbtn(1080,24,by,130,34,tcRun_?"Restart":"Start lesson",0);fbtn(1081,162,by,70,34,"Stop",1);fbtn(1082,240,by,150,34,tcAuto_?"Camera: Auto":tcCam_==0?"Camera: Wide":tcCam_==1?"Camera: Teacher":tcCam_==2?"Camera: Face":"Camera: Class",1);fbtn(1083,398,by,110,34,"Full screen",1);
+  T(tcSub_.empty()?"Press Start lesson":tcSub_,24,by+42,11.f,TXT3,F_REG,0);
 }
 }   // namespace sk
